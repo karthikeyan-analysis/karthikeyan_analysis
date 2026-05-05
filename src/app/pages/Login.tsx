@@ -62,11 +62,13 @@ export default function Login({ role = "student" }: LoginProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-slate-100 p-4">
       <Card className="w-full max-w-md shadow-xl border-indigo-100 overflow-hidden">
-        <img
-          src={bannerImage}
-          alt="EduHub banner"
-          className="h-24 w-full object-cover"
-        />
+        <div className="w-full bg-white px-3 py-3 sm:px-4 sm:py-4 flex items-center justify-center">
+          <img
+            src={bannerImage}
+            alt="EduHub banner"
+            className="block h-auto w-auto max-w-full max-h-14 sm:max-h-24 object-contain"
+          />
+        </div>
         <CardHeader className="space-y-3 text-center">
           <CardDescription className="text-base">
               {role === "admin"

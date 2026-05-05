@@ -121,8 +121,8 @@ export default function PdfViewer() {
 
   return (
     <div ref={containerRef} className="space-y-4 select-none">
-      <div className="flex items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
           <Button
             variant="ghost"
             onClick={() => navigate("/student/media")}
@@ -131,10 +131,12 @@ export default function PdfViewer() {
             <ArrowLeft className="w-4 h-4 mr-2" />
             Back to Library
           </Button>
-          <h1 className="text-2xl font-semibold text-slate-900">{file.title}</h1>
+          <h1 className="text-2xl font-semibold text-slate-900 break-words">
+            {file.title}
+          </h1>
           <p className="text-slate-600 mt-1">{file.description}</p>
         </div>
-        <Badge className="bg-indigo-600 hover:bg-indigo-600 flex items-center gap-1">
+        <Badge className="bg-indigo-600 hover:bg-indigo-600 flex items-center gap-1 self-start">
           <Shield className="w-3 h-3" />
           Protected View
         </Badge>

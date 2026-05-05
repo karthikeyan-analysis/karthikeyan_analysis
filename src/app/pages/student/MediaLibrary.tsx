@@ -121,7 +121,7 @@ export default function MediaLibrary() {
                 key={item.id}
                 className="overflow-hidden hover:shadow-md transition-shadow"
               >
-                <div className="flex items-center gap-4 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4">
                   {/* Icon */}
                   <div className="flex-shrink-0">
                     <div
@@ -141,7 +141,7 @@ export default function MediaLibrary() {
                   </div>
 
                   {/* Content */}
-                  <div className="flex-grow">
+                  <div className="flex-grow min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-slate-900">
                         {item.title}
@@ -153,7 +153,7 @@ export default function MediaLibrary() {
                     <p className="text-sm text-slate-600 mb-2">
                       {item.description}
                     </p>
-                    <div className="flex items-center gap-4 text-xs text-slate-500">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                       <span>Uploaded: {item.uploadDate}</span>
                       {isVideo && "duration" in item && (
                         <span>Duration: {item.duration}</span>
@@ -162,7 +162,7 @@ export default function MediaLibrary() {
                   </div>
 
                   {/* Action Button */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 sm:self-auto self-stretch">
                     <Button
                       onClick={() => {
                         if (isVideo) {
@@ -174,7 +174,7 @@ export default function MediaLibrary() {
                           navigate(`/student/pdf/${item.id}`);
                         }
                       }}
-                      className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap"
+                      className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto"
                     >
                       <Eye className="w-4 h-4 mr-2" />
                       View
@@ -183,7 +183,7 @@ export default function MediaLibrary() {
                 </div>
 
                 {/* Security Features Bar */}
-                <div className="bg-slate-50 px-4 py-2 flex items-center gap-4 text-xs text-slate-600 border-t">
+                <div className="bg-slate-50 px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 border-t">
                   <div className="flex items-center gap-1">
                     <Lock className="w-3 h-3" />
                     <span>Protected Content</span>

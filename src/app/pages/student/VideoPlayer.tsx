@@ -29,8 +29,8 @@ export default function VideoPlayer() {
       const animate = () => {
         if (!watermarkRef.current) return;
         
-        const maxX = window.innerWidth - 300;
-        const maxY = window.innerHeight - 100;
+        const maxX = Math.max(0, window.innerWidth - 300);
+        const maxY = Math.max(0, window.innerHeight - 100);
 
         x += dx;
         y += dy;
@@ -105,12 +105,14 @@ export default function VideoPlayer() {
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back to Library
         </Button>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-3xl font-semibold text-slate-900">{video.title}</h1>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-slate-900 truncate">
+              {video.title}
+            </h1>
             <p className="text-slate-600 mt-1">{video.description}</p>
           </div>
-          <Badge className="bg-indigo-600 hover:bg-indigo-600 flex items-center gap-1">
+          <Badge className="bg-indigo-600 hover:bg-indigo-600 flex items-center gap-1 self-start">
             <Shield className="w-3 h-3" />
             Secure Stream
           </Badge>
