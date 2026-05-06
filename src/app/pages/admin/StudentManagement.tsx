@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useData } from "../../context/DataContext";
 import type { Student } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
@@ -34,7 +34,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { UserPlus, Pencil, Trash2, Search } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -42,6 +42,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import * as XLSX from "xlsx";
 
 export default function StudentManagement() {
   const { students, batches, addStudent, updateStudent, deleteStudent } =
@@ -52,6 +53,23 @@ export default function StudentManagement() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importBatchId, setImportBatchId] = useState<string>("");
+  const [importStatus, setImportStatus] = useState<"active" | "inactive">("active");
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importRows, setImportRows] = useState<
+    Array<{ studentId: string; name: string; email: string; enrolledDate?: string }>
+  >([]);
+  const [importError, setImportError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importSummary, setImportSummary] = useState<{
+    total: number;
+    created: number;
+    skipped: number;
+    failed: number;
+    failures: Array<{ email?: string; reason: string }>;
+  } | null>(null);
 
   const [formData, setFormData] = useState({
     studentId: "",
@@ -74,6 +92,177 @@ export default function StudentManagement() {
       student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.studentId.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  const existingEmailSet = useMemo(() => {
+    return new Set(students.map((s) => s.email.trim().toLowerCase()).filter(Boolean));
+  }, [students]);
+
+  const normalizeEmail = (value: unknown) => {
+    // Handle messy inputs like "name @ gmail . com"
+    const raw = String(value || "");
+    const noWhitespace = raw.replace(/\s+/g, "");
+    const email = noWhitespace.trim().toLowerCase();
+    return email;
+  };
+
+  const isLikelyEmail = (email: string) => {
+    // Basic sanity check (not perfect, but good for import validation)
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  };
+
+  const normalizeHeader = (h: unknown) =>
+    String(h || "")
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, " ");
+
+  const guessFieldFromHeader = (header: string) => {
+    const h = normalizeHeader(header);
+    if (!h) return null;
+    if (h.includes("email")) return "email";
+    if (h.includes("student id") || h === "id" || h.includes("studentid")) return "studentId";
+    if (h.includes("full name") || h.includes("name")) return "name";
+    if (h.includes("enrolled") || h.includes("join") || h.includes("date")) return "enrolledDate";
+    return null;
+  };
+
+  const buildStudentId = (email: string, index: number) => {
+    const base = email.split("@")[0]?.replace(/[^a-z0-9]/gi, "")?.slice(0, 6) || "STU";
+    const suffix = String(index + 1).padStart(3, "0");
+    return `${base.toUpperCase()}${suffix}`;
+  };
+
+  const parseImportFile = async (file: File) => {
+    setImportError("");
+    setImportSummary(null);
+    setImportRows([]);
+
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: "array" });
+    const wsName = wb.SheetNames?.[0];
+    if (!wsName) throw new Error("No sheets found in Excel file.");
+
+    const ws = wb.Sheets[wsName];
+    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
+      defval: "",
+      raw: false,
+    });
+    if (!rows.length) throw new Error("No rows found in the first sheet.");
+
+    // Determine mapping by looking at the first row's keys (headers)
+    const headers = Object.keys(rows[0] || {});
+    const mapping: Partial<Record<"studentId" | "name" | "email" | "enrolledDate", string>> = {};
+    for (const h of headers) {
+      const field = guessFieldFromHeader(h);
+      if (field && !mapping[field]) mapping[field] = h;
+    }
+
+    if (!mapping.email) {
+      throw new Error('Could not detect an "Email" column. Please ensure a header like "Email", "Email ID", etc.');
+    }
+    if (!mapping.name) {
+      throw new Error('Could not detect a "Name" column. Please ensure a header like "Full Name" or "Name".');
+    }
+
+    const seenInFile = new Set<string>();
+
+    const parsed = rows
+      .map((r, idx) => {
+        const email = normalizeEmail(r[mapping.email!]);
+        const name = String(r[mapping.name!]).trim();
+        const studentIdFromSheet = mapping.studentId ? String(r[mapping.studentId]).trim() : "";
+        const enrolledDate = mapping.enrolledDate ? String(r[mapping.enrolledDate]).trim() : "";
+        const studentId = studentIdFromSheet || (email ? buildStudentId(email, idx) : "");
+        const duplicateInFile = email ? seenInFile.has(email) : false;
+        if (email) seenInFile.add(email);
+        return { studentId, name, email, enrolledDate: enrolledDate || undefined, duplicateInFile };
+      })
+      .filter((r) => r.email && r.name);
+
+    if (!parsed.length) {
+      throw new Error("No valid rows found. Make sure Email and Name cells are filled.");
+    }
+
+    // Keep duplicates in preview so user can see why rows may skip later
+    setImportRows(parsed.map(({ duplicateInFile, ...rest }) => rest));
+    if (parsed.some((p) => p.duplicateInFile)) {
+      setImportError("Warning: Your Excel has duplicate emails. Duplicates will be skipped during import.");
+    }
+  };
+
+  const runImport = async () => {
+    setImportError("");
+    setImportSummary(null);
+    if (!importFile) {
+      setImportError("Please choose an Excel file (.xlsx).");
+      return;
+    }
+    if (!importBatchId) {
+      setImportError("Please select a batch to assign these students.");
+      return;
+    }
+    if (!importRows.length) {
+      setImportError("No parsed rows to import. Upload the file again.");
+      return;
+    }
+
+    setImporting(true);
+    const failures: Array<{ email?: string; reason: string }> = [];
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
+
+    const seenInFile = new Set<string>();
+
+    for (const row of importRows) {
+      const email = normalizeEmail(row.email);
+      if (!email) {
+        skipped += 1;
+        failures.push({ reason: "Missing email" });
+        continue;
+      }
+      if (!isLikelyEmail(email)) {
+        skipped += 1;
+        failures.push({ email, reason: "Invalid email format" });
+        continue;
+      }
+      if (seenInFile.has(email)) {
+        skipped += 1;
+        failures.push({ email, reason: "Duplicate email in Excel file" });
+        continue;
+      }
+      seenInFile.add(email);
+      if (existingEmailSet.has(email)) {
+        skipped += 1;
+        failures.push({ email, reason: "Already exists in system (duplicate email)" });
+        continue;
+      }
+      try {
+        await addStudent({
+          studentId: row.studentId,
+          name: row.name,
+          email,
+          status: importStatus,
+          batchId: importBatchId,
+          enrolledDate: row.enrolledDate || new Date().toISOString().split("T")[0],
+        });
+        created += 1;
+        existingEmailSet.add(email);
+      } catch (e: any) {
+        failed += 1;
+        failures.push({ email, reason: e?.message || "Failed to create student" });
+      }
+    }
+
+    setImportSummary({
+      total: importRows.length,
+      created,
+      skipped,
+      failed,
+      failures,
+    });
+    setImporting(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,7 +347,7 @@ export default function StudentManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-indigo-600 hover:bg-indigo-700">
@@ -287,6 +476,194 @@ export default function StudentManagement() {
                 </Button>
               </DialogFooter>
             </form>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={importOpen} onOpenChange={setImportOpen}>
+          <DialogTrigger asChild>
+            <Button variant="outline" className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              Import Excel
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Import students from Excel</DialogTitle>
+              <DialogDescription>
+                Upload an <span className="font-medium">.xlsx</span> file and we will create students in bulk.
+                The sheet must have columns like <span className="font-medium">Email</span> and <span className="font-medium">Name</span>.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto pr-1">
+              <div className="space-y-4 py-2">
+                {importError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                    {importError}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Assign batch *</Label>
+                    <Select value={importBatchId} onValueChange={setImportBatchId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a batch" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {batches.map((b) => (
+                          <SelectItem key={b.id} value={b.id}>
+                            {b.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={importStatus} onValueChange={(v) => setImportStatus(v as "active" | "inactive")}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Excel file (.xlsx) *</Label>
+                  <div className="flex flex-col md:flex-row md:items-center gap-3">
+                    <Input
+                      type="file"
+                      accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      onChange={async (e) => {
+                        const f = e.target.files?.[0] || null;
+                        setImportFile(f);
+                        setImportSummary(null);
+                        setImportRows([]);
+                        setImportError("");
+                        if (!f) return;
+                        try {
+                          await parseImportFile(f);
+                        } catch (err: any) {
+                          setImportError(err?.message || "Failed to parse Excel.");
+                        }
+                      }}
+                    />
+                    <div className="text-xs text-slate-500 flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      First sheet will be imported
+                    </div>
+                  </div>
+                </div>
+
+                {importRows.length > 0 && (
+                  <Card className="border-slate-200">
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">
+                        Preview ({importRows.length} rows)
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Student ID</TableHead>
+                              <TableHead>Name</TableHead>
+                              <TableHead>Email</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {importRows.slice(0, 10).map((r, idx) => (
+                              <TableRow key={`${r.email}-${idx}`}>
+                                <TableCell className="font-medium">{r.studentId}</TableCell>
+                                <TableCell>{r.name}</TableCell>
+                                <TableCell className="text-sm text-slate-600">{r.email}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      {importRows.length > 10 && (
+                        <p className="text-xs text-slate-500 mt-2">
+                          Showing first 10 rows.
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-2">
+                        Duplicate emails already in the system will be skipped automatically.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {importSummary && (
+                  <Card className="border-slate-200">
+                    <CardHeader className="py-3">
+                      <CardTitle className="text-sm">Import summary</CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-2 text-sm">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline">Total: {importSummary.total}</Badge>
+                        <Badge className="bg-emerald-100 text-emerald-800">Created: {importSummary.created}</Badge>
+                        <Badge className="bg-slate-100 text-slate-800">Skipped: {importSummary.skipped}</Badge>
+                        {importSummary.failed > 0 ? (
+                          <Badge className="bg-rose-100 text-rose-800">Failed: {importSummary.failed}</Badge>
+                        ) : null}
+                      </div>
+                      {importSummary.failed > 0 && (
+                        <div className="text-xs text-slate-600">
+                          {importSummary.failures.slice(0, 5).map((f, idx) => (
+                            <div key={idx}>
+                              {f.email || "Row"}: {f.reason}
+                            </div>
+                          ))}
+                          {importSummary.failures.length > 5 ? (
+                            <div>…and {importSummary.failures.length - 5} more</div>
+                          ) : null}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setImportOpen(false);
+                  setImportFile(null);
+                  setImportRows([]);
+                  setImportError("");
+                  setImportSummary(null);
+                }}
+                disabled={importing}
+              >
+                Close
+              </Button>
+              <Button
+                type="button"
+                className="bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => void runImport()}
+                disabled={importing || !importRows.length}
+              >
+                {importing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Importing...
+                  </>
+                ) : (
+                  "Import Students"
+                )}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

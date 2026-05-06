@@ -282,7 +282,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       };
       const docRef = await addDoc(collection(db, "students"), newStudent);
       const studentWithId = { ...newStudent, id: docRef.id };
-      setStudents([...students, studentWithId]);
+      setStudents((prev) => [...prev, studentWithId]);
 
       // Update batch student count
       if (newStudent.batchId) {
