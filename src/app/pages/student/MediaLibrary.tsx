@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
 import { useNavigate } from "react-router";
@@ -40,10 +40,36 @@ export default function MediaLibrary() {
   const batchContent = content.filter((c) => canAccessItem(c));
   const batchVideos = videos.filter((v) => canAccessItem(v));
 
-  const allMedia = [...batchContent, ...batchVideos].sort(
-    (a, b) =>
-      new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime(),
-  );
+  const allMedia = useMemo(() => {
+    return [...batchContent, ...batchVideos].sort(
+      (a, b) =>
+        new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime(),
+    );
+  }, [batchContent, batchVideos]);
+
+  const availableSubjects = useMemo(() => {
+    const raw = currentBatch?.subjects || [];
+    const list = raw.map((s) => s.trim()).filter(Boolean);
+    if (!list.includes("Uncategorized")) list.push("Uncategorized");
+    return list;
+  }, [currentBatch?.subjects]);
+
+  const groupedMediaBySubject = useMemo(() => {
+    const toKey = (v?: string) => v?.trim() || "Uncategorized";
+    const groups = new Map<string, typeof allMedia>();
+    for (const s of availableSubjects) groups.set(s, []);
+
+    for (const item of allMedia) {
+      const key = toKey((item as any).subject);
+      if (groups.has(key)) {
+        groups.get(key)!.push(item);
+      } else {
+        groups.get("Uncategorized")!.push(item);
+      }
+    }
+
+    return availableSubjects.map((s) => [s, groups.get(s) || []] as const);
+  }, [allMedia, availableSubjects]);
 
   // Disable right-click, copying, and keyboard shortcuts for security
   useEffect(() => {
@@ -113,91 +139,99 @@ export default function MediaLibrary() {
       </Alert>
 
       {allMedia.length > 0 ? (
-        <div className="space-y-4">
-          {allMedia.map((item) => {
-            const isVideo = "videoUrl" in item;
-            return (
-              <Card
-                key={item.id}
-                className="overflow-hidden hover:shadow-md transition-shadow"
-              >
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4">
-                  {/* Icon */}
-                  <div className="flex-shrink-0">
-                    <div
-                      className="w-16 h-16 rounded-lg bg-gradient-to-br flex items-center justify-center"
-                      style={{
-                        backgroundImage: isVideo
-                          ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                          : "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                      }}
-                    >
-                      {isVideo ? (
-                        <Film className="w-8 h-8 text-white" />
-                      ) : (
-                        <FileText className="w-8 h-8 text-white" />
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex-grow min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-semibold text-slate-900">
-                        {item.title}
-                      </h3>
-                      <Badge variant={isVideo ? "default" : "secondary"}>
-                        {isVideo ? "Video" : "PDF"}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-slate-600 mb-2">
-                      {item.description}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                      <span>Uploaded: {item.uploadDate}</span>
-                      {isVideo && "duration" in item && (
-                        <span>Duration: {item.duration}</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Action Button */}
-                  <div className="flex-shrink-0 sm:self-auto self-stretch">
-                    <Button
-                      onClick={() => {
-                        if (isVideo) {
-                          navigate(`/student/video/${item.id}`);
-                          return;
-                        }
-
-                        if ("fileUrl" in item && item.fileUrl) {
-                          navigate(`/student/pdf/${item.id}`);
-                        }
-                      }}
-                      className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto"
-                    >
-                      <Eye className="w-4 h-4 mr-2" />
-                      View
-                    </Button>
-                  </div>
+        <div className="space-y-5">
+          {groupedMediaBySubject.map(([subjectName, items]) => (
+            <Card key={subjectName} className="border-slate-200">
+              <CardHeader className="border-b border-slate-100 bg-slate-50/60 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle className="text-base text-slate-900">
+                    {subjectName}
+                  </CardTitle>
+                  <Badge variant="outline" className="bg-white">
+                    {items.length} item{items.length === 1 ? "" : "s"}
+                  </Badge>
                 </div>
-
-                {/* Security Features Bar */}
-                <div className="bg-slate-50 px-4 py-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 border-t">
-                  <div className="flex items-center gap-1">
-                    <Lock className="w-3 h-3" />
-                    <span>Protected Content</span>
+              </CardHeader>
+              <CardContent className="p-0">
+                {items.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-600">
+                    No materials in this subject yet.
                   </div>
-                  <span>•</span>
-                  <span>No Download</span>
-                  <span>•</span>
-                  <span>No Screenshots</span>
-                  <span>•</span>
-                  <span>No Recording</span>
-                </div>
-              </Card>
-            );
-          })}
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {items.map((item) => {
+                      const isVideo = "videoUrl" in item;
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 hover:bg-slate-50/60 transition-colors"
+                        >
+                          {/* Icon */}
+                          <div className="flex-shrink-0">
+                            <div
+                              className="w-16 h-16 rounded-lg bg-gradient-to-br flex items-center justify-center"
+                              style={{
+                                backgroundImage: isVideo
+                                  ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                                  : "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                              }}
+                            >
+                              {isVideo ? (
+                                <Film className="w-8 h-8 text-white" />
+                              ) : (
+                                <FileText className="w-8 h-8 text-white" />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-grow min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <h3 className="font-semibold text-slate-900">
+                                {item.title}
+                              </h3>
+                              <Badge variant={isVideo ? "default" : "secondary"}>
+                                {isVideo ? "Video" : "PDF"}
+                              </Badge>
+                            </div>
+                            <p className="text-sm text-slate-600 mb-2">
+                              {item.description}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                              <span>Uploaded: {item.uploadDate}</span>
+                              {isVideo && "duration" in item && (
+                                <span>Duration: {item.duration}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="flex-shrink-0 sm:self-auto self-stretch">
+                            <Button
+                              onClick={() => {
+                                if (isVideo) {
+                                  navigate(`/student/video/${item.id}`);
+                                  return;
+                                }
+
+                                if ("fileUrl" in item && item.fileUrl) {
+                                  navigate(`/student/pdf/${item.id}`);
+                                }
+                              }}
+                              className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto"
+                            >
+                              <Eye className="w-4 h-4 mr-2" />
+                              View
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
         </div>
       ) : (
         <Card>

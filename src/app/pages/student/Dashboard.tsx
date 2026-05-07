@@ -4,13 +4,13 @@ import { useAuth } from "../../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { BookOpen, Video, FileText, Clock, ArrowRight } from "lucide-react";
+import { BookOpen, Video, FileText, Layers3, CalendarClock } from "lucide-react";
 import { useNavigate } from "react-router";
 import { listExamTestsForStudent } from "../../features/exams/examApi";
 import type { ExamTest } from "../../features/exams/types";
 
 export default function StudentDashboard() {
-  const { content, videos, tests } = useData();
+  const { content, videos, tests, batches } = useData();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [examTests, setExamTests] = useState<ExamTest[]>([]);
@@ -33,6 +33,32 @@ export default function StudentDashboard() {
   const availableContent = content.filter((item) => canAccessItem(item));
   const availableVideos = videos.filter((video) => canAccessItem(video));
 
+  const currentBatch = useMemo(() => {
+    if (!user?.batchId) return undefined;
+    return batches.find((b) => b.id === user.batchId);
+  }, [batches, user?.batchId]);
+
+  const availableSubjects = useMemo(() => {
+    const raw = currentBatch?.subjects || [];
+    return raw.map((s) => s.trim()).filter(Boolean);
+  }, [currentBatch?.subjects]);
+
+  const subjectStats = useMemo(() => {
+    const toKey = (v?: string) => (v || "").trim() || "Uncategorized";
+    const stats = new Map<string, { resources: number; videos: number }>();
+
+    for (const item of availableContent) {
+      const k = toKey(item.subject);
+      stats.set(k, { resources: (stats.get(k)?.resources || 0) + 1, videos: stats.get(k)?.videos || 0 });
+    }
+    for (const v of availableVideos) {
+      const k = toKey(v.subject);
+      stats.set(k, { resources: stats.get(k)?.resources || 0, videos: (stats.get(k)?.videos || 0) + 1 });
+    }
+
+    return stats;
+  }, [availableContent, availableVideos]);
+
   useEffect(() => {
     if (!user?.batchId) return;
     let cancelled = false;
@@ -53,55 +79,68 @@ export default function StudentDashboard() {
     };
   }, [user?.batchId, user?.studentRecordId]);
 
-  const recentContent = [...availableContent]
-    .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
-    .slice(0, 3);
-  const recentVideos = [...availableVideos]
-    .sort((a, b) => new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime())
-    .slice(0, 2);
-
-  const recentAnnouncements = useMemo(() => {
-    const items = [
-      ...recentContent.map((item) => ({
-        id: `content-${item.id}`,
-        title: "New course material shared",
-        description: `${item.title} is now available in your library.`,
-        time: item.uploadDate,
-      })),
-      ...recentVideos.map((video) => ({
-        id: `video-${video.id}`,
-        title: "New video lesson added",
-        description: `${video.title} is now available to watch.`,
-        time: video.uploadDate,
-      })),
-      ...examTests.map((t) => ({
-        id: `exam-${t.id}`,
-        title: `CBT Exam scheduled: ${t.title}`,
-        description: `${t.subject} • ${new Date(t.startAt).toLocaleString()} – ${new Date(t.endAt).toLocaleString()}`,
-        time: t.startAt,
-      })),
-      ...tests
-        .filter((t) => user?.batchId && t.batchId === user.batchId)
-        .map((test) => ({
-          id: `test-${test.id}`,
-          title: `Test ${test.testNo} scheduled`,
-          description: `${test.portion} on ${test.testDate} (${test.startTime} - ${test.endTime})`,
-          time: test.createdDate || test.testDate,
-        })),
-    ];
-
-    return items
-      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-      .slice(0, 4);
-  }, [recentContent, recentVideos, examTests, tests, user?.batchId]);
-
   const upcomingExamCount = useMemo(() => {
     const now = Date.now();
     return examTests.filter((t) => new Date(t.startAt).getTime() > now).length;
   }, [examTests]);
 
+  const upcomingItems = useMemo(() => {
+    const now = Date.now();
+
+    const cbt = examTests
+      .map((t) => ({
+        id: `cbt-${t.id}`,
+        type: "CBT" as const,
+        title: t.title,
+        subject: t.subject,
+        when: new Date(t.startAt).getTime(),
+        meta: `${new Date(t.startAt).toLocaleString()} – ${new Date(t.endAt).toLocaleString()}`,
+      }))
+      .filter((x) => x.when > now);
+
+    const internal = tests
+      .filter((t) => user?.batchId && t.batchId === user.batchId)
+      .map((t) => {
+        const ts = new Date(`${t.testDate}T${t.startTime || "00:00"}`).getTime();
+        return {
+          id: `test-${t.id}`,
+          type: "TEST" as const,
+          title: `Test ${t.testNo}`,
+          subject: t.portion,
+          when: Number.isFinite(ts) ? ts : new Date(t.testDate).getTime(),
+          meta: `${t.testDate} • ${t.startTime} - ${t.endTime}`,
+        };
+      })
+      .filter((x) => x.when > now);
+
+    return [...cbt, ...internal].sort((a, b) => a.when - b.when).slice(0, 4);
+  }, [examTests, tests, user?.batchId]);
+
   return (
     <div className="space-y-6">
+      {/* Course header */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardContent className="pt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Joined Course</p>
+            <p className="text-xl font-semibold text-slate-900 mt-1">
+              {currentBatch?.name || "Not assigned"}
+            </p>
+            <p className="text-sm text-slate-600 mt-1">
+              {currentBatch?.description?.trim() || "Course details will appear here."}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="bg-white">
+              {availableSubjects.length} subjects
+            </Badge>
+            <Badge variant="outline" className="bg-white">
+              {upcomingExamCount} upcoming CBT
+            </Badge>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Quick Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="border-slate-200 shadow-sm">
@@ -153,119 +192,96 @@ export default function StudentDashboard() {
         </Card>
       </div>
 
-      {/* Recent Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Resources</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/student/media")}>
-              View All <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Subjects */}
+        <Card className="border-slate-200 shadow-sm lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Layers3 className="w-5 h-5 text-indigo-600" />
+              Available Subjects
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {recentContent.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-4 p-3 border border-slate-200 rounded-lg hover:border-indigo-200 hover:bg-indigo-50/50 transition-all cursor-pointer"
-                onClick={() => navigate(`/student/pdf/${item.id}`)}
-              >
-                <div className="w-10 h-10 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-indigo-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h4 className="font-medium text-slate-900">{item.title}</h4>
-                  <p className="text-sm text-slate-600 line-clamp-1">{item.description}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Badge variant="outline" className="text-xs">
-                      {item.type.toUpperCase()}
-                    </Badge>
-                    <span className="text-xs text-slate-500">{item.uploadDate}</span>
-                  </div>
-                </div>
+          <CardContent>
+            {availableSubjects.length === 0 ? (
+              <p className="text-sm text-slate-600">
+                {currentBatch
+                  ? "No subjects added for your course yet."
+                  : "You are not assigned to any course/batch yet."}
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {availableSubjects.map((subject) => {
+                  const s = subjectStats.get(subject);
+                  const resourceCount = s?.resources || 0;
+                  const videoCount = s?.videos || 0;
+                  return (
+                    <Button
+                      key={subject}
+                      variant="outline"
+                      className="h-auto py-4 px-4 justify-between"
+                      onClick={() => navigate("/student/media")}
+                      title="Open Media Library"
+                    >
+                      <div className="text-left">
+                        <div className="text-base font-semibold text-slate-900">
+                          {subject}
+                        </div>
+                        <div className="text-xs text-slate-600 mt-1">
+                          {resourceCount} resources • {videoCount} videos
+                        </div>
+                      </div>
+                      <span className="text-xs text-slate-500">Open</span>
+                    </Button>
+                  );
+                })}
               </div>
-            ))}
-            {recentContent.length === 0 && (
-              <p className="text-sm text-slate-500">No recent resources available.</p>
             )}
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Recent Videos</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => navigate("/student/media")}>
-              View All <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
+        {/* Upcoming tests */}
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CalendarClock className="w-5 h-5 text-emerald-600" />
+              Upcoming Tests
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {recentVideos.map((video) => (
-              <div
-                key={video.id}
-                className="group cursor-pointer"
-                onClick={() => navigate(`/student/video/${video.id}`)}
-              >
-                <div className="relative aspect-video rounded-lg overflow-hidden mb-2">
-                  <img
-                    src={video.thumbnail}
-                    alt={video.title}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
-                      <Video className="w-5 h-5 text-slate-900 ml-0.5" />
-                    </div>
-                  </div>
-                  <div className="absolute top-2 right-2">
-                    <Badge className="bg-black/70 text-white hover:bg-black/70">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {video.duration}
+            {upcomingItems.length === 0 ? (
+              <p className="text-sm text-slate-600">No upcoming tests scheduled.</p>
+            ) : (
+              upcomingItems.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 bg-white p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-slate-900 truncate">
+                      {item.title}
+                    </p>
+                    <Badge variant="outline" className="bg-white shrink-0">
+                      {item.type}
                     </Badge>
                   </div>
+                  <p className="text-xs text-slate-600 mt-1 line-clamp-1">
+                    {item.subject}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-1">{item.meta}</p>
                 </div>
-                <h4 className="font-medium text-slate-900">{video.title}</h4>
-                <p className="text-sm text-slate-600 line-clamp-2">{video.description}</p>
-              </div>
-            ))}
-            {recentVideos.length === 0 && (
-              <p className="text-sm text-slate-500">No recent videos available.</p>
+              ))
             )}
+
+            <Button
+              variant="ghost"
+              className="w-full justify-center text-indigo-700"
+              onClick={() => navigate("/student/tests")}
+            >
+              View test schedule
+            </Button>
           </CardContent>
         </Card>
       </div>
-
-      {/* Announcements */}
-      <Card className="border-slate-200 bg-gradient-to-br from-indigo-50 to-white">
-        <CardHeader>
-          <CardTitle>Announcements</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {recentAnnouncements.length === 0 ? (
-            <p className="text-sm text-slate-500">
-              No announcements yet. New uploads and tests will appear here.
-            </p>
-          ) : (
-            recentAnnouncements.map((announcement, index) => (
-              <div
-                key={announcement.id}
-                className="p-4 bg-white rounded-lg border border-slate-200"
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-2 h-2 rounded-full mt-2 ${index === 0 ? "bg-indigo-600" : "bg-slate-400"}`}
-                  ></div>
-                  <div>
-                    <p className="font-medium text-slate-900">{announcement.title}</p>
-                    <p className="text-sm text-slate-600 mt-1">
-                      {announcement.description}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-2">{announcement.time}</p>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

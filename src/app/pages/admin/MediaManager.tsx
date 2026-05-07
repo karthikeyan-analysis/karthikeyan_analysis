@@ -217,24 +217,38 @@ export default function MediaManager() {
   }, [batchContent, subjectFilter, searchTerm]);
 
   const groupedMediaBySubject = useMemo(() => {
-    const groups: Record<string, typeof filteredBatchContent> = {};
-    for (const item of filteredBatchContent) {
-      const key = item.subject?.trim() || "Uncategorized";
-      if (!groups[key]) {
-        groups[key] = [];
-      }
-      groups[key].push(item);
-    }
-
-    return Object.entries(groups).sort(([a], [b]) => {
-      if (a === "Uncategorized") return 1;
-      if (b === "Uncategorized") return -1;
-      return a.localeCompare(b);
-    });
-  }, [filteredBatchContent]);
-
   const currentBatch = batches.find((b) => b.id === selectedBatch);
-  const availableSubjects = currentBatch?.subjects || [];
+  const availableSubjects = (currentBatch?.subjects || [])
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const toSubjectKey = (value?: string) => value?.trim() || "Uncategorized";
+
+  // Group using the batch's configured subjects first (even if empty),
+  // then anything uncategorized/unknown goes to "Uncategorized".
+  const orderedSubjects = useMemo(() => {
+    const base = [...availableSubjects];
+    if (!base.includes("Uncategorized")) base.push("Uncategorized");
+    return base;
+  }, [availableSubjects]);
+
+  const groups = new Map<string, typeof filteredBatchContent>();
+  for (const subject of orderedSubjects) groups.set(subject, []);
+
+  for (const item of filteredBatchContent) {
+    const key = toSubjectKey(item.subject);
+    if (groups.has(key)) {
+      groups.get(key)!.push(item);
+      continue;
+    }
+    // Upload has a subject not present in batch subjects: treat as Uncategorized
+    groups.get("Uncategorized")!.push(item);
+  }
+
+  const groupedMediaBySubject = orderedSubjects
+    .filter((s) => subjectFilter === "all" || s === subjectFilter)
+    .map((s) => [s, groups.get(s) || []] as const);
+  }, [filteredBatchContent, availableSubjects, orderedSubjects, subjectFilter]);
   const mediaCount = batchContent.length;
   const videoCount = batchContent.filter((item) => "videoUrl" in item).length;
   const documentCount = mediaCount - videoCount;
@@ -557,27 +571,30 @@ export default function MediaManager() {
       )}
 
       {/* Media List By Subject */}
-      {filteredBatchContent.length > 0 ? (
-        <div className="space-y-5">
-          {groupedMediaBySubject.map(([subjectName, subjectItems]) => (
-            <Card key={subjectName} className="border-slate-200 shadow-sm">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/60">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base text-slate-900">
-                      {subjectName}
-                    </CardTitle>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {subjectItems.length} upload
-                      {subjectItems.length > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="bg-white">
-                    Subject
-                  </Badge>
+      <div className="space-y-5">
+        {groupedMediaBySubject.map(([subjectName, subjectItems]) => (
+          <Card key={subjectName} className="border-slate-200 shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50/60">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base text-slate-900">
+                    {subjectName}
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {subjectItems.length} upload{subjectItems.length === 1 ? "" : "s"}
+                  </p>
                 </div>
-              </CardHeader>
-              <CardContent className="p-0">
+                <Badge variant="outline" className="bg-white">
+                  Subject
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {subjectItems.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-600">
+                  No uploads for this subject yet.
+                </div>
+              ) : (
                 <div className="divide-y divide-slate-100">
                   {subjectItems.map((item) => {
                     const isVideo = "videoUrl" in item;
@@ -640,23 +657,25 @@ export default function MediaManager() {
                     );
                   })}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <Card>
-          <CardContent className="pt-6 text-center">
-            <FileText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-            <p className="text-slate-600">
-              No uploads match your current filters
-            </p>
-            <p className="text-sm text-slate-500 mt-1">
-              Try changing subject/search filters or upload new media
-            </p>
-          </CardContent>
-        </Card>
-      )}
+              )}
+            </CardContent>
+          </Card>
+        ))}
+
+        {groupedMediaBySubject.every(([, items]) => items.length === 0) && (
+          <Card>
+            <CardContent className="pt-6 text-center">
+              <FileText className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+              <p className="text-slate-600">
+                No uploads match your current filters
+              </p>
+              <p className="text-sm text-slate-500 mt-1">
+                Try changing subject/search filters or upload new media
+              </p>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     </div>
   );
 }

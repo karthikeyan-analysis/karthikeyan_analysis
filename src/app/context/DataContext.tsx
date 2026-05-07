@@ -4,6 +4,7 @@ import React, {
   useState,
   ReactNode,
   useEffect,
+  useMemo,
 } from "react";
 import {
   collection,
@@ -124,6 +125,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [videos, setVideos] = useState<Video[]>([]);
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Keep `Batch.studentCount` consistent with actual enrolled students.
+  // Firestore can have stale counts (e.g. after bulk imports), so we derive it
+  // for UI/visibility pickers and dashboards.
+  const batchesWithDerivedCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const s of students) {
+      if (!s.batchId) continue;
+      counts.set(s.batchId, (counts.get(s.batchId) || 0) + 1);
+    }
+    return batches.map((b) => ({
+      ...b,
+      studentCount: counts.get(b.id) || 0,
+    }));
+  }, [batches, students]);
 
   // Load all data from Firestore on mount
   useEffect(() => {
@@ -494,7 +510,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   return (
     <DataContext.Provider
       value={{
-        batches,
+        batches: batchesWithDerivedCounts,
         addBatch,
         updateBatch,
         deleteBatch,

@@ -13,44 +13,27 @@ export default function VideoPlayer() {
   const { videos } = useData();
   const { user } = useAuth();
   const videoRef = useRef<HTMLVideoElement>(null);
-  const watermarkRef = useRef<HTMLDivElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   const video = videos.find((v) => v.id === id);
 
   useEffect(() => {
-    // Animate watermark position
-    if (watermarkRef.current) {
-      let x = 10;
-      let y = 10;
-      let dx = 1;
-      let dy = 1;
+    // If user switches away from the tab/app, pause playback.
+    const onVisibility = () => {
+      if (document.visibilityState !== "visible") {
+        videoRef.current?.pause();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
-      const animate = () => {
-        if (!watermarkRef.current) return;
-        
-        const maxX = Math.max(0, window.innerWidth - 300);
-        const maxY = Math.max(0, window.innerHeight - 100);
-
-        x += dx;
-        y += dy;
-
-        if (x <= 0 || x >= maxX) dx = -dx;
-        if (y <= 0 || y >= maxY) dy = -dy;
-
-        watermarkRef.current.style.left = `${x}px`;
-        watermarkRef.current.style.top = `${y}px`;
-
-        requestAnimationFrame(animate);
-      };
-
-      animate();
-    }
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, []);
 
   // Harden player interaction and common download/devtool shortcuts
   useEffect(() => {
-    const preventContextMenu = (e: MouseEvent) => {
+    const preventDefault = (e: Event) => {
       e.preventDefault();
     };
 
@@ -67,15 +50,19 @@ export default function VideoPlayer() {
     };
 
     const videoElement = videoRef.current;
-    if (videoElement) {
-      videoElement.addEventListener("contextmenu", preventContextMenu);
-    }
+    document.addEventListener("contextmenu", preventDefault, { capture: true });
+    document.addEventListener("copy", preventDefault, { capture: true });
+    document.addEventListener("cut", preventDefault, { capture: true });
+    document.addEventListener("dragstart", preventDefault, { capture: true });
+    document.addEventListener("selectstart", preventDefault, { capture: true });
     window.addEventListener("keydown", handleKeyDown);
 
     return () => {
-      if (videoElement) {
-        videoElement.removeEventListener("contextmenu", preventContextMenu);
-      }
+      document.removeEventListener("contextmenu", preventDefault, { capture: true } as any);
+      document.removeEventListener("copy", preventDefault, { capture: true } as any);
+      document.removeEventListener("cut", preventDefault, { capture: true } as any);
+      document.removeEventListener("dragstart", preventDefault, { capture: true } as any);
+      document.removeEventListener("selectstart", preventDefault, { capture: true } as any);
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, []);
@@ -131,6 +118,7 @@ export default function VideoPlayer() {
                 controls
                 controlsList="nodownload noremoteplayback noplaybackrate"
                 disablePictureInPicture
+                playsInline
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 poster={video.thumbnail}
@@ -140,27 +128,6 @@ export default function VideoPlayer() {
                 Your browser does not support the video tag.
               </video>
 
-              {/* Dynamic Watermark Overlay */}
-              {isPlaying && (
-                <div
-                  ref={watermarkRef}
-                  className="fixed pointer-events-none z-50"
-                  style={{
-                    opacity: 0.7,
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    color: "white",
-                    textShadow: "2px 2px 4px rgba(0,0,0,0.8)",
-                    padding: "8px 12px",
-                    backgroundColor: "rgba(0,0,0,0.4)",
-                    borderRadius: "6px",
-                    backdropFilter: "blur(4px)",
-                  }}
-                >
-                  <div>{user?.studentId}</div>
-                  <div className="text-xs">{user?.email}</div>
-                </div>
-              )}
             </div>
 
             {/* Security Notice */}
