@@ -586,57 +586,52 @@ export default function TakeExam() {
   return (
     <div className="min-h-screen bg-slate-50 p-3 md:p-6">
       <div className="h-[calc(100vh-3rem)] flex flex-col gap-4">
-        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 sm:py-2.5 flex flex-row items-start justify-between gap-3">
-          <img
-            src={bannerImage}
-            alt="EduHub banner"
-            className="block h-8 sm:h-10 w-auto max-w-[min(200px,42vw)] object-contain object-left self-start"
-          />
-          <div className="flex flex-col items-end gap-1 shrink-0">
-            <div
-              className="relative w-[92px] h-[118px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm"
-              title="Student photo"
-            >
-              {user.photoURL ? (
-                <img
-                  src={user.photoURL}
-                  alt=""
-                  className="max-w-full max-h-full w-full h-full object-contain object-center"
-                  loading="lazy"
-                />
-              ) : (
-                <span className="text-base font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
-                  {initialsFromName(user.name || "Student")}
-                </span>
-              )}
+        <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0 flex-1">
+              <img
+                src={bannerImage}
+                alt="EduHub banner"
+                className="block h-16 sm:h-20 lg:h-24 w-auto max-w-full object-contain object-left"
+              />
             </div>
-            <span className="max-w-[104px] text-[10px] leading-tight text-slate-600 text-right truncate" title={user.name}>
-              {user.name || "Student"}
-            </span>
+            <div className="w-full lg:w-auto lg:min-w-[360px] rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="text-base sm:text-lg font-semibold text-slate-900 truncate">
+                  {test.title}
+                </h1>
+                <Badge variant="outline" className="text-xs bg-white">
+                  {test.subject}
+                </Badge>
+                {isAttemptSubmitted ? (
+                  <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
+                ) : (
+                  <Badge className="bg-indigo-100 text-indigo-800">In progress</Badge>
+                )}
+              </div>
+              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
+                <div>
+                  Batch: <span className="font-semibold text-slate-800">{test.batchId}</span>
+                </div>
+                <div>
+                  Questions: <span className="font-semibold text-slate-800">{questions.length}</span>
+                </div>
+                <div>
+                  Total Marks: <span className="font-semibold text-slate-800">{test.totalMarks}</span>
+                </div>
+                <div>
+                  Duration:{" "}
+                  <span className="font-semibold text-slate-800">
+                    {formatTimeLeft((test.durationMinutes || 0) * 60)}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
-        {/* Top bar */}
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-lg md:text-xl font-semibold text-slate-900 truncate">
-              {test.title}
-            </h1>
-            <Badge variant="outline" className="text-xs">
-              {test.subject}
-            </Badge>
-            {isAttemptSubmitted ? (
-              <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
-            ) : (
-              <Badge className="bg-indigo-100 text-indigo-800">In progress</Badge>
-            )}
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Batch: {test.batchId} • Questions: {questions.length} • Marks: {test.totalMarks}
-          </p>
         </div>
 
       {/* Main grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-4 min-h-0">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 min-h-0">
         {/* Question panel */}
         <Card className="min-h-0">
           <CardContent className="p-0 h-full flex flex-col min-h-0">
@@ -739,32 +734,6 @@ export default function TakeExam() {
 
             <div className="border-t border-slate-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={goPrev} disabled={currentIndex === 0}>
-                  Previous
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goNext}
-                  disabled={currentIndex === questions.length - 1}
-                >
-                  Next
-                </Button>
-                {isAttemptActive ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <Clock className="w-4 h-4 text-slate-600 shrink-0" />
-                    <div className="text-sm font-semibold text-slate-900 tabular-nums">
-                      {formatTimeLeft(timeLeftSeconds)}
-                    </div>
-                  </div>
-                ) : isAttemptSubmitted ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                    <Clock className="w-4 h-4 shrink-0" />
-                    <span className="tabular-nums">00:00</span>
-                  </div>
-                ) : null}
-              </div>
-              <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                 <Button
                   variant="outline"
                   size="sm"
@@ -798,6 +767,32 @@ export default function TakeExam() {
                   Clear Response
                 </Button>
               </div>
+              <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                <Button variant="outline" size="sm" onClick={goPrev} disabled={currentIndex === 0}>
+                  Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={goNext}
+                  disabled={currentIndex === questions.length - 1}
+                >
+                  Next
+                </Button>
+                {isAttemptActive ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <Clock className="w-4 h-4 text-slate-600 shrink-0" />
+                    <div className="text-sm font-semibold text-slate-900 tabular-nums">
+                      {formatTimeLeft(timeLeftSeconds)}
+                    </div>
+                  </div>
+                ) : isAttemptSubmitted ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <span className="tabular-nums">00:00</span>
+                  </div>
+                ) : null}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -805,7 +800,46 @@ export default function TakeExam() {
         {/* Side panel */}
         <Card className="min-h-0">
           <CardContent className="p-4 h-full flex flex-col min-h-0">
-            <div className="flex items-center justify-between">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Candidate</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900 truncate" title={user.name}>
+                    {user.name || "Student"}
+                  </div>
+                  <div className="text-xs text-slate-600 mt-0.5">
+                    {user.studentId || user.studentRecordId || "ID not available"}
+                  </div>
+                </div>
+                <div
+                  className="relative w-[84px] h-[108px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm shrink-0"
+                  title="Student photo"
+                >
+                  {user.photoURL ? (
+                    <img
+                      src={user.photoURL}
+                      alt=""
+                      className="max-w-full max-h-full w-full h-full object-contain object-center"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
+                      {initialsFromName(user.name || "Student")}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
+                <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                  Answered: <span className="font-semibold text-slate-900">{answeredCount}</span>
+                </div>
+                <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                  Marked: <span className="font-semibold text-slate-900">{reviewCount}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
               <div className="text-sm font-semibold text-slate-900">Question Palette</div>
               <div className="text-xs text-slate-500">
                 {answeredCount}/{questions.length} answered
