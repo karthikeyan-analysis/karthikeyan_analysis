@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useLocation, useNavigate } from "react-router";
 import { Button } from '../ui/button';
-import { Avatar, AvatarFallback } from '../ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { LogOut, User, Bell, Menu } from 'lucide-react';
 
@@ -76,6 +76,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="flex items-center gap-2 md:gap-3 h-auto py-2">
               <Avatar className="w-8 h-8 md:w-9 md:h-9 bg-indigo-600">
+                {user?.photoURL ? (
+                  <AvatarImage src={user.photoURL} alt="" className="object-cover" />
+                ) : null}
                 <AvatarFallback className="bg-indigo-600 text-white">
                   {user ? getInitials(user.name) : 'U'}
                 </AvatarFallback>

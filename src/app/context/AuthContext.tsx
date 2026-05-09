@@ -36,6 +36,8 @@ interface User {
   studentId?: string;
   batchId?: string; // Batch enrollment for students
   studentRecordId?: string;
+  /** Profile image URL (admin-uploaded or Google). */
+  photoURL?: string;
 }
 
 interface AuthContextType {
@@ -68,14 +70,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (userDocSnap.exists()) {
         const userData = userDocSnap.data();
+        const role = (userData.role as UserRole) || "student";
+        let name =
+          (typeof userData.name === "string" && userData.name.trim()) ||
+          firebaseUser.displayName ||
+          "";
+        let photoURL: string | undefined =
+          typeof userData.photoURL === "string" ? userData.photoURL : undefined;
+
+        if (role === "student" && userData.studentRecordId) {
+          const stSnap = await getDoc(doc(db, "students", userData.studentRecordId));
+          if (stSnap.exists()) {
+            const st = stSnap.data() as { name?: string; photoURL?: string };
+            if (st.name?.trim()) name = st.name.trim();
+            if (typeof st.photoURL === "string" && st.photoURL) photoURL = st.photoURL;
+          }
+        } else if (role === "admin" && typeof userData.name === "string" && userData.name.trim()) {
+          name = userData.name.trim();
+        }
+
+        if (!photoURL && firebaseUser.photoURL) {
+          photoURL = firebaseUser.photoURL;
+        }
+
         return {
           id: firebaseUser.uid,
           email: firebaseUser.email || "",
-          name: firebaseUser.displayName || "",
-          role: userData.role || "student",
+          name,
+          role,
           studentId: userData.studentId,
           batchId: userData.batchId,
           studentRecordId: userData.studentRecordId,
+          photoURL,
         };
       }
       return null;
@@ -163,6 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email?: string;
         studentId?: string;
         batchId?: string;
+        photoURL?: string;
       };
       const studentRecordId = studentSnap.docs[0].id;
 
@@ -175,6 +202,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           studentId: studentRecord.studentId,
           batchId: studentRecord.batchId,
           studentRecordId,
+          ...(studentRecord.photoURL ? { photoURL: studentRecord.photoURL } : {}),
           updatedAt: new Date().toISOString(),
         },
         { merge: true },

@@ -20,6 +20,12 @@ service firebase.storage {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    // Student profile photos (admin upload; students need read for UI / PDF)
+    match /studentPhotos/{studentId}/{name} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }
 

@@ -17,9 +17,11 @@ import {
   where,
   Timestamp,
   writeBatch,
+  deleteField,
 } from "firebase/firestore";
 import { deleteObject, ref as storageRef } from "firebase/storage";
 import { db, storage } from "../../config/firebase";
+import { deleteStudentProfileImage } from "../features/students/studentPhotoStorage";
 
 export interface Batch {
   id: string;
@@ -39,6 +41,8 @@ export interface Student {
   enrolledDate: string;
   status: "active" | "inactive";
   batchId?: string; // Batch enrollment
+  /** Public download URL for profile image (Firebase Storage). */
+  photoURL?: string;
 }
 
 export type VisibilityType = "ALL" | "SELECTIVE" | "BATCH";
@@ -92,8 +96,9 @@ interface DataContextType {
   deleteBatch: (id: string) => Promise<void>;
 
   students: Student[];
-  addStudent: (student: Omit<Student, "id">) => Promise<void>;
+  addStudent: (student: Omit<Student, "id">) => Promise<string>;
   updateStudent: (id: string, student: Partial<Student>) => Promise<void>;
+  clearStudentPhoto: (id: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   getStudentsByBatch: (batchId: string) => Student[];
 
@@ -309,8 +314,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
           });
         }
       }
+      return docRef.id;
     } catch (error) {
       console.error("Error adding student:", error);
+      throw error;
+    }
+  };
+
+  const clearStudentPhoto = async (id: string) => {
+    try {
+      await deleteStudentProfileImage(id);
+      await updateDoc(doc(db, "students", id), { photoURL: deleteField() } as any);
+      setStudents((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, photoURL: undefined } : s)),
+      );
+    } catch (error) {
+      console.error("Error clearing student photo:", error);
       throw error;
     }
   };
@@ -357,6 +376,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const deleteStudent = async (id: string) => {
     try {
       const student = students.find((s) => s.id === id);
+      await deleteStudentProfileImage(id);
       await deleteDoc(doc(db, "students", id));
       setStudents(students.filter((s) => s.id !== id));
 
@@ -517,6 +537,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         students,
         addStudent,
         updateStudent,
+        clearStudentPhoto,
         deleteStudent,
         getStudentsByBatch,
         content,

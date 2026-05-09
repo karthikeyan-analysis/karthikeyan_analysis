@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useData } from "../../context/DataContext";
 import type { Student } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
@@ -34,7 +34,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -43,9 +43,11 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import * as XLSX from "xlsx";
+import StudentAvatar from "../../components/StudentAvatar";
+import { uploadStudentProfileImage } from "../../features/students/studentPhotoStorage";
 
 export default function StudentManagement() {
-  const { students, batches, addStudent, updateStudent, deleteStudent } =
+  const { students, batches, addStudent, updateStudent, deleteStudent, clearStudentPhoto } =
     useData();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<string>("all");
@@ -78,6 +80,19 @@ export default function StudentManagement() {
     status: "active" as "active" | "inactive",
     batchId: "",
   });
+
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const blobPreviewUrl = useMemo(
+    () => (photoFile ? URL.createObjectURL(photoFile) : null),
+    [photoFile],
+  );
+  useEffect(() => {
+    return () => {
+      if (blobPreviewUrl) URL.revokeObjectURL(blobPreviewUrl);
+    };
+  }, [blobPreviewUrl]);
+
+  const photoPreviewDisplay = blobPreviewUrl || editingStudent?.photoURL || null;
 
   // Filter students by selected batch
   const batchFilteredStudents =
