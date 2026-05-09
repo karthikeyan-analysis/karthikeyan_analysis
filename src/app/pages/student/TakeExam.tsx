@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import bannerImage from "../../../banner.jpeg";
+import StudentAvatar from "../../components/StudentAvatar";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -578,12 +579,13 @@ export default function TakeExam() {
   return (
     <div className="min-h-screen bg-slate-50 p-3 md:p-6">
       <div className="h-[calc(100vh-3rem)] flex flex-col gap-4">
-        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4 flex items-center justify-center">
+        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
           <img
             src={bannerImage}
             alt="EduHub banner"
-            className="block h-auto w-auto max-w-full max-h-14 sm:max-h-24 object-contain"
+            className="block h-auto w-auto max-w-full max-h-14 sm:max-h-24 object-contain flex-1 min-w-0"
           />
+          <StudentAvatar name={user.name || "Student"} photoURL={user.photoURL} size="xl" className="shrink-0 ring-2 ring-slate-100" />
         </div>
         {/* Top bar */}
         <div className="min-w-0">

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { BookOpen, Video, FileText, Layers3, CalendarClock } from "lucide-react";
+import StudentAvatar from "../../components/StudentAvatar";
 import { useNavigate } from "react-router";
 import { listExamTestsForStudent } from "../../features/exams/examApi";
 import type { ExamTest } from "../../features/exams/types";
@@ -120,8 +121,15 @@ export default function StudentDashboard() {
     <div className="space-y-6">
       {/* Course header */}
       <Card className="border-slate-200 shadow-sm">
-        <CardContent className="pt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <CardContent className="pt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-4 min-w-0">
+            <StudentAvatar
+              name={user?.name || "Student"}
+              photoURL={user?.photoURL}
+              size="lg"
+              className="shrink-0 ring-2 ring-slate-100"
+            />
+            <div className="min-w-0">
             <p className="text-xs uppercase tracking-wide text-slate-500">Joined Course</p>
             <p className="text-xl font-semibold text-slate-900 mt-1">
               {currentBatch?.name || "Not assigned"}
@@ -129,8 +137,9 @@ export default function StudentDashboard() {
             <p className="text-sm text-slate-600 mt-1">
               {currentBatch?.description?.trim() || "Course details will appear here."}
             </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <Badge variant="outline" className="bg-white">
               {availableSubjects.length} subjects
             </Badge>

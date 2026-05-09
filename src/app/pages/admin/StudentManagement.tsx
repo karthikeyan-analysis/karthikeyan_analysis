@@ -46,6 +46,63 @@ import * as XLSX from "xlsx";
 import StudentAvatar from "../../components/StudentAvatar";
 import { uploadStudentProfileImage } from "../../features/students/studentPhotoStorage";
 
+function StudentPhotoFields({
+  previewUrl,
+  displayName,
+  onPickFile,
+  onRemove,
+  canRemove,
+}: {
+  previewUrl: string | null;
+  displayName: string;
+  onPickFile: (file: File | null) => void;
+  onRemove: () => void | Promise<void>;
+  canRemove: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>Profile photo (optional)</Label>
+      <div className="flex flex-wrap items-center gap-3">
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt=""
+            className="h-16 w-16 rounded-full object-cover border border-slate-200 shrink-0 bg-slate-50"
+          />
+        ) : (
+          <StudentAvatar name={displayName || "?"} size="lg" />
+        )}
+        <Input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          className="max-w-[220px]"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (!f) {
+              onPickFile(null);
+              return;
+            }
+            if (!f.type.startsWith("image/")) {
+              onPickFile(null);
+              return;
+            }
+            onPickFile(f);
+          }}
+        />
+        {canRemove ? (
+          <Button type="button" variant="outline" size="sm" onClick={() => void onRemove()}>
+            <X className="w-4 h-4 mr-1" />
+            Remove
+          </Button>
+        ) : null}
+      </div>
+      <p className="text-xs text-slate-500">
+        Stored in Firebase Storage. Visible when the student logs in, on tests, and on result PDFs.
+      </p>
+    </div>
+  );
+}
+
 export default function StudentManagement() {
   const { students, batches, addStudent, updateStudent, deleteStudent, clearStudentPhoto } =
     useData();
@@ -279,6 +336,19 @@ export default function StudentManagement() {
     setImporting(false);
   };
 
+  const handleRemovePhoto = async () => {
+    setPhotoFile(null);
+    if (editingStudent) {
+      try {
+        await clearStudentPhoto(editingStudent.id);
+        setEditingStudent((prev) => (prev ? { ...prev, photoURL: undefined } : null));
+      } catch (err) {
+        console.error(err);
+        setError("Could not remove photo from storage.");
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -287,15 +357,24 @@ export default function StudentManagement() {
     try {
       if (editingStudent) {
         await updateStudent(editingStudent.id, formData);
+        if (photoFile) {
+          const url = await uploadStudentProfileImage(editingStudent.id, photoFile);
+          await updateStudent(editingStudent.id, { photoURL: url });
+        }
         setEditingStudent(null);
       } else {
-        await addStudent({
+        const newId = await addStudent({
           ...formData,
           enrolledDate: new Date().toISOString().split("T")[0],
         });
+        if (photoFile) {
+          const url = await uploadStudentProfileImage(newId, photoFile);
+          await updateStudent(newId, { photoURL: url });
+        }
         setIsAddDialogOpen(false);
       }
 
+      setPhotoFile(null);
       setFormData({
         studentId: "",
         name: "",
@@ -311,6 +390,7 @@ export default function StudentManagement() {
   };
 
   const handleEdit = (student: Student) => {
+    setPhotoFile(null);
     setEditingStudent(student);
     setFormData({
       studentId: student.studentId,
@@ -336,6 +416,7 @@ export default function StudentManagement() {
   };
 
   const resetForm = () => {
+    setPhotoFile(null);
     setFormData({
       studentId: "",
       name: "",
@@ -363,7 +444,13 @@ export default function StudentManagement() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <Dialog
+          open={isAddDialogOpen}
+          onOpenChange={(open) => {
+            setIsAddDialogOpen(open);
+            resetForm();
+          }}
+        >
           <DialogTrigger asChild>
             <Button className="bg-indigo-600 hover:bg-indigo-700">
               <UserPlus className="w-4 h-4 mr-2" />
@@ -465,6 +552,13 @@ export default function StudentManagement() {
                     </SelectContent>
                   </Select>
                 </div>
+                <StudentPhotoFields
+                  previewUrl={blobPreviewUrl || null}
+                  displayName={formData.name}
+                  onPickFile={setPhotoFile}
+                  onRemove={handleRemovePhoto}
+                  canRemove={!!photoFile}
+                />
               </div>
               <DialogFooter>
                 <Button
@@ -759,6 +853,7 @@ export default function StudentManagement() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-14">Photo</TableHead>
                     <TableHead>Student ID</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
@@ -783,11 +878,23 @@ export default function StudentManagement() {
                         onSubmit={handleSubmit}
                         onReset={resetForm}
                         getBatchName={getBatchName}
+                        photoPreviewUrl={
+                          editingStudent?.id === student.id
+                            ? photoPreviewDisplay
+                            : student.photoURL || null
+                        }
+                        onPhotoPick={setPhotoFile}
+                        onPhotoRemove={handleRemovePhoto}
+                        canRemovePhoto={
+                          editingStudent?.id === student.id
+                            ? !!(photoFile || editingStudent.photoURL)
+                            : false
+                        }
                       />
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
+                      <TableCell colSpan={8} className="text-center py-8">
                         <p className="text-slate-500">No students found</p>
                       </TableCell>
                     </TableRow>
@@ -804,6 +911,7 @@ export default function StudentManagement() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-14">Photo</TableHead>
                       <TableHead>Student ID</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
@@ -828,11 +936,23 @@ export default function StudentManagement() {
                           onReset={resetForm}
                           getBatchName={getBatchName}
                           showBatchColumn={false}
+                          photoPreviewUrl={
+                            editingStudent?.id === student.id
+                              ? photoPreviewDisplay
+                              : student.photoURL || null
+                          }
+                          onPhotoPick={setPhotoFile}
+                          onPhotoRemove={handleRemovePhoto}
+                          canRemovePhoto={
+                            editingStudent?.id === student.id
+                              ? !!(photoFile || editingStudent.photoURL)
+                              : false
+                          }
                         />
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-slate-500">
                             No students in this batch
                           </p>
@@ -852,6 +972,7 @@ export default function StudentManagement() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-14">Photo</TableHead>
                       <TableHead>Student ID</TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Email</TableHead>
@@ -876,11 +997,23 @@ export default function StudentManagement() {
                           onReset={resetForm}
                           getBatchName={getBatchName}
                           showBatchColumn={false}
+                          photoPreviewUrl={
+                            editingStudent?.id === student.id
+                              ? photoPreviewDisplay
+                              : student.photoURL || null
+                          }
+                          onPhotoPick={setPhotoFile}
+                          onPhotoRemove={handleRemovePhoto}
+                          canRemovePhoto={
+                            editingStudent?.id === student.id
+                              ? !!(photoFile || editingStudent.photoURL)
+                              : false
+                          }
                         />
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8">
+                        <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-slate-500">
                             No unassigned students
                           </p>
@@ -911,6 +1044,10 @@ interface StudentRowProps {
   onReset: () => void;
   getBatchName: (batchId?: string) => string;
   showBatchColumn?: boolean;
+  photoPreviewUrl: string | null;
+  onPhotoPick: (file: File | null) => void;
+  onPhotoRemove: () => void | Promise<void>;
+  canRemovePhoto: boolean;
 }
 
 function StudentRow({
@@ -925,9 +1062,16 @@ function StudentRow({
   onReset,
   getBatchName,
   showBatchColumn = true,
+  photoPreviewUrl,
+  onPhotoPick,
+  onPhotoRemove,
+  canRemovePhoto,
 }: StudentRowProps) {
   return (
     <TableRow key={student.id}>
+      <TableCell>
+        <StudentAvatar name={student.name} photoURL={student.photoURL} size="sm" />
+      </TableCell>
       <TableCell className="font-medium">{student.studentId}</TableCell>
       <TableCell>{student.name}</TableCell>
       <TableCell>{student.email}</TableCell>
@@ -1056,6 +1200,13 @@ function StudentRow({
                       </SelectContent>
                     </Select>
                   </div>
+                  <StudentPhotoFields
+                    previewUrl={photoPreviewUrl}
+                    displayName={formData.name}
+                    onPickFile={onPhotoPick}
+                    onRemove={onPhotoRemove}
+                    canRemove={canRemovePhoto}
+                  />
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={onReset}>

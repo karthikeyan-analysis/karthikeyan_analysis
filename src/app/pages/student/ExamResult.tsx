@@ -9,6 +9,7 @@ import { Card, CardContent } from "../../components/ui/card";
 import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
+import StudentAvatar from "../../components/StudentAvatar";
 
 function formatEta(totalSeconds: number) {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -155,6 +156,10 @@ export default function ExamResult() {
   const watermarkText = `${studentName} • ${studentIdValue}`;
 
   const downloadPdf = () => {
+    const profileImg = user.photoURL?.trim()
+      ? `<div class="profile-wrap"><img src="${escapeHtml(user.photoURL.trim())}" alt="" /></div>`
+      : "";
+
     // Lightweight "Download as PDF": open print-friendly window and let user save as PDF.
     const rows = questions.map((q, idx) => {
       const selected = attempt.answers?.[q.id] ?? null;
@@ -209,8 +214,10 @@ export default function ExamResult() {
     .watermark{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:0}
     .watermark-text{font-size:42px; font-weight:800; color:#475569; opacity:.09; transform:rotate(-28deg); white-space:nowrap}
     .content{position:relative; z-index:1}
-    .banner{border:1px solid #e2e8f0; border-radius:14px; background:#fff; padding:10px 12px; display:flex; align-items:center; justify-content:center; margin-bottom:14px}
+    .header-strip{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:16px; margin-bottom:14px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; padding:12px}
+    .banner{flex:1; min-width:200px; display:flex; justify-content:center; align-items:center}
     .banner img{max-height:74px; max-width:100%; object-fit:contain}
+    .profile-wrap img{width:72px;height:72px;border-radius:999px;object-fit:cover;border:1px solid #e2e8f0; display:block}
     .top{display:flex; justify-content:space-between; gap:16px; align-items:flex-start}
     .h1{font-size:20px; font-weight:800; margin:0}
     .sub{margin-top:6px; color:#475569; font-size:12px}
@@ -246,7 +253,10 @@ export default function ExamResult() {
 <body>
   <div class="watermark"><div class="watermark-text">${escapeHtml(watermarkText)}</div></div>
   <div class="content">
-    <div class="banner"><img src="${escapeHtml(bannerImage)}" alt="EduHub banner" /></div>
+    <div class="header-strip">
+      <div class="banner"><img src="${escapeHtml(bannerImage)}" alt="EduHub banner" /></div>
+      ${profileImg}
+    </div>
     <div class="top">
       <div>
         <div class="h1">Result</div>
@@ -283,12 +293,13 @@ export default function ExamResult() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4 flex items-center justify-center">
+        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
           <img
             src={bannerImage}
             alt="EduHub banner"
-            className="block h-auto w-auto max-w-full max-h-14 sm:max-h-24 object-contain"
+            className="block h-auto w-auto max-w-full max-h-14 sm:max-h-24 object-contain flex-1 min-w-0"
           />
+          <StudentAvatar name={studentName} photoURL={user.photoURL} size="xl" className="shrink-0 ring-2 ring-slate-100" />
         </div>
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

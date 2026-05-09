@@ -23,14 +23,14 @@ import { useEffect, useMemo, useState } from "react";
 import { getAttempt, listExamTestsForStudent } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { useNavigate } from "react-router";
+import StudentAvatar from "../../components/StudentAvatar";
 
 export default function TestSchedule() {
   const { user } = useAuth();
-  const { batches, getTestsByBatch } = useData();
+  const { batches } = useData();
   const navigate = useNavigate();
 
   const currentBatch = batches.find((b) => b.id === user?.batchId);
-  const batchTests = user?.batchId ? getTestsByBatch(user.batchId) : [];
 
   const [examTests, setExamTests] = useState<ExamTest[]>([]);
   const [examLoading, setExamLoading] = useState(false);
@@ -95,6 +95,19 @@ export default function TestSchedule() {
     };
   }, [examTests, user?.id]);
 
+  const now = Date.now();
+  const studentExams = useMemo(() => {
+    const items = [...examTests].sort(
+      (a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime(),
+    );
+    const active = items.filter(
+      (t) => now >= new Date(t.startAt).getTime() && now <= new Date(t.endAt).getTime(),
+    );
+    const upcoming = items.filter((t) => now < new Date(t.startAt).getTime());
+    const closed = items.filter((t) => now > new Date(t.endAt).getTime());
+    return { active, upcoming, closed, all: items };
+  }, [examTests, now]);
+
   if (!user?.batchId) {
     return (
       <div className="space-y-6">
@@ -108,23 +121,6 @@ export default function TestSchedule() {
       </div>
     );
   }
-
-  const activeTests = batchTests.filter((t) => t.status === "active");
-  const closedTests = batchTests.filter((t) => t.status === "closed");
-  const upcomingTests = batchTests.filter((t) => t.status === "upcoming");
-
-  const now = Date.now();
-  const studentExams = useMemo(() => {
-    const items = [...examTests].sort(
-      (a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime(),
-    );
-    const active = items.filter(
-      (t) => now >= new Date(t.startAt).getTime() && now <= new Date(t.endAt).getTime(),
-    );
-    const upcoming = items.filter((t) => now < new Date(t.startAt).getTime());
-    const closed = items.filter((t) => now > new Date(t.endAt).getTime());
-    return { active, upcoming, closed, all: items };
-  }, [examTests, now]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -269,6 +265,18 @@ export default function TestSchedule() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <StudentAvatar name={user.name || "Student"} photoURL={user.photoURL} size="lg" className="ring-2 ring-slate-100" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-900 truncate">{user.name || "Student"}</p>
+          {user.studentId ? (
+            <p className="text-xs text-slate-600">ID: {user.studentId}</p>
+          ) : null}
+          {currentBatch ? (
+            <p className="text-xs text-slate-500 truncate max-w-md">{currentBatch.name}</p>
+          ) : null}
+        </div>
+      </div>
       {/* In-app CBT exams */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
