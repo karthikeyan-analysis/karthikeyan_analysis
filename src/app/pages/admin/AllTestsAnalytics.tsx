@@ -8,6 +8,7 @@ import { Download, Loader2, ArrowLeft } from "lucide-react";
 import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { useData } from "../../context/DataContext";
+import type { Student } from "../../context/DataContext";
 import * as XLSX from "xlsx";
 
 function safeFileName(name: string) {
@@ -28,6 +29,43 @@ function percentScore(a: ExamAttempt, maxMarks: number) {
   const score = a.score;
   if (score == null || !Number.isFinite(max) || max <= 0) return null;
   return Math.round((score / max) * 1000) / 10;
+}
+
+function attemptCompositeKey(testId: string, studentRecordIdOrUid: string) {
+  return `${testId}::${studentRecordIdOrUid}`;
+}
+
+function buildAttemptsLookup(pairs: { test: ExamTest; attempts: ExamAttempt[] }[]) {
+  const m = new Map<string, ExamAttempt>();
+  for (const { test, attempts } of pairs) {
+    for (const a of attempts) {
+      const sk = (a.studentRecordId || "").trim() || a.uid;
+      if (sk) m.set(attemptCompositeKey(test.id, sk), a);
+    }
+  }
+  return m;
+}
+
+/** Same rules as exams list for visibility (roster-aligned). */
+function isEligibleForExam(student: Student, test: ExamTest): boolean {
+  if (test.visibility === "SELECTIVE") {
+    const ids = test.selectedStudentRecordIds;
+    return Array.isArray(ids) && ids.includes(student.id);
+  }
+  return Boolean(student.batchId && student.batchId === test.batchId);
+}
+
+function participationCellText(a: ExamAttempt | undefined, test: ExamTest) {
+  if (!a) return "";
+  const maxMarks = test.totalMarks;
+  if (a.status === "submitted") {
+    const pct = percentScore(a, maxMarks);
+    const score = a.score ?? "";
+    const max = a.maxScore ?? maxMarks;
+    const pctPart = pct != null ? `${pct}%` : "";
+    return `Submitted${pctPart ? ` · ${pctPart}` : ""}${score !== "" ? ` · ${score}/${max}` : ""}`;
+  }
+  return "In progress";
 }
 
 type Row = {
@@ -226,8 +264,119 @@ export default function AllTestsAnalytics() {
             : "",
       }));
 
+      const testsSorted = [...rows].sort(
+        (a, b) => new Date(b.test.startAt).getTime() - new Date(a.test.startAt).getTime(),
+      );
+      const attemptsMap = buildAttemptsLookup(pairs);
+      const rosterSorted = [...students].sort((a, b) =>
+        `${a.name}`.localeCompare(`${b.name}`, undefined, { sensitivity: "base" }),
+      );
+
+      const matrixHeaders = [
+        "studentRecordId",
+        "studentId",
+        "studentName",
+        "studentEmail",
+        "studentBatch",
+        ...testsSorted.map((r) => {
+          const t = r.test;
+          const idShort = String(t.id).slice(0, 8);
+          const titleCrop = String(t.title || "").slice(0, 55);
+          return `[${idShort}] ${titleCrop}`;
+        }),
+      ];
+
+      const matrixAoA: (string | number)[][] = [
+        matrixHeaders,
+        ...rosterSorted.map((s) => {
+          const batchName = batches.find((b) => b.id === s.batchId)?.name || "";
+          return [
+            s.id,
+            s.studentId,
+            s.name,
+            s.email,
+            batchName,
+            ...testsSorted.map((r) => {
+              const a = attemptsMap.get(attemptCompositeKey(r.test.id, s.id));
+              return participationCellText(a, r.test);
+            }),
+          ];
+        }),
+      ];
+
+      const studentTestPairs = rosterSorted.flatMap((s) => {
+        const batchName = batches.find((b) => b.id === s.batchId)?.name || "";
+        return testsSorted.map((r) => {
+          const t = r.test;
+          const elig = isEligibleForExam(s, t);
+          const a = attemptsMap.get(attemptCompositeKey(t.id, s.id));
+          const pct = a?.status === "submitted" ? percentScore(a, t.totalMarks) : null;
+          return {
+            studentRecordId: s.id,
+            studentId: s.studentId,
+            studentName: s.name,
+            studentEmail: s.email,
+            studentBatch: batchName,
+            examId: t.id,
+            examTitle: t.title,
+            examSubject: t.subject,
+            examBatch: r.batchName,
+            examStartAt: toIsoOrEmpty(t.startAt),
+            examEndAt: toIsoOrEmpty(t.endAt),
+            eligibleForExam: elig ? "Yes" : "No",
+            attempted: a ? "Yes" : "No",
+            attemptStatus: a?.status ?? "",
+            score: a?.score ?? "",
+            maxScore: a ? (a.maxScore ?? t.totalMarks) : "",
+            percent: pct ?? "",
+            startedAt: a ? toIsoOrEmpty(a.startedAt) : "",
+            submittedAt: a ? toIsoOrEmpty(a.submittedAt) : "",
+          };
+        });
+      });
+
+      const everyStudentRollup = rosterSorted.map((s) => {
+        const batchName = batches.find((b) => b.id === s.batchId)?.name || "";
+        let examsEligible = 0;
+        let examsAttempted = 0;
+        let examsSubmitted = 0;
+        for (const r of testsSorted) {
+          if (!isEligibleForExam(s, r.test)) continue;
+          examsEligible++;
+          const a = attemptsMap.get(attemptCompositeKey(r.test.id, s.id));
+          if (a) {
+            examsAttempted++;
+            if (a.status === "submitted") examsSubmitted++;
+          }
+        }
+        const rate =
+          examsEligible > 0 ? Math.round((examsAttempted / examsEligible) * 1000) / 10 : "";
+        const submitRate =
+          examsEligible > 0 ? Math.round((examsSubmitted / examsEligible) * 1000) / 10 : "";
+
+        const fromAttempts = rollupMap.get(s.id);
+        return {
+          studentRecordId: s.id,
+          studentId: s.studentId,
+          studentName: s.name,
+          studentEmail: s.email,
+          studentBatch: batchName,
+          studentStatus: s.status,
+          examsEligible_visibilityRules: examsEligible,
+          examsAttempted: examsAttempted,
+          examsSubmitted: examsSubmitted,
+          pctEligibleAttempted: rate,
+          pctEligibleSubmitted: submitRate,
+          testsStarted_anyExam: fromAttempts?.testsStarted ?? 0,
+          testsSubmitted_anyExam: fromAttempts?.testsSubmitted ?? 0,
+        };
+      });
+
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(testSummary), "Test summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(matrixAoA), "Participation_matrix");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentTestPairs), "Student_x_test_pairs");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(everyStudentRollup), "Every_student_summary");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allAttempts), "All attempts");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentOverview), "Students overview");
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
@@ -247,14 +396,15 @@ export default function AllTestsAnalytics() {
           </Button>
           <h1 className="text-2xl font-semibold text-slate-900">All tests — performance analytics</h1>
           <p className="text-sm text-slate-600 max-w-2xl">
-            Attendance and scores across every CBT test. Export a multi-sheet Excel file: per-test summary, every
-            attempt row, and a student rollup.
+            Attendance and scores across every CBT test. The Excel workbook includes a wide participation matrix (each
+            roster student × each test), a long student-by-test pairing list with eligibility and outcome fields, raw
+            attempt rows, and per-student summaries.
           </p>
         </div>
         <Button
           className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
           onClick={exportExcel}
-          disabled={loading || rows.length === 0 || exporting}
+          disabled={loading || exporting || rows.length === 0}
         >
           {exporting ? (
             <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -353,8 +503,9 @@ export default function AllTestsAnalytics() {
       </Card>
 
       <div className="flex justify-end">
-        <Badge variant="outline" className="text-xs font-normal">
-          Excel sheets: Test summary · All attempts · Students overview
+        <Badge variant="outline" className="text-xs font-normal max-w-full justify-center text-center h-auto py-2 leading-relaxed">
+          Sheets: summary, participation matrix (all students × all tests), student×test pairs, every-student rollup,
+          raw attempts, attempt-participant overview
         </Badge>
       </div>
     </div>

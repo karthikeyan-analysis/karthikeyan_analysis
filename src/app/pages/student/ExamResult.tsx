@@ -9,8 +9,6 @@ import { Card, CardContent } from "../../components/ui/card";
 import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
-import StudentAvatar from "../../components/StudentAvatar";
-
 function formatEta(totalSeconds: number) {
   const s = Math.max(0, Math.floor(totalSeconds));
   const h = Math.floor(s / 3600);
@@ -18,6 +16,13 @@ function formatEta(totalSeconds: number) {
   const sec = s % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   return `${m}:${String(sec).padStart(2, "0")}`;
+}
+
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
+  return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
 }
 
 function escapeHtml(input: string) {
@@ -156,9 +161,9 @@ export default function ExamResult() {
   const watermarkText = `${studentName} • ${studentIdValue}`;
 
   const downloadPdf = () => {
-    const profileImg = user.photoURL?.trim()
-      ? `<div class="profile-wrap"><img src="${escapeHtml(user.photoURL.trim())}" alt="" /></div>`
-      : "";
+    const passportInner = user.photoURL?.trim()
+      ? `<img src="${escapeHtml(user.photoURL.trim())}" alt="" />`
+      : `<div class="profile-fallback">${escapeHtml(initialsFromName(studentName))}</div>`;
 
     // Lightweight "Download as PDF": open print-friendly window and let user save as PDF.
     const rows = questions.map((q, idx) => {
@@ -214,11 +219,14 @@ export default function ExamResult() {
     .watermark{position:fixed; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; z-index:0}
     .watermark-text{font-size:42px; font-weight:800; color:#475569; opacity:.09; transform:rotate(-28deg); white-space:nowrap}
     .content{position:relative; z-index:1}
-    .header-strip{display:flex; flex-wrap:wrap; align-items:center; justify-content:center; gap:16px; margin-bottom:14px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; padding:12px}
-    .banner{flex:1; min-width:200px; display:flex; justify-content:center; align-items:center}
+    .header-strip{display:flex; align-items:center; justify-content:center; margin-bottom:14px; border:1px solid #e2e8f0; border-radius:14px; background:#fff; padding:12px}
+    .banner{display:flex; justify-content:center; align-items:center; width:100%}
     .banner img{max-height:74px; max-width:100%; object-fit:contain}
-    .profile-wrap img{width:72px;height:72px;border-radius:999px;object-fit:cover;border:1px solid #e2e8f0; display:block}
-    .top{display:flex; justify-content:space-between; gap:16px; align-items:flex-start}
+    .result-row{display:flex; flex-wrap:wrap; gap:14px; align-items:flex-start; justify-content:space-between; margin-bottom:2px}
+    .result-main{flex:1; min-width:200px}
+    .profile-passport{width:92px;height:118px;border:3px solid #1e293b;border-radius:2px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;box-sizing:border-box}
+    .profile-passport img{max-width:100%;max-height:100%;object-fit:contain;display:block;margin:0 auto}
+    .profile-fallback{font-size:16px;font-weight:800;color:#4338ca;text-align:center;padding:4px;word-break:break-all}
     .h1{font-size:20px; font-weight:800; margin:0}
     .sub{margin-top:6px; color:#475569; font-size:12px}
     .student{margin-top:8px; display:flex; gap:8px; flex-wrap:wrap}
@@ -255,10 +263,9 @@ export default function ExamResult() {
   <div class="content">
     <div class="header-strip">
       <div class="banner"><img src="${escapeHtml(bannerImage)}" alt="EduHub banner" /></div>
-      ${profileImg}
     </div>
-    <div class="top">
-      <div>
+    <div class="result-row">
+      <div class="result-main">
         <div class="h1">Result</div>
         <div class="sub"><b>${escapeHtml(test.title)}</b> • ${escapeHtml(test.subject)} • Submitted at: ${escapeHtml(
           attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-",
@@ -268,6 +275,7 @@ export default function ExamResult() {
           <span class="student-chip">Student ID: ${escapeHtml(studentIdValue)}</span>
         </div>
       </div>
+      <div class="profile-passport">${passportInner}</div>
     </div>
     <div class="kpis">
       <div class="kpi"><div class="l">Score</div><div class="v">${scoreValue} / ${maxScoreValue}</div></div>
@@ -293,35 +301,55 @@ export default function ExamResult() {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
+        <div className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 sm:px-4 sm:py-4 flex justify-center">
           <img
             src={bannerImage}
             alt="EduHub banner"
-            className="block h-auto w-auto max-w-full max-h-14 sm:max-h-24 object-contain flex-1 min-w-0"
+            className="block h-auto max-h-24 sm:max-h-28 w-auto max-w-full object-contain"
           />
-          <StudentAvatar name={studentName} photoURL={user.photoURL} size="xl" className="shrink-0 ring-2 ring-slate-100" />
         </div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 truncate">
-              Result
-            </h1>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              <Badge variant="outline">{test.title}</Badge>
-              <Badge variant="outline">{test.subject}</Badge>
-              <Badge className="bg-emerald-100 text-emerald-800">
-                <CheckCircle2 className="w-4 h-4 mr-1" /> Submitted
-              </Badge>
+
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex flex-1 flex-col sm:flex-row sm:gap-6 min-w-0 items-stretch">
+            <div className="min-w-0 flex-1 pt-1">
+              <h1 className="text-2xl md:text-3xl font-semibold text-slate-900 truncate">
+                Result
+              </h1>
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <Badge variant="outline">{test.title}</Badge>
+                <Badge variant="outline">{test.subject}</Badge>
+                <Badge className="bg-emerald-100 text-emerald-800">
+                  <CheckCircle2 className="w-4 h-4 mr-1" /> Submitted
+                </Badge>
+              </div>
+              <div className="text-sm text-slate-600 mt-2">
+                Submitted at: {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-"}
+              </div>
+              <div className="text-sm text-slate-700 mt-1">
+                Student Name: <span className="font-semibold text-slate-900">{studentName}</span>
+                {" • "}Student ID: <span className="font-semibold text-slate-900">{studentIdValue}</span>
+              </div>
             </div>
-            <div className="text-sm text-slate-600 mt-2">
-              Submitted at: {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-"}
-            </div>
-            <div className="text-sm text-slate-700 mt-1">
-              Student Name: <span className="font-semibold text-slate-900">{studentName}</span>
-              {" • "}Student ID: <span className="font-semibold text-slate-900">{studentIdValue}</span>
+            <div className="flex justify-end sm:flex-none shrink-0 sm:mt-1">
+              <div
+                className="relative w-[92px] h-[118px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm"
+                title="Student photo"
+              >
+                {user.photoURL?.trim() ? (
+                  <img
+                    src={user.photoURL.trim()}
+                    alt=""
+                    className="max-w-full max-h-full w-full h-full object-contain object-center"
+                  />
+                ) : (
+                  <span className="text-base font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
+                    {initialsFromName(studentName)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-          <Button variant="outline" onClick={() => navigate("/student/tests")}>
+          <Button variant="outline" className="self-end sm:self-start shrink-0" onClick={() => navigate("/student/tests")}>
             Back to schedule
           </Button>
         </div>
