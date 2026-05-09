@@ -1,0 +1,111 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function role() {
+      return isSignedIn() && userDoc().data.role != null ? userDoc().data.role : null;
+    }
+
+    function isAdmin() {
+      return role() == "admin";
+    }
+
+    function isStudent() {
+      return role() == "student";
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /batches/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /students/{id} {
+      allow read: if isAdmin() || (isStudent() && userDoc().data.studentRecordId == id);
+      allow write: if isAdmin();
+    }
+
+    // In-app CBT engine
+    match /examTests/{testId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+
+      match /questionsPublic/{qId} {
+        allow read: if isSignedIn();
+        allow write: if isAdmin();
+      }
+
+      // Private keys (correct answers) must not be readable during exam.
+      match /questionsPrivate/{qId} {
+        allow read: if isAdmin() || (isStudent() && canStudentReadPrivateKeys(testId));
+        allow write: if isAdmin();
+      }
+
+      match /attempts/{uid} {
+        allow read: if isAdmin() || (isStudent() && request.auth.uid == uid);
+
+        allow create: if isStudent() && request.auth.uid == uid;
+
+        // Students can save progress while in_progress,
+        // and can submit + write score ONLY after their hardEndAt time.
+        allow update: if isStudent()
+          && request.auth.uid == uid
+          && (
+            // progress save
+            (
+              resource.data.status == "in_progress"
+              && request.resource.data.status == "in_progress"
+              && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+                "answers",
+                "markedForReview",
+                "lastSavedAt",
+                "lastSavedAtServer"
+              ])
+            )
+            ||
+            // submit + score after time ends
+            (
+              resource.data.status == "in_progress"
+              && request.resource.data.status == "submitted"
+              && request.time >= timestamp(resource.data.hardEndAt)
+              && request.resource.data.hardEndAt == resource.data.hardEndAt
+              && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+                "status",
+                "submittedAt",
+                "submittedAtServer",
+                "score",
+                "maxScore"
+              ])
+            )
+          );
+
+        allow delete: if isAdmin();
+      }
+    }
+
+    function canStudentReadPrivateKeys(testId) {
+      // Student can read private keys only after the exam timer ends (hardEndAt),
+      // or after submission if the policy is immediate. This allows client-side
+      // scoring at auto-submit time without exposing keys during the attempt.
+      let t = get(/databases/$(database)/documents/examTests/$(testId)).data;
+      let a = get(/databases/$(database)/documents/examTests/$(testId)/attempts/$(request.auth.uid)).data;
+      return a != null
+        && (
+          (t.showAnswersAfter == "immediate" && a.status == "submitted")
+          || (t.showAnswersAfter == "after_end" && request.time >= timestamp(a.hardEndAt))
+        );
+    }
+  }
+}
+

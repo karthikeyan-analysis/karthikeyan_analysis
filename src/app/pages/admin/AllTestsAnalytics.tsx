@@ -1,0 +1,362 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router";
+import { Button } from "../../components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import { Badge } from "../../components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import { Download, Loader2, ArrowLeft } from "lucide-react";
+import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
+import type { ExamAttempt, ExamTest } from "../../features/exams/types";
+import { useData } from "../../context/DataContext";
+import * as XLSX from "xlsx";
+
+function safeFileName(name: string) {
+  return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
+}
+
+function toIsoOrEmpty(value: unknown) {
+  if (!value) return "";
+  try {
+    return new Date(value as string).toISOString();
+  } catch {
+    return String(value);
+  }
+}
+
+function percentScore(a: ExamAttempt, maxMarks: number) {
+  const max = a.maxScore ?? maxMarks;
+  const score = a.score;
+  if (score == null || !Number.isFinite(max) || max <= 0) return null;
+  return Math.round((score / max) * 1000) / 10;
+}
+
+type Row = {
+  test: ExamTest;
+  attempts: ExamAttempt[];
+  batchName: string;
+  started: number;
+  submitted: number;
+  inProgress: number;
+  avgPercentSubmitted: number | null;
+  minPercentSubmitted: number | null;
+  maxPercentSubmitted: number | null;
+};
+
+export default function AllTestsAnalytics() {
+  const navigate = useNavigate();
+  const { students, batches } = useData();
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [pairs, setPairs] = useState<{ test: ExamTest; attempts: ExamAttempt[] }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const data = await listAllTestsWithAttemptsForAdmin();
+        if (!cancelled) setPairs(data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const rows: Row[] = useMemo(() => {
+    return pairs.map(({ test, attempts }) => {
+      const batchName = batches.find((b) => b.id === test.batchId)?.name || test.batchId;
+      const submittedAtt = attempts.filter((a) => a.status === "submitted");
+      const inProgress = attempts.filter((a) => a.status === "in_progress").length;
+      const percents = submittedAtt
+        .map((a) => percentScore(a, test.totalMarks))
+        .filter((p): p is number => p != null);
+      const avgPercentSubmitted =
+        percents.length > 0 ? Math.round((percents.reduce((s, p) => s + p, 0) / percents.length) * 10) / 10 : null;
+      const minPercentSubmitted =
+        percents.length > 0 ? Math.round(Math.min(...percents) * 10) / 10 : null;
+      const maxPercentSubmitted =
+        percents.length > 0 ? Math.round(Math.max(...percents) * 10) / 10 : null;
+      return {
+        test,
+        attempts,
+        batchName,
+        started: attempts.length,
+        submitted: submittedAtt.length,
+        inProgress,
+        avgPercentSubmitted,
+        minPercentSubmitted,
+        maxPercentSubmitted,
+      };
+    });
+  }, [pairs, batches]);
+
+  const totals = useMemo(() => {
+    let started = 0;
+    let submitted = 0;
+    let inProgress = 0;
+    for (const r of rows) {
+      started += r.started;
+      submitted += r.submitted;
+      inProgress += r.inProgress;
+    }
+    return { tests: rows.length, started, submitted, inProgress };
+  }, [rows]);
+
+  const studentLookup = (studentRecordId?: string) =>
+    studentRecordId ? students.find((s) => s.id === studentRecordId) : undefined;
+
+  const exportExcel = () => {
+    setExporting(true);
+    try {
+      const testSummary = rows.map((r) => ({
+        examId: r.test.id,
+        examTitle: r.test.title,
+        subject: r.test.subject,
+        batch: r.batchName,
+        startAt: toIsoOrEmpty(r.test.startAt),
+        endAt: toIsoOrEmpty(r.test.endAt),
+        durationMinutes: r.test.durationMinutes,
+        totalQuestions: r.test.totalQuestions,
+        totalMarks: r.test.totalMarks,
+        examStatus: (() => {
+          const now = Date.now();
+          const s = new Date(r.test.startAt).getTime();
+          const e = new Date(r.test.endAt).getTime();
+          if (now >= s && now <= e) return "active";
+          if (now < s) return "upcoming";
+          return "closed";
+        })(),
+        studentsStarted: r.started,
+        studentsSubmitted: r.submitted,
+        studentsInProgress: r.inProgress,
+        avgPercent_amongSubmitted: r.avgPercentSubmitted ?? "",
+        minPercent_amongSubmitted: r.minPercentSubmitted ?? "",
+        maxPercent_amongSubmitted: r.maxPercentSubmitted ?? "",
+      }));
+
+      const allAttempts: Record<string, string | number>[] = [];
+      for (const r of rows) {
+        for (const a of r.attempts) {
+          const st = studentLookup(a.studentRecordId);
+          const pct = a.status === "submitted" ? percentScore(a, r.test.totalMarks) : null;
+          allAttempts.push({
+            examId: r.test.id,
+            examTitle: r.test.title,
+            subject: r.test.subject,
+            batch: r.batchName,
+            studentUid: a.uid,
+            studentRecordId: a.studentRecordId || "",
+            studentId: st?.studentId || "",
+            studentName: st?.name || "",
+            studentEmail: st?.email || "",
+            attemptStatus: a.status,
+            score: a.score ?? "",
+            maxScore: a.maxScore ?? r.test.totalMarks,
+            percent: pct ?? "",
+            startedAt: toIsoOrEmpty(a.startedAt),
+            submittedAt: toIsoOrEmpty(a.submittedAt),
+            lastSavedAt: toIsoOrEmpty(a.lastSavedAt),
+          });
+        }
+      }
+
+      const rollupMap = new Map<
+        string,
+        {
+          key: string;
+          studentUid: string;
+          studentRecordId: string;
+          studentId: string;
+          studentName: string;
+          studentEmail: string;
+          testsStarted: number;
+          testsSubmitted: number;
+          percents: number[];
+        }
+      >();
+
+      for (const r of rows) {
+        for (const a of r.attempts) {
+          const st = studentLookup(a.studentRecordId);
+          const rollupKey = a.studentRecordId || a.uid;
+          let row = rollupMap.get(rollupKey);
+          if (!row) {
+            row = {
+              key: rollupKey,
+              studentUid: a.uid,
+              studentRecordId: a.studentRecordId || "",
+              studentId: st?.studentId || "",
+              studentName: st?.name || "",
+              studentEmail: st?.email || "",
+              testsStarted: 0,
+              testsSubmitted: 0,
+              percents: [],
+            };
+            rollupMap.set(rollupKey, row);
+          }
+          row.testsStarted += 1;
+          if (a.status === "submitted") {
+            row.testsSubmitted += 1;
+            const p = percentScore(a, r.test.totalMarks);
+            if (p != null) row.percents.push(p);
+          }
+          if (st?.studentId && !row.studentId) row.studentId = st.studentId;
+          if (st?.name && !row.studentName) row.studentName = st.name;
+          if (st?.email && !row.studentEmail) row.studentEmail = st.email;
+        }
+      }
+
+      const studentOverview = Array.from(rollupMap.values()).map((u) => ({
+        studentUid: u.studentUid,
+        studentRecordId: u.studentRecordId,
+        studentId: u.studentId,
+        studentName: u.studentName,
+        studentEmail: u.studentEmail,
+        testsStarted: u.testsStarted,
+        testsSubmitted: u.testsSubmitted,
+        avgPercent_acrossSubmittedTests:
+          u.percents.length > 0
+            ? Math.round((u.percents.reduce((s, p) => s + p, 0) / u.percents.length) * 10) / 10
+            : "",
+      }));
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(testSummary), "Test summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(allAttempts), "All attempts");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentOverview), "Students overview");
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      XLSX.writeFile(wb, `${safeFileName(`all_tests_analytics_${stamp}`)}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="space-y-1">
+          <Button variant="ghost" size="sm" className="w-fit -ml-2" onClick={() => navigate("/admin/tests")}>
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to tests
+          </Button>
+          <h1 className="text-2xl font-semibold text-slate-900">All tests — performance analytics</h1>
+          <p className="text-sm text-slate-600 max-w-2xl">
+            Attendance and scores across every CBT test. Export a multi-sheet Excel file: per-test summary, every
+            attempt row, and a student rollup.
+          </p>
+        </div>
+        <Button
+          className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
+          onClick={exportExcel}
+          disabled={loading || rows.length === 0 || exporting}
+        >
+          {exporting ? (
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+          ) : (
+            <Download className="w-4 h-4 mr-2" />
+          )}
+          Download Excel
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Tests</CardDescription>
+            <CardTitle className="text-2xl">{totals.tests}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Total attempts (started)</CardDescription>
+            <CardTitle className="text-2xl">{totals.started}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>Submitted</CardDescription>
+            <CardTitle className="text-2xl text-emerald-800">{totals.submitted}</CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardDescription>In progress</CardDescription>
+            <CardTitle className="text-2xl text-amber-800">{totals.inProgress}</CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Per-test summary</CardTitle>
+          <CardDescription>
+            Students started includes in-progress and submitted. Percent metrics use submitted attempts only.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-600 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading analytics…
+            </div>
+          ) : rows.length === 0 ? (
+            <p className="text-sm text-slate-500">No tests found.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Test</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead>Subject</TableHead>
+                    <TableHead className="text-right">Started</TableHead>
+                    <TableHead className="text-right">Submitted</TableHead>
+                    <TableHead className="text-right">In progress</TableHead>
+                    <TableHead className="text-right">Avg %</TableHead>
+                    <TableHead className="text-right">Min %</TableHead>
+                    <TableHead className="text-right">Max %</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.map((r) => (
+                    <TableRow key={r.test.id}>
+                      <TableCell className="font-medium text-slate-900 max-w-[200px] truncate" title={r.test.title}>
+                        {r.test.title}
+                      </TableCell>
+                      <TableCell className="text-sm">{r.batchName}</TableCell>
+                      <TableCell className="text-sm">{r.test.subject}</TableCell>
+                      <TableCell className="text-right">{r.started}</TableCell>
+                      <TableCell className="text-right">{r.submitted}</TableCell>
+                      <TableCell className="text-right">{r.inProgress}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.avgPercentSubmitted != null ? `${r.avgPercentSubmitted}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.minPercentSubmitted != null ? `${r.minPercentSubmitted}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {r.maxPercentSubmitted != null ? `${r.maxPercentSubmitted}%` : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex justify-end">
+        <Badge variant="outline" className="text-xs font-normal">
+          Excel sheets: Test summary · All attempts · Students overview
+        </Badge>
+      </div>
+    </div>
+  );
+}
