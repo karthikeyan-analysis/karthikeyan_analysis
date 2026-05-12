@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useData } from "../../context/DataContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Users, FileText, Video, TrendingUp } from "lucide-react";
+import { Users, FileText, Video, TrendingUp, FileSpreadsheet } from "lucide-react";
 
 export default function AdminDashboard() {
   const { students, content, videos, tests, loading } = useData();
@@ -216,6 +216,25 @@ export default function AdminDashboard() {
                     <p className="font-medium text-slate-900">Manage Tests</p>
                     <p className="text-sm text-slate-600">
                       Schedule and maintain batch tests
+                    </p>
+                  </div>
+                </div>
+              </Button>
+            </Link>
+
+            <Link to="/admin/reports/student-tests" className="block">
+              <Button
+                variant="ghost"
+                className="w-full h-auto p-4 justify-start text-left border border-slate-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-600 rounded-lg flex items-center justify-center">
+                    <FileSpreadsheet className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-slate-900">Student test reports</p>
+                    <p className="text-sm text-slate-600">
+                      Export marks and attendance for chosen students
                     </p>
                   </div>
                 </div>

@@ -8,6 +8,17 @@ import { Badge } from "../../components/ui/badge";
 import { cn } from "../../components/ui/utils";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { Checkbox } from "../../components/ui/checkbox";
+import { PLATFORM_INSTRUCTIONS_TEXT } from "./cbtInstructions";
+import instruction1 from "../../../instructions/1.jpg";
+import instruction2 from "../../../instructions/2.jpg";
+import instruction3 from "../../../instructions/3.jpg";
+import instruction4 from "../../../instructions/4.jpg";
+import instruction5 from "../../../instructions/5.jpg";
+import instruction6 from "../../../instructions/6.jpg";
+import instruction7 from "../../../instructions/7.jpg";
+import instruction8 from "../../../instructions/8.jpg";
+import instruction9 from "../../../instructions/9.jpg";
 import {
   getAttempt,
   getExamTest,
@@ -92,8 +103,15 @@ export default function TakeExam() {
   const testId = id || "";
   const uid = user?.id || "";
   const pwSessionKey = useMemo(() => `exam_pw_ok:${testId}:${uid}`, [testId, uid]);
+  const instructionsSessionKey = useMemo(() => `cbt_instr_ok:${testId}:${uid}`, [testId, uid]);
+  const [instructionsOk, setInstructionsOk] = useState(false);
+  const [instructionsChecked, setInstructionsChecked] = useState(false);
 
-  const startAtMs = test ? new Date(test.startAt).getTime() : 0;
+  useEffect(() => {
+    if (!uid || !testId) return;
+    setInstructionsOk(sessionStorage.getItem(instructionsSessionKey) === "1");
+  }, [instructionsSessionKey, testId, uid]);
+
   const endAtMs = test ? new Date(test.endAt).getTime() : 0;
 
   const attemptStartedAtMs = attemptStartedAtIso
@@ -103,11 +121,9 @@ export default function TakeExam() {
   const durationMs = (test?.durationMinutes || 0) * 60 * 1000;
   const hardEndMs = useMemo(() => {
     if (!test || !attemptStartedAtMs) return null;
-    // Exam ends when either duration ends (from attempt start) OR the schedule window ends.
-    return Math.min(attemptStartedAtMs + durationMs, endAtMs);
-  }, [attemptStartedAtMs, durationMs, endAtMs, test]);
-
-  const isWithinWindow = test ? nowTick >= startAtMs && nowTick <= endAtMs : false;
+    // Exam ends strictly by duration from attempt start (no fixed schedule window).
+    return attemptStartedAtMs + durationMs;
+  }, [attemptStartedAtMs, durationMs, test]);
   const isAttemptActive = attemptStatus === "in_progress";
   const isAttemptSubmitted = attemptStatus === "submitted";
 
@@ -178,6 +194,7 @@ export default function TakeExam() {
     if (!uid || !testId) return;
     if (!test) return;
     if (test.accessPasswordHash && !pwVerified) return;
+    if (!instructionsOk) return;
     let cancelled = false;
 
     const loadQuestionsAndAttempt = async () => {
@@ -192,15 +209,7 @@ export default function TakeExam() {
 
         if (!attempt) {
           const startMs = Date.now();
-          const hardEnd =
-            test && test.endAt
-              ? new Date(
-                  Math.min(
-                    startMs + (test.durationMinutes || 0) * 60 * 1000,
-                    new Date(test.endAt).getTime(),
-                  ),
-                ).toISOString()
-              : new Date(startMs).toISOString();
+          const hardEnd = new Date(startMs + (test.durationMinutes || 0) * 60 * 1000).toISOString();
           await startAttempt({
             testId,
             uid,
@@ -249,6 +258,7 @@ export default function TakeExam() {
     };
   }, [
     pwVerified,
+    instructionsOk,
     test,
     testId,
     uid,
@@ -403,11 +413,12 @@ export default function TakeExam() {
   const showAnswers = useMemo(() => {
     if (!test) return false;
     if (!isAttemptSubmitted) return false;
+    const effectiveEndAtMs = hardEndMs ?? endAtMs;
     const can =
-      canShowAnswers({ showAnswersAfter: test.showAnswersAfter, nowMs: nowTick, endAtMs }) ||
+      canShowAnswers({ showAnswersAfter: test.showAnswersAfter, nowMs: nowTick, endAtMs: effectiveEndAtMs }) ||
       false;
     return can;
-  }, [endAtMs, isAttemptSubmitted, nowTick, test]);
+  }, [endAtMs, hardEndMs, isAttemptSubmitted, nowTick, test]);
 
   const ensureCorrectKeys = async () => {
     if (!showAnswers) return;
@@ -462,62 +473,7 @@ export default function TakeExam() {
     );
   }
 
-  // If exam window is over, never allow starting/continuing the exam UI.
-  if (nowTick > endAtMs && !isAttemptSubmitted) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{test.title}</h1>
-          <p className="text-slate-600 mt-1">
-            Scheduled: {new Date(test.startAt).toLocaleString()} –{" "}
-            {new Date(test.endAt).toLocaleString()}
-          </p>
-        </div>
-        <Alert>
-          <AlertTitle>Exam ended</AlertTitle>
-          <AlertDescription>
-            This exam is closed. You can only view your result.
-          </AlertDescription>
-        </Alert>
-        <div className="flex items-center gap-2">
-          <Button
-            className="bg-emerald-600 hover:bg-emerald-700"
-            onClick={() => navigate(`/student/tests/${testId}/result`)}
-          >
-            View Result
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/student/tests")}>
-            Back to schedule
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isWithinWindow && !isAttemptSubmitted) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">{test.title}</h1>
-          <p className="text-slate-600 mt-1">
-            Scheduled: {new Date(test.startAt).toLocaleString()} –{" "}
-            {new Date(test.endAt).toLocaleString()}
-          </p>
-        </div>
-        <Alert>
-          <AlertTitle>Not active yet</AlertTitle>
-          <AlertDescription>
-            You can start this exam only within the scheduled window.
-          </AlertDescription>
-        </Alert>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => navigate("/student/tests")}>
-            Back to schedule
-          </Button>
-        </div>
-      </div>
-    );
-  }
+  // Exams can be started any time; the attempt timer runs from the moment the attempt starts.
 
   if (test.accessPasswordHash && !pwVerified) {
     return (
@@ -583,6 +539,137 @@ export default function TakeExam() {
     );
   }
 
+  if (!instructionsOk && !isAttemptSubmitted) {
+    const tamilFriendlyFont =
+      'font-["Noto_Sans_Tamil","Nirmala_UI","Latha","Hind_Madurai","Inter",system-ui,sans-serif]';
+    const instructionPages = [
+      instruction1,
+      instruction2,
+      instruction3,
+      instruction4,
+      instruction5,
+      instruction6,
+      instruction7,
+      instruction8,
+      instruction9,
+    ];
+
+    return (
+      <div className={cn("min-h-screen bg-slate-50 p-4 sm:p-6", tamilFriendlyFont)}>
+        <div className="mx-auto w-full max-w-5xl">
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+            <div className="px-5 py-2 sm:px-8 sm:py-3 bg-white border-b border-slate-200">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700 border border-indigo-100">
+                    Pre-test checklist
+                  </div>
+                  <h1 className="mt-1 text-lg sm:text-xl font-semibold tracking-tight text-slate-900 truncate">
+                    Instructions before you start
+                  </h1>
+                  <p className="mt-0.5 text-xs text-slate-600 max-w-2xl">
+                    Read the official CBT instructions and the platform guidelines. You can start the test only after you
+                    confirm you’ve read them.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="border-slate-300"
+                  onClick={() => navigate("/student/tests")}
+                >
+                  Back
+                </Button>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 sm:px-8 sm:py-7 space-y-5">
+              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                <div className="max-h-[52vh] overflow-y-auto">
+                  <div className="p-4 sm:p-5 space-y-4">
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900">TNPSC CBT Instructions (Scanned)</div>
+                          <div className="text-xs text-slate-600 mt-0.5">
+                            Official instructions pages (Tamil + English)
+                          </div>
+                        </div>
+                        <Badge className="bg-indigo-600 text-white">Official</Badge>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {instructionPages.map((src, idx) => (
+                          <div
+                            key={src}
+                            className="rounded-lg border border-slate-200 bg-white overflow-hidden"
+                          >
+                            <div className="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                              <span className="text-xs font-semibold text-slate-700">Page {idx + 1} / {instructionPages.length}</span>
+                            </div>
+                            <img
+                              src={src}
+                              alt={`TNPSC CBT instructions page ${idx + 1}`}
+                              className="w-full h-auto object-contain bg-white"
+                              loading="lazy"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-slate-900">
+                            Important Instructions (Our platform)
+                          </div>
+                          <div className="text-xs text-slate-600 mt-0.5">
+                            How to use Save/Mark/Submit properly
+                          </div>
+                        </div>
+                        <Badge className="bg-violet-600 text-white">Platform</Badge>
+                      </div>
+                      <pre className={cn("mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-900", tamilFriendlyFont)}>
+                        {PLATFORM_INSTRUCTIONS_TEXT.trim()}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <label className="flex items-start gap-3 text-sm text-slate-700 select-none">
+                    <Checkbox
+                      checked={instructionsChecked}
+                      onCheckedChange={(v) => setInstructionsChecked(v === true)}
+                    />
+                    <span>
+                      I have read and understood the instructions. I agree to follow them during the examination.
+                    </span>
+                  </label>
+
+                  <Button
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={!instructionsChecked}
+                    onClick={() => {
+                      sessionStorage.setItem(instructionsSessionKey, "1");
+                      setInstructionsOk(true);
+                    }}
+                  >
+                    Continue to test
+                  </Button>
+                </div>
+                <div className="mt-3 text-xs text-slate-500">
+                  Tip: If you get disconnected, wait for the page to recover—avoid refresh during the exam.
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 p-3 md:p-6">
       <div className="h-[calc(100vh-3rem)] flex flex-col gap-4">
@@ -625,6 +712,12 @@ export default function TakeExam() {
                     {formatTimeLeft((test.durationMinutes || 0) * 60)}
                   </span>
                 </div>
+                <div className="sm:col-span-2">
+                  Time Left:{" "}
+                  <span className={cn("font-semibold tabular-nums", timeLeftSeconds <= 60 ? "text-rose-700" : "text-slate-900")}>
+                    {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -644,7 +737,7 @@ export default function TakeExam() {
                   Mark: {currentQuestion?.marks ?? 0}
                 </span>
                 {currentQuestion && markedForReview.includes(currentQuestion.id) && (
-                  <Badge className="bg-amber-100 text-amber-800">Marked</Badge>
+                  <Badge className="bg-violet-100 text-violet-800 border border-violet-200/80">Marked</Badge>
                 )}
               </div>
             </div>
@@ -665,50 +758,48 @@ export default function TakeExam() {
                 </div>
               ) : null}
 
-              <div className="mt-5 space-y-2">
-                {currentQuestion?.options?.map((opt, idx) => {
+              <div className="mt-5 grid grid-cols-5 gap-2">
+                {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
                   const selected = answers[currentQuestion.id] === idx;
                   const correctIndex = correctIndexById.get(currentQuestion.id);
                   const showCorrect = showAnswers && correctIndex != null;
                   const isCorrect = showCorrect && correctIndex === idx;
                   const isWrongSelected = showCorrect && selected && correctIndex !== idx;
+                  const letter = String.fromCharCode(65 + idx);
+                  const label = (opt || "").trim() || letter;
+                  const isLetterOnly = label.toUpperCase() === letter;
 
                   return (
                     <button
                       key={idx}
+                      type="button"
+                      title={label}
                       className={cn(
-                        "w-full text-left rounded-xl border px-4 py-3 transition-all",
-                        selected
-                          ? "border-indigo-400 bg-indigo-50"
-                          : "border-slate-200 hover:border-slate-300 hover:bg-slate-50",
-                        isCorrect && "border-emerald-400 bg-emerald-50",
-                        isWrongSelected && "border-rose-400 bg-rose-50",
+                        "h-11 rounded-xl border bg-white transition-all flex items-center justify-center gap-2",
+                        "border-slate-200 text-slate-800 hover:bg-slate-50 hover:border-slate-300",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2",
+                        "active:scale-[0.99]",
+                        selected && "border-indigo-600 bg-indigo-600 text-white shadow-sm",
+                        isCorrect && "border-emerald-600 bg-emerald-600 text-white shadow-sm",
+                        isWrongSelected && "border-rose-600 bg-rose-600 text-white shadow-sm",
                       )}
                       onClick={() => handleSelect(idx)}
                       disabled={!isAttemptActive}
                     >
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={cn(
-                            "mt-0.5 w-6 h-6 rounded-full border flex items-center justify-center text-xs font-semibold",
-                            selected
-                              ? "border-indigo-600 bg-indigo-600 text-white"
-                              : "border-slate-300 text-slate-700",
-                            isCorrect && "border-emerald-600 bg-emerald-600 text-white",
-                            isWrongSelected && "border-rose-600 bg-rose-600 text-white",
-                          )}
-                        >
-                          {String.fromCharCode(65 + idx)}
-                        </div>
-                        <div className="flex-1 text-sm text-slate-900 whitespace-pre-wrap">
-                          {opt}
-                          {showCorrect && isCorrect && (
-                            <span className="ml-2 text-xs font-semibold text-emerald-700">
-                              (Correct)
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                      <span
+                        className={cn(
+                          "h-7 w-7 rounded-full grid place-items-center text-xs font-bold border",
+                          selected || isCorrect || isWrongSelected
+                            ? "border-white/60 bg-white/15 text-white"
+                            : "border-slate-300 bg-white text-slate-700",
+                        )}
+                        aria-hidden="true"
+                      >
+                        {letter}
+                      </span>
+                      <span className={cn("text-sm font-semibold", isLetterOnly && "sr-only")}>
+                        {label}
+                      </span>
                     </button>
                   );
                 })}
@@ -737,61 +828,34 @@ export default function TakeExam() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => void handleManualSave()}
-                  disabled={!isAttemptActive || saving || submitting}
-                >
-                  {saving ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  <span className="ml-2">Save</span>
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleMarkForReview}
-                  disabled={!isAttemptActive}
+                  onClick={() => {
+                    toggleMarkForReview();
+                    goNext();
+                  }}
+                  disabled={!isAttemptActive || currentIndex === questions.length - 1}
                 >
                   <Flag className="w-4 h-4 mr-2" />
-                  {currentQuestion && markedForReview.includes(currentQuestion.id)
-                    ? "Unmark"
-                    : "Mark"}
+                  Mark for Review &amp; Next
                 </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleClear}
-                  disabled={!isAttemptActive}
-                >
+                <Button variant="outline" size="sm" onClick={handleClear} disabled={!isAttemptActive}>
                   Clear Response
                 </Button>
               </div>
+
               <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                <Button variant="outline" size="sm" onClick={goPrev} disabled={currentIndex === 0}>
-                  Previous
-                </Button>
                 <Button
-                  variant="outline"
                   size="sm"
-                  onClick={goNext}
-                  disabled={currentIndex === questions.length - 1}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  onClick={() => void handleManualSave().then(goNext)}
+                  disabled={!isAttemptActive || saving || submitting || currentIndex === questions.length - 1}
                 >
-                  Next
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save &amp; Next
                 </Button>
-                {isAttemptActive ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
-                    <Clock className="w-4 h-4 text-slate-600 shrink-0" />
-                    <div className="text-sm font-semibold text-slate-900 tabular-nums">
-                      {formatTimeLeft(timeLeftSeconds)}
-                    </div>
-                  </div>
-                ) : isAttemptSubmitted ? (
-                  <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
-                    <Clock className="w-4 h-4 shrink-0" />
-                    <span className="tabular-nums">00:00</span>
-                  </div>
-                ) : null}
               </div>
             </div>
           </CardContent>
@@ -854,7 +918,7 @@ export default function TakeExam() {
                   st === "answered"
                     ? "bg-emerald-600 text-white border-emerald-600"
                     : st === "marked_for_review"
-                      ? "bg-amber-500 text-white border-amber-500"
+                      ? "bg-violet-600 text-white border-violet-600"
                       : st === "not_answered"
                         ? "bg-rose-500 text-white border-rose-500"
                         : "bg-white text-slate-900 border-slate-200";
@@ -879,7 +943,7 @@ export default function TakeExam() {
             <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
               <LegendChip color="bg-emerald-600" label="Answered" />
               <LegendChip color="bg-rose-500" label="Not Answered" />
-              <LegendChip color="bg-amber-500" label="Marked" />
+              <LegendChip color="bg-violet-600" label="Marked" />
               <LegendChip color="bg-white border border-slate-200" label="Not Visited" />
             </div>
 

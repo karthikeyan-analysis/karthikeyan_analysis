@@ -147,7 +147,7 @@ export default function ExamResult() {
             This exam will be submitted automatically when the timer ends.
           </AlertDescription>
         </Alert>
-        <Button onClick={() => navigate(`/student/tests/${testId}`)}>Back to exam</Button>
+        <Button onClick={() => navigate("/student/tests")}>Back to schedule</Button>
       </div>
     );
   }

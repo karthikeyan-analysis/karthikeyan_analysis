@@ -240,6 +240,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         createdAt: new Date().toISOString(),
       });
 
+      // Store admin profiles in a dedicated collection for admin-only management/reporting.
+      await setDoc(doc(db, "admins", result.user.uid), {
+        uid: result.user.uid,
+        name,
+        email,
+        role: "admin",
+        createdAt: new Date().toISOString(),
+      });
+
       const createdUser = await fetchUserData(result.user);
       setUser(createdUser);
 

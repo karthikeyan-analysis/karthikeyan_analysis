@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
+import { cn } from "../../components/ui/utils";
 import { useNavigate, useParams } from "react-router";
 import {
   deleteQuestion,
@@ -30,13 +31,16 @@ type EditorQuestion = {
   imagePreviewUrl: string;
 };
 
+const DEFAULT_5_OPTIONS = ["A", "B", "C", "D", "E"];
+
 function fromPublicQuestion(q: ExamQuestionPublic, correctIndex = 0): EditorQuestion {
+  const options = q.options?.length ? [...q.options] : [...DEFAULT_5_OPTIONS];
   return {
     localId: q.id,
     questionId: q.id,
     text: q.text || "",
-    options: q.options?.length ? [...q.options] : ["", ""],
-    correctIndex: Math.max(0, Math.min(correctIndex, Math.max(0, (q.options?.length || 2) - 1))),
+    options,
+    correctIndex: Math.max(0, Math.min(correctIndex, Math.max(0, options.length - 1))),
     marks: String(q.marks || 1),
     imageUrl: q.imageUrl || "",
     imageFile: null,
@@ -48,7 +52,7 @@ function newQuestion(): EditorQuestion {
   return {
     localId: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     text: "",
-    options: ["", ""],
+    options: [...DEFAULT_5_OPTIONS],
     correctIndex: 0,
     marks: "1",
     imageUrl: "",
@@ -364,50 +368,41 @@ export default function ExamQuestionsPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Options</Label>
-                    <Button variant="outline" size="sm" onClick={() => addOption(q.localId)}>
-                      <Plus className="w-3.5 h-3.5 mr-1" />
-                      Add option
-                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    {q.options.map((opt, optIdx) => {
+                  <div
+                    role="radiogroup"
+                    aria-label={`Correct option for question ${idx + 1}`}
+                    className="flex flex-wrap items-center gap-2"
+                  >
+                    {q.options.slice(0, 5).map((opt, optIdx) => {
                       const letter = String.fromCharCode(65 + optIdx);
+                      const selected = q.correctIndex === optIdx;
                       return (
-                        <div key={optIdx} className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name={`correct-${q.localId}`}
-                            checked={q.correctIndex === optIdx}
-                            onChange={() =>
-                              updateQuestion(q.localId, (prev) => ({
-                                ...prev,
-                                correctIndex: optIdx,
-                              }))
-                            }
-                          />
-                          <span className="text-xs font-medium text-slate-600 w-5">{letter}.</span>
-                          <Input
-                            value={opt}
-                            onChange={(e) =>
-                              updateQuestion(q.localId, (prev) => {
-                                const nextOptions = [...prev.options];
-                                nextOptions[optIdx] = e.target.value;
-                                return { ...prev, options: nextOptions };
-                              })
-                            }
-                            placeholder={`Option ${letter}`}
-                          />
-                          {q.options.length > 2 ? (
-                            <Button variant="ghost" size="sm" onClick={() => removeOption(q.localId, optIdx)}>
-                              Remove
-                            </Button>
-                          ) : null}
-                        </div>
+                        <button
+                          key={optIdx}
+                          type="button"
+                          onClick={() =>
+                            updateQuestion(q.localId, (prev) => ({
+                              ...prev,
+                              correctIndex: optIdx,
+                            }))
+                          }
+                          className={cn(
+                            "h-9 px-3 rounded-lg border text-sm font-semibold transition-colors",
+                            selected
+                              ? "border-indigo-600 bg-indigo-50 text-indigo-800"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                          )}
+                          aria-checked={selected}
+                          role="radio"
+                        >
+                          {letter}
+                        </button>
                       );
                     })}
                   </div>
                   <div className="text-[11px] text-slate-500">
-                    Select the radio button to set the correct answer for results.
+                    Five choices (A–E) are fixed. Click the correct letter.
                   </div>
                 </div>
 

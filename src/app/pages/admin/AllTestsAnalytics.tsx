@@ -7,53 +7,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { Download, Loader2, ArrowLeft } from "lucide-react";
 import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
+import {
+  attemptCompositeKey,
+  buildAttemptsLookup,
+  isEligibleForExam,
+  percentScore,
+  safeFileName,
+  toIsoOrEmpty,
+} from "../../features/exams/adminTestReportUtils";
 import { useData } from "../../context/DataContext";
 import type { Student } from "../../context/DataContext";
 import * as XLSX from "xlsx";
-
-function safeFileName(name: string) {
-  return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
-}
-
-function toIsoOrEmpty(value: unknown) {
-  if (!value) return "";
-  try {
-    return new Date(value as string).toISOString();
-  } catch {
-    return String(value);
-  }
-}
-
-function percentScore(a: ExamAttempt, maxMarks: number) {
-  const max = a.maxScore ?? maxMarks;
-  const score = a.score;
-  if (score == null || !Number.isFinite(max) || max <= 0) return null;
-  return Math.round((score / max) * 1000) / 10;
-}
-
-function attemptCompositeKey(testId: string, studentRecordIdOrUid: string) {
-  return `${testId}::${studentRecordIdOrUid}`;
-}
-
-function buildAttemptsLookup(pairs: { test: ExamTest; attempts: ExamAttempt[] }[]) {
-  const m = new Map<string, ExamAttempt>();
-  for (const { test, attempts } of pairs) {
-    for (const a of attempts) {
-      const sk = (a.studentRecordId || "").trim() || a.uid;
-      if (sk) m.set(attemptCompositeKey(test.id, sk), a);
-    }
-  }
-  return m;
-}
-
-/** Same rules as exams list for visibility (roster-aligned). */
-function isEligibleForExam(student: Student, test: ExamTest): boolean {
-  if (test.visibility === "SELECTIVE") {
-    const ids = test.selectedStudentRecordIds;
-    return Array.isArray(ids) && ids.includes(student.id);
-  }
-  return Boolean(student.batchId && student.batchId === test.batchId);
-}
 
 function participationCellText(a: ExamAttempt | undefined, test: ExamTest) {
   if (!a) return "";
@@ -84,8 +48,9 @@ export default function AllTestsAnalytics() {
   const navigate = useNavigate();
   const { students, batches } = useData();
   const [loading, setLoading] = useState(true);
-  const [exporting, setExporting] = useState(false);
+  const [exportMode, setExportMode] = useState<null | "full" | "attendance">(null);
   const [pairs, setPairs] = useState<{ test: ExamTest; attempts: ExamAttempt[] }[]>([]);
+  const exporting = exportMode !== null;
 
   useEffect(() => {
     let cancelled = false;
@@ -146,11 +111,31 @@ export default function AllTestsAnalytics() {
     return { tests: rows.length, started, submitted, inProgress };
   }, [rows]);
 
+  const testsSorted = useMemo(
+    () => [...rows].sort((a, b) => new Date(b.test.startAt).getTime() - new Date(a.test.startAt).getTime()),
+    [rows],
+  );
+
+  const attemptsMap = useMemo(() => buildAttemptsLookup(pairs), [pairs]);
+
+  const rosterSorted = useMemo(
+    () => [...students].sort((a, b) => `${a.name}`.localeCompare(`${b.name}`, undefined, { sensitivity: "base" })),
+    [students],
+  );
+
   const studentLookup = (studentRecordId?: string) =>
     studentRecordId ? students.find((s) => s.id === studentRecordId) : undefined;
 
+  /** Any started attempt counts as attended for this report (submitted or in progress). */
+  function attendanceStatusForCell(student: Student, test: ExamTest): "ATTENDED" | "NA" {
+    if (!isEligibleForExam(student, test)) return "NA";
+    const a = attemptsMap.get(attemptCompositeKey(test.id, student.id));
+    if (a && (a.status === "submitted" || a.status === "in_progress")) return "ATTENDED";
+    return "NA";
+  }
+
   const exportExcel = () => {
-    setExporting(true);
+    setExportMode("full");
     try {
       const testSummary = rows.map((r) => ({
         examId: r.test.id,
@@ -264,14 +249,6 @@ export default function AllTestsAnalytics() {
             : "",
       }));
 
-      const testsSorted = [...rows].sort(
-        (a, b) => new Date(b.test.startAt).getTime() - new Date(a.test.startAt).getTime(),
-      );
-      const attemptsMap = buildAttemptsLookup(pairs);
-      const rosterSorted = [...students].sort((a, b) =>
-        `${a.name}`.localeCompare(`${b.name}`, undefined, { sensitivity: "base" }),
-      );
-
       const matrixHeaders = [
         "studentRecordId",
         "studentId",
@@ -382,7 +359,78 @@ export default function AllTestsAnalytics() {
       const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
       XLSX.writeFile(wb, `${safeFileName(`all_tests_analytics_${stamp}`)}.xlsx`);
     } finally {
-      setExporting(false);
+      setExportMode(null);
+    }
+  };
+
+  /** Printable student × test grid: ATTENDED if the student started the test (eligible roster only); NA otherwise. */
+  const exportAttendanceReportExcel = () => {
+    if (testsSorted.length === 0) return;
+    setExportMode("attendance");
+    try {
+      const numCols = 1 + testsSorted.length;
+      const padRow = (): string[] => Array.from({ length: numCols }, () => "");
+
+      const orgTitle = "Karthikeyan Analysis Study Circle & Learning Resources";
+      const listTitle = "LIST OF STATISTICS CLASS TEST ATTENDANCE";
+      const headerRow = ["CANDIDATES NAME", ...testsSorted.map((_, i) => `TEST.${i + 1}`)];
+
+      const aoa: string[][] = [];
+      {
+        const r = padRow();
+        r[0] = orgTitle;
+        aoa.push(r);
+      }
+      {
+        const r = padRow();
+        r[0] = listTitle;
+        aoa.push(r);
+      }
+      aoa.push(padRow());
+      aoa.push(headerRow);
+
+      for (const s of rosterSorted) {
+        aoa.push([
+          String(s.name || "").trim().toUpperCase(),
+          ...testsSorted.map((row) => attendanceStatusForCell(s, row.test)),
+        ]);
+      }
+
+      aoa.push(padRow());
+      {
+        const r = padRow();
+        r[0] = "*NA - Not Attended";
+        aoa.push(r);
+      }
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const lastColIdx = numCols - 1;
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: lastColIdx } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: lastColIdx } },
+      ];
+      ws["!cols"] = [{ wch: 40 }, ...testsSorted.map(() => ({ wch: 14 }))];
+
+      const keyAoA: (string | number)[][] = [
+        ["Column", "Exam title", "Subject", "Batch", "Exam start (UTC)"],
+        ...testsSorted.map((r, i) => [
+          `TEST.${i + 1}`,
+          r.test.title,
+          r.test.subject,
+          r.batchName,
+          toIsoOrEmpty(r.test.startAt),
+        ]),
+      ];
+      const wsKey = XLSX.utils.aoa_to_sheet(keyAoA);
+      wsKey["!cols"] = [{ wch: 10 }, { wch: 48 }, { wch: 22 }, { wch: 22 }, { wch: 26 }];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Class_test_attendance");
+      XLSX.utils.book_append_sheet(wb, wsKey, "TEST_column_key");
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      XLSX.writeFile(wb, `${safeFileName(`class_test_attendance_${stamp}`)}.xlsx`);
+    } finally {
+      setExportMode(null);
     }
   };
 
@@ -396,23 +444,39 @@ export default function AllTestsAnalytics() {
           </Button>
           <h1 className="text-2xl font-semibold text-slate-900">All tests — performance analytics</h1>
           <p className="text-sm text-slate-600 max-w-2xl">
-            Attendance and scores across every CBT test. The Excel workbook includes a wide participation matrix (each
-            roster student × each test), a long student-by-test pairing list with eligibility and outcome fields, raw
-            attempt rows, and per-student summaries.
+            Attendance and scores across every CBT test. Use{" "}
+            <span className="font-medium text-slate-800">Attendance report</span> for a student-by-test grid (ATTENDED /
+            NA). The full Excel workbook includes a detailed participation matrix, student×test pairs, raw attempts, and
+            summaries.
           </p>
         </div>
-        <Button
-          className="bg-emerald-600 hover:bg-emerald-700 shrink-0"
-          onClick={exportExcel}
-          disabled={loading || exporting || rows.length === 0}
-        >
-          {exporting ? (
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-          ) : (
-            <Download className="w-4 h-4 mr-2" />
-          )}
-          Download Excel
-        </Button>
+        <div className="flex flex-wrap gap-2 shrink-0">
+          <Button
+            variant="outline"
+            className="border-slate-300"
+            onClick={exportAttendanceReportExcel}
+            disabled={loading || exporting || rows.length === 0}
+          >
+            {exportMode === "attendance" ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Attendance report
+          </Button>
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-700"
+            onClick={exportExcel}
+            disabled={loading || exporting || rows.length === 0}
+          >
+            {exportMode === "full" ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Full analytics Excel
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -504,8 +568,8 @@ export default function AllTestsAnalytics() {
 
       <div className="flex justify-end">
         <Badge variant="outline" className="text-xs font-normal max-w-full justify-center text-center h-auto py-2 leading-relaxed">
-          Sheets: summary, participation matrix (all students × all tests), student×test pairs, every-student rollup,
-          raw attempts, attempt-participant overview
+          Full workbook sheets: summary, participation matrix, student×test pairs, every-student rollup, raw attempts,
+          overview. Attendance report file: printable grid + TEST_column_key (which TEST.n is which exam).
         </Badge>
       </div>
     </div>
