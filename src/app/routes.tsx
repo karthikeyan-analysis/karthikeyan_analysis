@@ -24,6 +24,7 @@ import MediaLibrary from "./pages/student/MediaLibrary";
 import TestSchedule from "./pages/student/TestSchedule";
 import TakeExam from "./pages/student/TakeExam";
 import ExamResult from "./pages/student/ExamResult";
+import GuestExamJoin from "./pages/student/GuestExamJoin";
 import VideoPlayer from "./pages/student/VideoPlayer";
 import PdfViewer from "./pages/student/PdfViewer";
 
@@ -34,6 +35,13 @@ function StudentOnlyRoute({ children }: { children: ReactElement }) {
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "student") return <Navigate to="/admin" replace />;
 
+  return children;
+}
+
+function GuestJoinRoute({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user?.role === "admin") return <Navigate to="/admin" replace />;
   return children;
 }
 
@@ -51,6 +59,22 @@ export const router = createBrowserRouter([
   {
     path: "/login",
     element: <Login role="student" />,
+  },
+  {
+    path: "/student/join-test",
+    element: (
+      <GuestJoinRoute>
+        <GuestExamJoin />
+      </GuestJoinRoute>
+    ),
+  },
+  {
+    path: "/student/join-test/:testId",
+    element: (
+      <GuestJoinRoute>
+        <GuestExamJoin />
+      </GuestJoinRoute>
+    ),
   },
   {
     path: "/admin/login",

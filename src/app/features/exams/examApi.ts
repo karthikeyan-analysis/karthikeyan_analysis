@@ -17,8 +17,11 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db } from "../../../config/firebase";
 import { storage } from "../../../config/firebase";
+import { allowsPasscodeGuestAccess } from "./settings";
+import { sha256Base64 } from "./password";
 import type {
   ExamAttempt,
+  ExamGuestProfile,
   ExamQuestionPrivate,
   ExamQuestionPublic,
   ExamTest,
@@ -46,6 +49,14 @@ export function examAttemptsCol(testId: string) {
   return collection(db, TESTS, testId, "attempts");
 }
 
+export function examGuestProfileRef(testId: string, uid: string) {
+  return doc(db, TESTS, testId, "guestProfiles", uid);
+}
+
+export function examGuestProfilesCol(testId: string) {
+  return collection(db, TESTS, testId, "guestProfiles");
+}
+
 export async function listExamTestsForAdmin(): Promise<ExamTest[]> {
   const snap = await getDocs(query(collection(db, TESTS), orderBy("createdAt", "desc")));
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
@@ -65,6 +76,48 @@ export async function listExamTestsForStudent(params: {
     return (t.selectedStudentRecordIds || []).includes(params.studentRecordId);
   });
   return visible.sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime());
+}
+
+/** Published passcode tests open to unenrolled guests. */
+export async function listPasscodeGuestExamTests(): Promise<ExamTest[]> {
+  const snap = await getDocs(query(collection(db, TESTS), orderBy("createdAt", "desc")));
+  const tests = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
+  return tests.filter((t) => allowsPasscodeGuestAccess(t));
+}
+
+export async function verifyExamPasscode(test: ExamTest, passcode: string): Promise<boolean> {
+  if (!test.accessPasswordHash) return false;
+  const h = await sha256Base64(passcode.trim());
+  return h === test.accessPasswordHash;
+}
+
+export async function getGuestProfile(testId: string, uid: string): Promise<ExamGuestProfile | null> {
+  const snap = await getDoc(examGuestProfileRef(testId, uid));
+  if (!snap.exists()) return null;
+  return { id: snap.id, ...(snap.data() as any) } as ExamGuestProfile;
+}
+
+export async function saveGuestProfile(params: {
+  testId: string;
+  uid: string;
+  name: string;
+  email: string;
+}): Promise<void> {
+  const email = params.email.trim().toLowerCase();
+  const name = params.name.trim();
+  const now = new Date().toISOString();
+  await setDoc(
+    examGuestProfileRef(params.testId, params.uid),
+    {
+      uid: params.uid,
+      testId: params.testId,
+      name,
+      email,
+      createdAt: now,
+      createdAtServer: serverTimestamp(),
+    } satisfies Omit<ExamGuestProfile, "id"> as any,
+    { merge: true },
+  );
 }
 
 export async function createExamTest(
@@ -162,6 +215,9 @@ export async function startAttempt(params: {
   uid: string;
   batchId: string;
   studentRecordId?: string;
+  participantName?: string;
+  participantEmail?: string;
+  isGuest?: boolean;
   questionIds: string[];
   hardEndAt?: string;
 }): Promise<void> {
@@ -174,6 +230,9 @@ export async function startAttempt(params: {
     {
       uid: params.uid,
       studentRecordId: params.studentRecordId || null,
+      participantName: params.participantName?.trim() || null,
+      participantEmail: params.participantEmail?.trim().toLowerCase() || null,
+      isGuest: params.isGuest === true,
       testId: params.testId,
       batchId: params.batchId,
       startedAt: now,

@@ -126,6 +126,22 @@ export default function AllTestsAnalytics() {
   const studentLookup = (studentRecordId?: string) =>
     studentRecordId ? students.find((s) => s.id === studentRecordId) : undefined;
 
+  const participantFromAttempt = (a: ExamAttempt) => {
+    const enrolled = studentLookup(a.studentRecordId);
+    if (a.isGuest || a.participantName || a.participantEmail) {
+      return {
+        name: a.participantName?.trim() || a.participantEmail?.trim() || "Guest",
+        email: a.participantEmail?.trim() || "",
+        studentId: "GUEST",
+      };
+    }
+    return {
+      name: enrolled?.name || "",
+      email: enrolled?.email || "",
+      studentId: enrolled?.studentId || "",
+    };
+  };
+
   /** Any started attempt counts as attended for this report (submitted or in progress). */
   function attendanceStatusForCell(student: Student, test: ExamTest): "ATTENDED" | "NA" {
     if (!isEligibleForExam(student, test)) return "NA";
@@ -166,7 +182,7 @@ export default function AllTestsAnalytics() {
       const allAttempts: Record<string, string | number>[] = [];
       for (const r of rows) {
         for (const a of r.attempts) {
-          const st = studentLookup(a.studentRecordId);
+          const p = participantFromAttempt(a);
           const pct = a.status === "submitted" ? percentScore(a, r.test.totalMarks) : null;
           allAttempts.push({
             examId: r.test.id,
@@ -175,9 +191,10 @@ export default function AllTestsAnalytics() {
             batch: r.batchName,
             studentUid: a.uid,
             studentRecordId: a.studentRecordId || "",
-            studentId: st?.studentId || "",
-            studentName: st?.name || "",
-            studentEmail: st?.email || "",
+            studentId: p.studentId,
+            studentName: p.name,
+            studentEmail: p.email,
+            isGuest: a.isGuest ? "yes" : "no",
             attemptStatus: a.status,
             score: a.score ?? "",
             maxScore: a.maxScore ?? r.test.totalMarks,
@@ -206,7 +223,7 @@ export default function AllTestsAnalytics() {
 
       for (const r of rows) {
         for (const a of r.attempts) {
-          const st = studentLookup(a.studentRecordId);
+          const p = participantFromAttempt(a);
           const rollupKey = a.studentRecordId || a.uid;
           let row = rollupMap.get(rollupKey);
           if (!row) {
@@ -214,9 +231,9 @@ export default function AllTestsAnalytics() {
               key: rollupKey,
               studentUid: a.uid,
               studentRecordId: a.studentRecordId || "",
-              studentId: st?.studentId || "",
-              studentName: st?.name || "",
-              studentEmail: st?.email || "",
+              studentId: p.studentId,
+              studentName: p.name,
+              studentEmail: p.email,
               testsStarted: 0,
               testsSubmitted: 0,
               percents: [],

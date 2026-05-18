@@ -13,9 +13,11 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
+  signInAnonymously,
   User as FirebaseUser,
 } from "firebase/auth";
 import { auth, db } from "../../config/firebase";
+import { saveGuestProfile } from "../features/exams/examApi";
 import {
   collection,
   doc,
@@ -38,12 +40,20 @@ interface User {
   studentRecordId?: string;
   /** Profile image URL (admin-uploaded or Google). */
   photoURL?: string;
+  /** Anonymous passcode guest (not enrolled in a batch). */
+  isGuestExamParticipant?: boolean;
+  guestExamTestId?: string;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string, role: UserRole) => Promise<boolean>;
   loginStudentWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  loginGuestForExam: (params: {
+    name: string;
+    email: string;
+    testId: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   signupAdmin: (
     name: string,
     email: string,
@@ -95,13 +105,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         return {
           id: firebaseUser.uid,
-          email: firebaseUser.email || "",
+          email: firebaseUser.email || userData.email || "",
           name,
           role,
           studentId: userData.studentId,
           batchId: userData.batchId,
           studentRecordId: userData.studentRecordId,
           photoURL,
+          isGuestExamParticipant: userData.isGuestExamParticipant === true,
+          guestExamTestId:
+            typeof userData.guestExamTestId === "string" ? userData.guestExamTestId : undefined,
         };
       }
       return null;
@@ -223,6 +236,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginGuestForExam = async (params: {
+    name: string;
+    email: string;
+    testId: string;
+  }): Promise<{ success: boolean; error?: string }> => {
+    const name = params.name.trim();
+    const email = params.email.trim().toLowerCase();
+    if (!name) return { success: false, error: "Please enter your name." };
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { success: false, error: "Please enter a valid email address." };
+    }
+    if (!params.testId) return { success: false, error: "Test not found." };
+
+    try {
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+
+      const cred = await signInAnonymously(auth);
+      const uid = cred.user.uid;
+
+      await setDoc(
+        doc(db, "users", uid),
+        {
+          role: "student",
+          name,
+          email,
+          isGuestExamParticipant: true,
+          guestExamTestId: params.testId,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+
+      await saveGuestProfile({ testId: params.testId, uid, name, email });
+
+      const guestUser = await fetchUserData(cred.user);
+      setUser(guestUser);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Guest exam login error:", error);
+      if (error?.code === "auth/operation-not-allowed") {
+        return {
+          success: false,
+          error:
+            "Anonymous sign-in is disabled in Firebase. Enable it under Authentication → Sign-in method → Anonymous.",
+        };
+      }
+      return {
+        success: false,
+        error: "Could not start guest session. Please try again.",
+      };
+    }
+  };
+
   const signupAdmin = async (
     name: string,
     email: string,
@@ -282,6 +351,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         login,
         loginStudentWithGoogle,
+        loginGuestForExam,
         signupAdmin,
         logout,
         isAuthenticated: !!user,

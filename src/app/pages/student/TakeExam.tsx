@@ -37,6 +37,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Clock, Flag, Loader2, Save, XCircle } from "lucide-react";
 import { submitAttempt } from "../../features/exams/examApi";
 import { sha256Base64 } from "../../features/exams/password";
+import { allowsPasscodeGuestAccess } from "../../features/exams/settings";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -102,6 +103,8 @@ export default function TakeExam() {
 
   const testId = id || "";
   const uid = user?.id || "";
+  const isGuestParticipant =
+    user?.isGuestExamParticipant === true && user.guestExamTestId === testId;
   const pwSessionKey = useMemo(() => `exam_pw_ok:${testId}:${uid}`, [testId, uid]);
   const instructionsSessionKey = useMemo(() => `cbt_instr_ok:${testId}:${uid}`, [testId, uid]);
   const [instructionsOk, setInstructionsOk] = useState(false);
@@ -175,8 +178,10 @@ export default function TakeExam() {
 
         setTest(t);
 
+        const guestOk = isGuestParticipant && allowsPasscodeGuestAccess(t);
         const alreadyOk = sessionStorage.getItem(pwSessionKey) === "1";
-        setPwVerified(!t.accessPasswordHash || alreadyOk);
+        setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk);
+        if (guestOk) sessionStorage.setItem(pwSessionKey, "1");
       } catch (e) {
         console.error(e);
       } finally {
@@ -188,7 +193,7 @@ export default function TakeExam() {
     return () => {
       cancelled = true;
     };
-  }, [pwSessionKey, testId, uid]);
+  }, [isGuestParticipant, pwSessionKey, testId, uid]);
 
   useEffect(() => {
     if (!uid || !testId) return;
@@ -213,8 +218,11 @@ export default function TakeExam() {
           await startAttempt({
             testId,
             uid,
-            batchId: user?.batchId || "",
+            batchId: test.batchId,
             studentRecordId: user?.studentRecordId,
+            participantName: isGuestParticipant ? user?.name : undefined,
+            participantEmail: isGuestParticipant ? user?.email : undefined,
+            isGuest: isGuestParticipant,
             questionIds: qs.map((q) => q.id),
             hardEndAt: hardEnd,
           });
@@ -263,6 +271,9 @@ export default function TakeExam() {
     testId,
     uid,
     user?.batchId,
+    isGuestParticipant,
+    user?.email,
+    user?.name,
     user?.studentRecordId,
   ]);
 
@@ -463,12 +474,21 @@ export default function TakeExam() {
     );
   }
 
-  if (!user.batchId || user.batchId !== test.batchId) {
+  const canAccessAsGuest =
+    isGuestParticipant && allowsPasscodeGuestAccess(test) && user.guestExamTestId === testId;
+
+  if (!canAccessAsGuest && (!user.batchId || user.batchId !== test.batchId)) {
     return (
       <Alert variant="destructive">
         <XCircle className="h-4 w-4" />
         <AlertTitle>Access denied</AlertTitle>
-        <AlertDescription>This exam is not available for your batch.</AlertDescription>
+        <AlertDescription>
+          This exam is not available for your batch. If you have a passcode, use{" "}
+          <a href="/student/join-test" className="underline font-medium">
+            Join with passcode
+          </a>
+          .
+        </AlertDescription>
       </Alert>
     );
   }

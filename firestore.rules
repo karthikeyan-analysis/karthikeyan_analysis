@@ -21,6 +21,17 @@ service cloud.firestore {
       return role() == "student";
     }
 
+    function isGuestExamStudent() {
+      return isSignedIn()
+        && userDoc().data.role == "student"
+        && userDoc().data.isGuestExamParticipant == true;
+    }
+
+    /** Enrolled students and passcode guests may take CBT exams. */
+    function isExamParticipant() {
+      return isStudent();
+    }
+
     match /users/{uid} {
       allow read: if isSignedIn() && request.auth.uid == uid;
       allow write: if isSignedIn() && request.auth.uid == uid;
@@ -48,18 +59,29 @@ service cloud.firestore {
 
       // Private keys (correct answers) must not be readable during exam.
       match /questionsPrivate/{qId} {
-        allow read: if isAdmin() || (isStudent() && canStudentReadPrivateKeys(testId));
+        allow read: if isAdmin() || (isExamParticipant() && canStudentReadPrivateKeys(testId));
         allow write: if isAdmin();
       }
 
-      match /attempts/{uid} {
-        allow read: if isAdmin() || (isStudent() && request.auth.uid == uid);
+      match /guestProfiles/{uid} {
+        allow read: if isAdmin() || (isExamParticipant() && request.auth.uid == uid);
+        allow create: if isExamParticipant()
+          && request.auth.uid == uid
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.testId == testId;
+        allow update: if isAdmin()
+          || (isExamParticipant() && request.auth.uid == uid);
+        allow delete: if isAdmin();
+      }
 
-        allow create: if isStudent() && request.auth.uid == uid;
+      match /attempts/{uid} {
+        allow read: if isAdmin() || (isExamParticipant() && request.auth.uid == uid);
+
+        allow create: if isExamParticipant() && request.auth.uid == uid;
 
         // Students can save progress while in_progress,
         // and can submit + write score ONLY after their hardEndAt time.
-        allow update: if isStudent()
+        allow update: if isExamParticipant()
           && request.auth.uid == uid
           && (
             // progress save
@@ -108,4 +130,3 @@ service cloud.firestore {
     }
   }
 }
-

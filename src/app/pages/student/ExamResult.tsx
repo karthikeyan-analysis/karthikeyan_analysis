@@ -156,7 +156,11 @@ export default function ExamResult() {
   const scoreValue = attempt.score ?? 0;
   const maxScoreValue = attempt.maxScore ?? test.totalMarks;
   const percent = maxScoreValue ? Math.round((scoreValue / maxScoreValue) * 1000) / 10 : 0;
-  const studentName = user.name?.trim() || "Student";
+  const studentName =
+    attempt?.participantName?.trim() ||
+    user.name?.trim() ||
+    attempt?.participantEmail?.trim() ||
+    "Student";
   const studentIdValue = user.studentId?.trim() || user.studentRecordId?.trim() || "-";
   const watermarkText = `${studentName} • ${studentIdValue}`;
 
