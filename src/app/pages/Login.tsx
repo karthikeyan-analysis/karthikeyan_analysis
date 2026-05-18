@@ -11,7 +11,7 @@ import {
   CardDescription,
   CardHeader,
 } from "../components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, KeyRound } from "lucide-react";
 import type { UserRole } from "../context/AuthContext";
 
 interface LoginProps {
@@ -127,14 +127,26 @@ export default function Login({ role = "student" }: LoginProps) {
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
             ) : (
-              <Button
-                type="button"
-                className="w-full bg-indigo-600 hover:bg-indigo-700"
-                onClick={handleStudentGoogleLogin}
-                disabled={loading}
-              >
-                {loading ? "Connecting to Google..." : "Continue with Google"}
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  className="w-full bg-indigo-600 hover:bg-indigo-700"
+                  onClick={handleStudentGoogleLogin}
+                  disabled={loading}
+                >
+                  {loading ? "Connecting to Google..." : "Continue with Google"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-indigo-200 hover:bg-indigo-50"
+                  disabled={loading}
+                  onClick={() => navigate("/student/join-test")}
+                >
+                  <KeyRound className="w-4 h-4 mr-2" />
+                  Join test with passcode (no login)
+                </Button>
+              </>
             )}
 
             <div className="pt-4 border-t">
@@ -151,6 +163,14 @@ export default function Login({ role = "student" }: LoginProps) {
                     className="text-indigo-600 hover:underline"
                   >
                     Create one
+                  </Link>
+                </p>
+              )}
+              {role === "student" && (
+                <p className="text-sm text-center text-slate-600 mt-2">
+                  Not enrolled?{" "}
+                  <Link to="/student/join-test" className="text-indigo-600 hover:underline font-medium">
+                    Join a test with passcode
                   </Link>
                 </p>
               )}

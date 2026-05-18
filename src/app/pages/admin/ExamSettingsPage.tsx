@@ -289,6 +289,12 @@ export default function ExamSettingsPage() {
                 onChange={(e) => setForm({ ...form, passcode: e.target.value })}
                 placeholder="Set or change passcode"
               />
+              <p className="text-xs text-slate-600">
+                Unenrolled students can join at{" "}
+                <span className="font-mono text-slate-800">/student/join-test</span> with this passcode.
+                They will enter their name and email before starting; results appear in analytics like enrolled
+                students.
+              </p>
             </div>
           ) : null}
 

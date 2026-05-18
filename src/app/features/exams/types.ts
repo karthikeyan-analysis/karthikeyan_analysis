@@ -82,10 +82,24 @@ export interface ExamQuestionPrivate {
 
 export type AttemptStatus = "in_progress" | "submitted";
 
+export interface ExamGuestProfile {
+  id: string; // uid
+  uid: string;
+  testId: string;
+  name: string;
+  email: string;
+  createdAt: string;
+}
+
 export interface ExamAttempt {
   id: string; // uid (doc id)
   uid: string;
   studentRecordId?: string;
+  /** Guest / passcode participant display name (unenrolled). */
+  participantName?: string;
+  /** Guest / passcode participant email (unenrolled). */
+  participantEmail?: string;
+  isGuest?: boolean;
   testId: string;
   batchId: string;
   startedAt: string; // ISO

@@ -14,6 +14,7 @@ import {
 } from "../../components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { BarChart3, Calendar, Edit2, FileSpreadsheet, Trash2 } from "lucide-react";
+import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
 import { deleteExamTest, listExamTestsForAdmin } from "../../features/exams/examApi";
 import type { ExamTest } from "../../features/exams/types";
 
@@ -132,7 +133,9 @@ export default function ExamManagement() {
                           <span className="font-semibold">{t.totalQuestions}</span> /{" "}
                           <span className="font-semibold">{t.totalMarks}</span>
                         </TableCell>
-                        <TableCell className="text-right flex justify-end gap-2">
+                        <TableCell className="text-right">
+                          <div className="flex justify-end items-center gap-1">
+                          <CopyGuestLinkButton test={t} />
                           <Button
                             variant="ghost"
                             size="sm"
@@ -157,6 +160,7 @@ export default function ExamManagement() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

@@ -78,3 +78,38 @@ export function parseCsvList(input: string) {
     .filter(Boolean);
 }
 
+/** Test has passcode guest access configured (admin UI / link sharing). */
+export function isPasscodeGuestTestConfigured(
+  test: Pick<ExamTest, "settings" | "accessPasswordHash">,
+): boolean {
+  const settings = getEffectiveExamSettings(test);
+  return settings.accessMode === "passcode" && Boolean(test.accessPasswordHash);
+}
+
+/** Passcode tests that allow unenrolled guests (name + email collected at join). */
+export function allowsPasscodeGuestAccess(
+  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "status">,
+): boolean {
+  if (test.status && test.status !== "published") return false;
+  return isPasscodeGuestTestConfigured(test);
+}
+
+export function guestJoinUrl(testId: string, origin = typeof window !== "undefined" ? window.location.origin : "") {
+  const base = origin.replace(/\/$/, "");
+  return `${base}/student/join-test/${testId}`;
+}
+
+export async function copyGuestJoinLink(testId: string): Promise<void> {
+  const url = guestJoinUrl(testId);
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    const input = document.createElement("input");
+    input.value = url;
+    document.body.appendChild(input);
+    input.select();
+    document.execCommand("copy");
+    document.body.removeChild(input);
+  }
+}
+

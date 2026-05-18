@@ -3,8 +3,16 @@ import { Link, useParams } from "react-router";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Input } from "../../components/ui/input";
 import { getExamTest, listAttemptsForAdmin, listPublicQuestions } from "../../features/exams/examApi";
+import {
+  allowsPasscodeGuestAccess,
+  guestJoinUrl,
+  isPasscodeGuestTestConfigured,
+} from "../../features/exams/settings";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
+import { Link2 } from "lucide-react";
+import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
 
 export default function ExamDashboardPage() {
   const { id } = useParams();
@@ -46,6 +54,9 @@ export default function ExamDashboardPage() {
   if (loading) return <div className="text-sm text-slate-500">Loading dashboard...</div>;
   if (!test) return null;
 
+  const showGuestLink = isPasscodeGuestTestConfigured(test);
+  const guestLinkLive = allowsPasscodeGuestAccess(test);
+
   return (
     <div className="space-y-6">
       <Card>
@@ -72,6 +83,10 @@ export default function ExamDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {showGuestLink ? (
+        <GuestLinkCard test={test} isLive={guestLinkLive} />
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -130,6 +145,43 @@ function StatCard(props: { label: string; value: string }) {
       <div className="text-xs text-slate-500">{props.label}</div>
       <div className="text-lg font-semibold text-slate-900 mt-0.5">{props.value}</div>
     </div>
+  );
+}
+
+function GuestLinkCard(props: { test: ExamTest; isLive: boolean }) {
+  const url = guestJoinUrl(props.test.id);
+
+  return (
+    <Card className="border-indigo-200 bg-indigo-50/30">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Link2 className="w-4 h-4 text-indigo-600" />
+          Guest passcode link
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <p className="text-sm text-slate-600">
+          Share this link with unenrolled students. They enter the passcode, name, and email before
+          starting the test.
+        </p>
+        {!props.isLive ? (
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+            Publish this test before guests can join from this link.
+          </p>
+        ) : (
+          <Badge className="bg-emerald-100 text-emerald-800">Live for guests</Badge>
+        )}
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Input
+            readOnly
+            value={url}
+            className="font-mono text-xs bg-white"
+            onFocus={(e) => e.target.select()}
+          />
+          <CopyGuestLinkButton test={props.test} variant="outline" className="shrink-0" />
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

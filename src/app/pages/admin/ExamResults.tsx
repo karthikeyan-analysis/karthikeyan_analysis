@@ -10,6 +10,7 @@ import { getExamTest, listAttemptsForAdmin, listPrivateQuestions, listPublicQues
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { useData } from "../../context/DataContext";
 import * as XLSX from "xlsx";
+import { displayNameForAttempt, resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
 
 function safeFileName(name: string) {
   return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
@@ -39,7 +40,7 @@ function percentFromAttempt(a: ExamAttempt, maxMarks: number) {
 /** Submitted first, highest marks first; ties break by student name. In-progress / not submitted after, by name. */
 function sortAttemptsForRankExport(attempts: ExamAttempt[], students: { id: string; name?: string }[]) {
   const nameOf = (a: ExamAttempt) =>
-    students.find((s) => s.id === a.studentRecordId)?.name?.trim().toLowerCase() || a.uid;
+    displayNameForAttempt(a, students).trim().toLowerCase() || a.uid;
 
   const submitted = attempts.filter((a) => a.status === "submitted");
   const notSubmitted = attempts.filter((a) => a.status !== "submitted");
@@ -146,7 +147,7 @@ export default function ExamResults() {
 
       let rankCounter = 0;
       const summaryRows = exportAttemptOrder.map((a) => {
-        const student = students.find((s) => s.id === a.studentRecordId);
+        const participant = resolveAttemptParticipant(a, students);
         const answers = a.answers || {};
         const answeredCount = Object.values(answers).filter((v) => v != null).length;
         let correctCount: number | "" = "";
@@ -186,15 +187,16 @@ export default function ExamResults() {
 
         return {
           rank: a.status === "submitted" ? rankCounter : "",
-          studentName: student?.name || "",
-          studentId: student?.studentId || "",
+          studentName: participant.name,
+          studentId: participant.studentId,
           marksObtained: a.score ?? "",
           maxMarks: maxForStudent,
           percentage: pct != null ? pct : "",
           totalQuestions,
           totalMarks,
           avgMarksPerQuestion,
-          studentEmail: student?.email || "",
+          studentEmail: participant.email,
+          isGuest: participant.isGuest ? "yes" : "no",
           status: a.status,
           answeredCount,
           unansweredCount,
@@ -214,7 +216,7 @@ export default function ExamResults() {
       });
 
       const questionByQuestionRows = exportAttemptOrder.flatMap((a) => {
-        const student = students.find((s) => s.id === a.studentRecordId);
+        const participant = resolveAttemptParticipant(a, students);
         const answers = a.answers || {};
         return questions.map((q) => {
           const selected = answers[q.id] ?? null;
@@ -229,9 +231,10 @@ export default function ExamResults() {
             subject: test.subject,
             uid: a.uid,
             studentRecordId: a.studentRecordId || "",
-            studentId: student?.studentId || "",
-            studentName: student?.name || "",
-            studentEmail: student?.email || "",
+            studentId: participant.studentId,
+            studentName: participant.name,
+            studentEmail: participant.email,
+            isGuest: participant.isGuest ? "yes" : "no",
             attemptStatus: a.status,
             startedAt: toIsoOrEmpty(a.startedAt),
             submittedAt: toIsoOrEmpty(a.submittedAt),
@@ -251,14 +254,14 @@ export default function ExamResults() {
 
       let wideRank = 0;
       const wideRows = exportAttemptOrder.map((a) => {
-        const student = students.find((s) => s.id === a.studentRecordId);
+        const participant = resolveAttemptParticipant(a, students);
         const maxForStudent = a.maxScore ?? totalMarks;
         const pct = percentFromAttempt(a, totalMarks);
         if (a.status === "submitted") wideRank++;
         const base: Record<string, any> = {
           rank: a.status === "submitted" ? wideRank : "",
-          studentName: student?.name || "",
-          studentId: student?.studentId || "",
+          studentName: participant.name,
+          studentId: participant.studentId,
           marksObtained: a.score ?? "",
           maxMarks: maxForStudent,
           percentage: pct != null ? pct : "",
@@ -266,7 +269,8 @@ export default function ExamResults() {
           totalMarks,
           avgMarksPerQuestion,
           uid: a.uid,
-          studentEmail: student?.email || "",
+          studentEmail: participant.email,
+          isGuest: participant.isGuest ? "yes" : "no",
           status: a.status,
         };
         const answers = a.answers || {};
@@ -376,7 +380,7 @@ export default function ExamResults() {
                 </TableHeader>
                 <TableBody>
                   {attemptsWithRank.map(({ attempt: a, rank }) => {
-                    const s = students.find((x) => x.id === a.studentRecordId);
+                    const p = resolveAttemptParticipant(a, students);
                     const rankLabel = rank != null ? String(rank) : "—";
                     const maxMarks = test ? a.maxScore ?? test.totalMarks : null;
                     const percent =
@@ -387,8 +391,8 @@ export default function ExamResults() {
                       <TableRow key={a.id} className="hover:bg-slate-50">
                         <TableCell className="text-sm font-semibold text-slate-800 tabular-nums">{rankLabel}</TableCell>
                         <TableCell className="min-w-[260px]">
-                          <div className="font-medium text-slate-900">{s?.name || "Unknown"}</div>
-                          <div className="text-xs text-slate-600">{s?.email || a.uid}</div>
+                          <div className="font-medium text-slate-900">{p.name || "Unknown"}</div>
+                          <div className="text-xs text-slate-600">{p.email || a.uid}</div>
                         </TableCell>
                         <TableCell>
                           {a.status === "submitted" ? (

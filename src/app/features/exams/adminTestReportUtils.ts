@@ -1,4 +1,5 @@
 import type { Student } from "../../context/DataContext";
+import { displayNameForAttempt } from "./participantUtils";
 import type { ExamAttempt, ExamTest } from "./types";
 
 export function toIsoOrEmpty(value: unknown) {
@@ -44,3 +45,5 @@ export function isEligibleForExam(student: Student, test: ExamTest): boolean {
 export function safeFileName(name: string) {
   return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
 }
+
+export { displayNameForAttempt, resolveAttemptParticipant } from "./participantUtils";

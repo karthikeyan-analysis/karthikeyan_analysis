@@ -18,9 +18,9 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { Calendar, CheckCircle2, FileCheck2, Zap } from "lucide-react";
+import { Calendar, CheckCircle2, FileCheck2, KeyRound, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getAttempt, listExamTestsForStudent } from "../../features/exams/examApi";
+import { getAttempt, getExamTest, listExamTestsForStudent } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { useNavigate } from "react-router";
 import StudentAvatar from "../../components/StudentAvatar";
@@ -38,6 +38,25 @@ export default function TestSchedule() {
   const [attemptLoading, setAttemptLoading] = useState(false);
 
   useEffect(() => {
+    if (user?.isGuestExamParticipant && user.guestExamTestId) {
+      let cancelled = false;
+      const loadGuest = async () => {
+        setExamLoading(true);
+        try {
+          const t = await getExamTest(user.guestExamTestId!);
+          if (!cancelled) setExamTests(t ? [t] : []);
+        } catch (e) {
+          console.error(e);
+        } finally {
+          if (!cancelled) setExamLoading(false);
+        }
+      };
+      void loadGuest();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     if (!user?.batchId) return;
     let cancelled = false;
     const load = async () => {
@@ -58,7 +77,7 @@ export default function TestSchedule() {
     return () => {
       cancelled = true;
     };
-  }, [user?.batchId, user?.studentRecordId]);
+  }, [user?.batchId, user?.guestExamTestId, user?.isGuestExamParticipant, user?.studentRecordId]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -108,16 +127,38 @@ export default function TestSchedule() {
     return { active, upcoming, closed, all: items };
   }, [examTests, now]);
 
-  if (!user?.batchId) {
+  const isGuestOnly = user?.isGuestExamParticipant && user.guestExamTestId;
+
+  if (!user?.batchId && !isGuestOnly) {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-semibold text-slate-900">Test Schedule</h1>
         <Alert>
           <AlertTitle>Not Enrolled</AlertTitle>
           <AlertDescription>
-            You are not enrolled in any batch. Please contact administrator.
+            You are not enrolled in any batch. If you have a test passcode from your instructor, you
+            can join below.
           </AlertDescription>
         </Alert>
+        <Card className="border-indigo-200 bg-indigo-50/40">
+          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <p className="font-semibold text-slate-900 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-indigo-600" />
+                Join with passcode
+              </p>
+              <p className="text-sm text-slate-600 mt-1">
+                Enter your name, email, and the passcode shared by your instructor.
+              </p>
+            </div>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 shrink-0"
+              onClick={() => navigate("/student/join-test")}
+            >
+              Join test
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -279,14 +320,20 @@ export default function TestSchedule() {
       </div>
       {/* In-app CBT exams */}
       <div className="space-y-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Zap className="w-5 h-5" />
             In-app CBT Exams
           </h2>
-          <Badge variant="outline" className="text-xs">
-            Secure mode
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
+              <KeyRound className="w-3 h-3 mr-1" />
+              Passcode join
+            </Button>
+            <Badge variant="outline" className="text-xs">
+              Secure mode
+            </Badge>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
