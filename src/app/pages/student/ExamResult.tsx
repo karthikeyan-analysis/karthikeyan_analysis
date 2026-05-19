@@ -8,7 +8,8 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } from "../../features/exams/examApi";
-import { resolveStudentPhotoDisplayUrl } from "../../features/students/studentPhotoUrl";
+import StudentPhotoImage from "../../components/StudentPhotoImage";
+import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 function formatEta(totalSeconds: number) {
@@ -44,10 +45,7 @@ export default function ExamResult() {
   const location = useLocation();
   const allowPdfDownload =
     (location.state as { allowPdfDownload?: boolean } | null)?.allowPdfDownload === true;
-  const studentPhotoSrc = useMemo(
-    () => resolveStudentPhotoDisplayUrl(user?.photoURL),
-    [user?.photoURL],
-  );
+  const { photoURL, displaySrc: studentPhotoSrc } = useStudentPhoto();
 
   const [loading, setLoading] = useState(true);
   const [test, setTest] = useState<ExamTest | null>(null);
@@ -350,11 +348,15 @@ export default function ExamResult() {
                 className="relative w-[92px] h-[118px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm"
                 title="Student photo"
               >
-                {studentPhotoSrc ? (
-                  <img
-                    src={studentPhotoSrc}
-                    alt=""
-                    className="max-w-full max-h-full w-full h-full object-contain object-center"
+                {photoURL ? (
+                  <StudentPhotoImage
+                    photoURL={photoURL}
+                    imgClassName="max-w-full max-h-full w-full h-full object-contain object-center"
+                    fallback={
+                      <span className="text-base font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
+                        {initialsFromName(studentName)}
+                      </span>
+                    }
                   />
                 ) : (
                   <span className="text-base font-bold text-indigo-700 tabular-nums px-1 text-center select-none">

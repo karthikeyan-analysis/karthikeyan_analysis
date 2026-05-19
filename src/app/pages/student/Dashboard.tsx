@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { BookOpen, Video, FileText, Layers3, CalendarClock } from "lucide-react";
 import StudentAvatar from "../../components/StudentAvatar";
+import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import { useNavigate } from "react-router";
 import { listExamTestsForStudent } from "../../features/exams/examApi";
 import type { ExamTest } from "../../features/exams/types";
@@ -13,6 +14,7 @@ import type { ExamTest } from "../../features/exams/types";
 export default function StudentDashboard() {
   const { content, videos, tests, batches } = useData();
   const { user } = useAuth();
+  const { photoURL } = useStudentPhoto();
   const navigate = useNavigate();
   const [examTests, setExamTests] = useState<ExamTest[]>([]);
 
@@ -125,7 +127,7 @@ export default function StudentDashboard() {
           <div className="flex items-start gap-4 min-w-0">
             <StudentAvatar
               name={user?.name || "Student"}
-              photoURL={user?.photoURL}
+              photoURL={photoURL}
               size="lg"
               className="shrink-0 ring-2 ring-slate-100"
             />

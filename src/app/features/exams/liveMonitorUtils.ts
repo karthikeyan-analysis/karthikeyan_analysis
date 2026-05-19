@@ -14,6 +14,7 @@ export type LiveAttemptRow = {
   participantName: string;
   studentId: string;
   email: string;
+  photoURL?: string;
   isGuest: boolean;
   joinedAt: string;
   hardEndAt: string;
@@ -96,7 +97,7 @@ export function buildLiveAttemptRow(params: {
   testId: string;
   test?: ExamTest | null;
   batchName: string;
-  students: Pick<Student, "id" | "name" | "email" | "studentId">[];
+  students: Pick<Student, "id" | "name" | "email" | "studentId" | "photoURL">[];
   nowMs: number;
 }): LiveAttemptRow {
   const { attempt, testId, test, batchName, students, nowMs } = params;
@@ -113,6 +114,7 @@ export function buildLiveAttemptRow(params: {
     participantName: p.name || p.email || attempt.uid.slice(0, 8),
     studentId: p.studentId || "—",
     email: p.email || "",
+    photoURL: p.photoURL,
     isGuest: p.isGuest,
     joinedAt: attempt.startedAt,
     hardEndAt: attempt.hardEndAt || "",

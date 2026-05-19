@@ -27,7 +27,8 @@ import {
   saveAttemptProgress,
   startAttempt,
 } from "../../features/exams/examApi";
-import { resolveStudentPhotoDisplayUrl } from "../../features/students/studentPhotoUrl";
+import StudentPhotoImage from "../../components/StudentPhotoImage";
+import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import type {
   ExamQuestionPrivate,
   ExamQuestionPublic,
@@ -77,10 +78,7 @@ export default function TakeExam() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const studentPhotoSrc = useMemo(
-    () => resolveStudentPhotoDisplayUrl(user?.photoURL),
-    [user?.photoURL],
-  );
+  const { photoURL } = useStudentPhoto();
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -936,12 +934,15 @@ export default function TakeExam() {
                   className="relative w-[84px] h-[108px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm shrink-0"
                   title="Student photo"
                 >
-                  {studentPhotoSrc ? (
-                    <img
-                      src={studentPhotoSrc}
-                      alt=""
-                      className="max-w-full max-h-full w-full h-full object-contain object-center"
-                      loading="lazy"
+                  {photoURL ? (
+                    <StudentPhotoImage
+                      photoURL={photoURL}
+                      imgClassName="max-w-full max-h-full w-full h-full object-contain object-center"
+                      fallback={
+                        <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
+                          {initialsFromName(user.name || "Student")}
+                        </span>
+                      }
                     />
                   ) : (
                     <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">

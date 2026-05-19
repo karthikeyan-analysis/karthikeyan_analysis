@@ -25,9 +25,11 @@ import { getExamWindowStatus } from "../../features/exams/examAvailability";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { useNavigate } from "react-router";
 import StudentAvatar from "../../components/StudentAvatar";
+import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 
 export default function TestSchedule() {
   const { user } = useAuth();
+  const { photoURL } = useStudentPhoto();
   const { batches } = useData();
   const navigate = useNavigate();
 
@@ -297,7 +299,7 @@ export default function TestSchedule() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <StudentAvatar name={user.name || "Student"} photoURL={user.photoURL} size="lg" className="ring-2 ring-slate-100" />
+        <StudentAvatar name={user.name || "Student"} photoURL={photoURL} size="lg" className="ring-2 ring-slate-100" />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-slate-900 truncate">{user.name || "Student"}</p>
           {user.studentId ? (

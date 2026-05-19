@@ -83,14 +83,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           firebaseUser.displayName ||
           "";
         let photoURL: string | undefined =
-          typeof userData.photoURL === "string" ? userData.photoURL : undefined;
+          typeof userData.photoURL === "string" && userData.photoURL.trim()
+            ? userData.photoURL.trim()
+            : undefined;
+        let studentRecordId =
+          typeof userData.studentRecordId === "string" ? userData.studentRecordId : undefined;
+        let studentId =
+          typeof userData.studentId === "string" ? userData.studentId : undefined;
+        let batchId = typeof userData.batchId === "string" ? userData.batchId : undefined;
 
-        if (role === "student" && userData.studentRecordId) {
-          const stSnap = await getDoc(doc(db, "students", userData.studentRecordId));
-          if (stSnap.exists()) {
-            const st = stSnap.data() as { name?: string; photoURL?: string };
-            if (st.name?.trim()) name = st.name.trim();
-            if (typeof st.photoURL === "string" && st.photoURL) photoURL = st.photoURL;
+        if (role === "student") {
+          const email = (
+            firebaseUser.email ||
+            (typeof userData.email === "string" ? userData.email : "")
+          )
+            .trim()
+            .toLowerCase();
+
+          type StudentDoc = {
+            name?: string;
+            photoURL?: string;
+            studentId?: string;
+            batchId?: string;
+          };
+
+          let studentData: StudentDoc | null = null;
+
+          if (studentRecordId) {
+            const stSnap = await getDoc(doc(db, "students", studentRecordId));
+            if (stSnap.exists()) {
+              studentData = stSnap.data() as StudentDoc;
+            } else {
+              studentRecordId = undefined;
+            }
+          }
+
+          if (!studentData && email) {
+            const studentQuery = query(
+              collection(db, "students"),
+              where("email", "==", email),
+            );
+            const studentSnap = await getDocs(studentQuery);
+            if (!studentSnap.empty) {
+              studentRecordId = studentSnap.docs[0].id;
+              studentData = studentSnap.docs[0].data() as StudentDoc;
+              void setDoc(
+                userDocRef,
+                {
+                  studentRecordId,
+                  studentId: studentData.studentId ?? studentId ?? null,
+                  batchId: studentData.batchId ?? batchId ?? null,
+                  ...(studentData.photoURL ? { photoURL: studentData.photoURL } : {}),
+                  updatedAt: new Date().toISOString(),
+                },
+                { merge: true },
+              );
+            }
+          }
+
+          if (studentData) {
+            if (studentData.name?.trim()) name = studentData.name.trim();
+            if (typeof studentData.photoURL === "string" && studentData.photoURL.trim()) {
+              photoURL = studentData.photoURL.trim();
+            }
+            if (studentData.studentId) studentId = studentData.studentId;
+            if (studentData.batchId) batchId = studentData.batchId;
           }
         } else if (role === "admin" && typeof userData.name === "string" && userData.name.trim()) {
           name = userData.name.trim();
@@ -105,9 +162,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           email: firebaseUser.email || userData.email || "",
           name,
           role,
-          studentId: userData.studentId,
-          batchId: userData.batchId,
-          studentRecordId: userData.studentRecordId,
+          studentId,
+          batchId,
+          studentRecordId,
           photoURL,
           isGuestExamParticipant: userData.isGuestExamParticipant === true,
           guestExamTestId:
@@ -250,14 +307,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cred = await signInAnonymously(auth);
       const uid = cred.user.uid;
 
+      const guestStudentSnap = await getDocs(
+        query(collection(db, "students"), where("email", "==", email)),
+      );
+      const guestStudent = guestStudentSnap.empty ? null : guestStudentSnap.docs[0];
+
       await setDoc(
         doc(db, "users", uid),
         {
           role: "student",
-          name,
+          name: guestStudent?.data()?.name?.trim() || name,
           email,
           isGuestExamParticipant: true,
           guestExamTestId: params.testId,
+          ...(guestStudent
+            ? {
+                studentRecordId: guestStudent.id,
+                studentId: guestStudent.data()?.studentId ?? null,
+                batchId: guestStudent.data()?.batchId ?? null,
+                ...(guestStudent.data()?.photoURL
+                  ? { photoURL: guestStudent.data()?.photoURL }
+                  : {}),
+              }
+            : {}),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },

@@ -1,5 +1,6 @@
+import { useEffect, useMemo, useState } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
-import { resolveStudentPhotoDisplayUrl } from "../features/students/studentPhotoUrl";
+import { getStudentPhotoDisplayCandidates } from "../features/students/studentPhotoUrl";
 import { cn } from "./ui/utils";
 
 function initialsFromName(name: string) {
@@ -30,7 +31,15 @@ export default function StudentAvatar({
   size?: Size;
 }) {
   const label = name.trim() || "Student";
-  const displaySrc = resolveStudentPhotoDisplayUrl(photoURL);
+  const candidates = useMemo(() => getStudentPhotoDisplayCandidates(photoURL), [photoURL]);
+  const [srcIndex, setSrcIndex] = useState(0);
+
+  useEffect(() => {
+    setSrcIndex(0);
+  }, [photoURL]);
+
+  const displaySrc = candidates[srcIndex];
+
   return (
     <Avatar className={cn(sizeClass[size], className)}>
       {displaySrc ? (
@@ -39,6 +48,11 @@ export default function StudentAvatar({
           alt=""
           className="object-cover"
           referrerPolicy="no-referrer"
+          onLoadingStatusChange={(status) => {
+            if (status === "error" && srcIndex < candidates.length - 1) {
+              setSrcIndex((i) => i + 1);
+            }
+          }}
         />
       ) : null}
       <AvatarFallback className="bg-indigo-600 text-white font-semibold">

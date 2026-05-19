@@ -69,10 +69,25 @@ export function googleDriveThumbnailUrl(fileId: string, size = 400): string {
 
 /** URL suitable for &lt;img src&gt;. Drive links use the thumbnail endpoint for reliable previews. */
 export function resolveStudentPhotoDisplayUrl(photoURL?: string | null): string | undefined {
-  if (!photoURL?.trim()) return undefined;
-  const driveId = extractGoogleDriveFileId(photoURL);
-  if (driveId) return googleDriveThumbnailUrl(driveId);
-  return normalizeStudentPhotoUrl(photoURL) ?? photoURL.trim();
+  const candidates = getStudentPhotoDisplayCandidates(photoURL);
+  return candidates[0];
+}
+
+/** Ordered URLs to try when embedding a profile photo (thumbnail first, then direct view). */
+export function getStudentPhotoDisplayCandidates(photoURL?: string | null): string[] {
+  if (!photoURL?.trim()) return [];
+  const raw = photoURL.trim();
+  const driveId = extractGoogleDriveFileId(raw);
+  if (driveId) {
+    return [
+      googleDriveThumbnailUrl(driveId, 400),
+      `https://drive.google.com/uc?export=view&id=${driveId}`,
+      `https://drive.google.com/uc?export=download&id=${driveId}`,
+    ];
+  }
+  const normalized = normalizeStudentPhotoUrl(raw);
+  const primary = normalized ?? raw;
+  return primary === raw ? [primary] : [primary, raw];
 }
 
 /** First photo-like URL in a list of cell values (import row scan). */

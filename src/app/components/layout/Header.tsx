@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { LogOut, User, Bell, Menu } from 'lucide-react';
-import { resolveStudentPhotoDisplayUrl } from '../../features/students/studentPhotoUrl';
+import { useStudentPhoto } from '../../features/students/useStudentPhoto';
 
 interface HeaderProps {
   onMenuClick?: () => void;
@@ -16,10 +16,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const avatarSrc = useMemo(
-    () => resolveStudentPhotoDisplayUrl(user?.photoURL),
-    [user?.photoURL],
-  );
+  const { displaySrc: avatarSrc } = useStudentPhoto();
 
   const pageTitle = useMemo(() => {
     const p = location.pathname;
@@ -83,7 +80,12 @@ export default function Header({ onMenuClick }: HeaderProps) {
             <Button variant="ghost" className="flex items-center gap-2 md:gap-3 h-auto py-2">
               <Avatar className="w-8 h-8 md:w-9 md:h-9 bg-indigo-600">
                 {avatarSrc ? (
-                  <AvatarImage src={avatarSrc} alt="" className="object-cover" />
+                  <AvatarImage
+                    src={avatarSrc}
+                    alt=""
+                    className="object-cover"
+                    referrerPolicy="no-referrer"
+                  />
                 ) : null}
                 <AvatarFallback className="bg-indigo-600 text-white">
                   {user ? getInitials(user.name) : 'U'}

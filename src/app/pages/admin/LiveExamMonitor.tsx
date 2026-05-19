@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { cn } from "../../components/ui/utils";
+import StudentAvatar from "../../components/StudentAvatar";
 import { listExamTestsForAdmin } from "../../features/exams/examApi";
 import { subscribeInProgressAttempts } from "../../features/exams/liveMonitorApi";
 import type { ExamTest } from "../../features/exams/types";
