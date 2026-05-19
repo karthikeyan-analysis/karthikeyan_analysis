@@ -55,6 +55,8 @@ export interface ExamTest {
   durationMinutes: number;
   totalQuestions: number;
   totalMarks: number;
+  /** Default marks applied to new questions (1, 1.5, or 2). */
+  defaultMarksPerQuestion?: number;
   negativeMarkPerWrong?: number;
   showAnswersAfter: ExamShowAnswersAfter;
   visibility: ExamVisibility;

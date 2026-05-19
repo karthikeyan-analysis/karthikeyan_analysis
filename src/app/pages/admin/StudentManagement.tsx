@@ -45,22 +45,31 @@ import {
 import * as XLSX from "xlsx";
 import StudentAvatar from "../../components/StudentAvatar";
 import { uploadStudentProfileImage } from "../../features/students/studentPhotoStorage";
+import {
+  looksLikePhotoUrl,
+  normalizeStudentPhotoUrl,
+  resolveStudentPhotoDisplayUrl,
+} from "../../features/students/studentPhotoUrl";
 
 function StudentPhotoFields({
   previewUrl,
   displayName,
+  photoUrlText,
+  onPhotoUrlTextChange,
   onPickFile,
   onRemove,
   canRemove,
 }: {
   previewUrl: string | null;
   displayName: string;
+  photoUrlText: string;
+  onPhotoUrlTextChange: (value: string) => void;
   onPickFile: (file: File | null) => void;
   onRemove: () => void | Promise<void>;
   canRemove: boolean;
 }) {
   return (
-    <div className="space-y-2">
+    <div className="space-y-3 md:col-span-2">
       <Label>Profile photo (optional)</Label>
       <div className="flex flex-wrap items-center gap-3">
         {previewUrl ? (
@@ -86,6 +95,7 @@ function StudentPhotoFields({
               onPickFile(null);
               return;
             }
+            onPhotoUrlTextChange("");
             onPickFile(f);
           }}
         />
@@ -96,8 +106,24 @@ function StudentPhotoFields({
           </Button>
         ) : null}
       </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="student-photo-url" className="text-xs font-normal text-slate-600">
+          Or paste image URL (Google Drive link or any https image)
+        </Label>
+        <Input
+          id="student-photo-url"
+          type="url"
+          placeholder="https://drive.google.com/file/d/…"
+          value={photoUrlText}
+          onChange={(e) => {
+            onPhotoUrlTextChange(e.target.value);
+            if (e.target.value.trim()) onPickFile(null);
+          }}
+        />
+      </div>
       <p className="text-xs text-slate-500">
-        Stored in Firebase Storage. Visible when the student logs in, on tests, and on result PDFs.
+        Upload saves to Firebase Storage. Pasted links are stored as-is (Drive links are converted for display).
+        Photos appear when the student logs in, during tests, and on result PDFs.
       </p>
     </div>
   );
@@ -118,7 +144,7 @@ export default function StudentManagement() {
   const [importStatus, setImportStatus] = useState<"active" | "inactive">("active");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importRows, setImportRows] = useState<
-    Array<{ studentId: string; name: string; email: string; enrolledDate?: string }>
+    Array<{ studentId: string; name: string; email: string; enrolledDate?: string; photoURL?: string }>
   >([]);
   const [importError, setImportError] = useState("");
   const [importing, setImporting] = useState(false);
@@ -139,6 +165,7 @@ export default function StudentManagement() {
   });
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoUrlText, setPhotoUrlText] = useState("");
   const blobPreviewUrl = useMemo(
     () => (photoFile ? URL.createObjectURL(photoFile) : null),
     [photoFile],
@@ -149,7 +176,11 @@ export default function StudentManagement() {
     };
   }, [blobPreviewUrl]);
 
-  const photoPreviewDisplay = blobPreviewUrl || editingStudent?.photoURL || null;
+  const photoPreviewDisplay =
+    blobPreviewUrl ||
+    resolveStudentPhotoDisplayUrl(photoUrlText) ||
+    resolveStudentPhotoDisplayUrl(editingStudent?.photoURL) ||
+    null;
 
   // Filter students by selected batch
   const batchFilteredStudents =
@@ -193,9 +224,83 @@ export default function StudentManagement() {
     if (!h) return null;
     if (h.includes("email")) return "email";
     if (h.includes("student id") || h === "id" || h.includes("studentid")) return "studentId";
-    if (h.includes("full name") || h.includes("name")) return "name";
-    if (h.includes("enrolled") || h.includes("join") || h.includes("date")) return "enrolledDate";
+    if (h.includes("photo") || h.includes("picture") || h.includes("image") || h.includes("drive"))
+      return "photoURL";
+    if (h.includes("profile") && (h.includes("url") || h.includes("link") || h.includes("photo")))
+      return "photoURL";
+    if ((h.includes("url") || h.includes("link")) && !h.includes("email")) return "photoURL";
+    if (h.includes("full name") || (h.includes("name") && !h.includes("file"))) return "name";
+    if (h.includes("enrolled") || h.includes("join") || h.includes("date") || h.includes("timestamp"))
+      return "enrolledDate";
     return null;
+  };
+
+  const inferMappingFromValues = (
+    headers: string[],
+    sampleRows: Record<string, unknown>[],
+  ): Partial<Record<"studentId" | "name" | "email" | "enrolledDate" | "photoURL", string>> => {
+    const mapping: Partial<Record<"studentId" | "name" | "email" | "enrolledDate" | "photoURL", string>> = {};
+    const sample = sampleRows.slice(0, 15);
+
+    for (const h of headers) {
+      const field = guessFieldFromHeader(h);
+      if (field && !mapping[field]) mapping[field] = h;
+    }
+
+    if (!mapping.email) {
+      for (const h of headers) {
+        const hits = sample.filter((r) => isLikelyEmail(normalizeEmail(String(r[h] ?? "")))).length;
+        if (hits >= Math.max(1, Math.ceil(sample.length * 0.4))) {
+          mapping.email = h;
+          break;
+        }
+      }
+    }
+
+    if (!mapping.name && mapping.email) {
+      const emailIdx = headers.indexOf(mapping.email);
+      if (emailIdx > 0) {
+        const candidate = headers[emailIdx - 1];
+        const hits = sample.filter((r) => String(r[candidate] ?? "").trim().length > 1).length;
+        if (hits > 0) mapping.name = candidate;
+      }
+    }
+
+    if (!mapping.photoURL && mapping.email) {
+      const emailIdx = headers.indexOf(mapping.email);
+      for (let i = emailIdx + 1; i < headers.length; i++) {
+        const h = headers[i];
+        if (sample.some((r) => looksLikePhotoUrl(String(r[h] ?? "")))) {
+          mapping.photoURL = h;
+          break;
+        }
+      }
+    }
+
+    if (!mapping.enrolledDate) {
+      for (const h of headers) {
+        if (h === mapping.name || h === mapping.email || h === mapping.photoURL) continue;
+        const hits = sample.filter((r) => {
+          const v = String(r[h] ?? "").trim();
+          return v.length > 4 && !looksLikePhotoUrl(v) && !isLikelyEmail(v);
+        }).length;
+        if (hits >= Math.max(1, Math.ceil(sample.length * 0.3))) {
+          mapping.enrolledDate = h;
+          break;
+        }
+      }
+    }
+
+    return mapping;
+  };
+
+  const getCellHyperlink = (ws: XLSX.WorkSheet, row: number, col: number): string | undefined => {
+    const addr = XLSX.utils.encode_cell({ r: row, c: col });
+    const cell = ws[addr] as { l?: { Target?: string }; v?: unknown } | undefined;
+    if (!cell) return undefined;
+    if (cell.l?.Target && /^https?:\/\//i.test(cell.l.Target)) return cell.l.Target.trim();
+    if (typeof cell.v === "string" && /^https?:\/\//i.test(cell.v)) return cell.v.trim();
+    return undefined;
   };
 
   const buildStudentId = (email: string, index: number) => {
@@ -221,21 +326,22 @@ export default function StudentManagement() {
     });
     if (!rows.length) throw new Error("No rows found in the first sheet.");
 
-    // Determine mapping by looking at the first row's keys (headers)
     const headers = Object.keys(rows[0] || {});
-    const mapping: Partial<Record<"studentId" | "name" | "email" | "enrolledDate", string>> = {};
-    for (const h of headers) {
-      const field = guessFieldFromHeader(h);
-      if (field && !mapping[field]) mapping[field] = h;
-    }
+    const mapping = inferMappingFromValues(headers, rows);
 
     if (!mapping.email) {
-      throw new Error('Could not detect an "Email" column. Please ensure a header like "Email", "Email ID", etc.');
+      throw new Error(
+        'Could not detect an "Email" column. Add a header like "Email", or put email in the third column (Date, Name, Email, Photo URL).',
+      );
     }
     if (!mapping.name) {
-      throw new Error('Could not detect a "Name" column. Please ensure a header like "Full Name" or "Name".');
+      throw new Error(
+        'Could not detect a "Name" column. Add a header like "Full Name", or put the name column before email.',
+      );
     }
 
+    const photoColIdx = mapping.photoURL ? headers.indexOf(mapping.photoURL) : -1;
+    const hasHeaderRow = headers.some((h) => guessFieldFromHeader(h) != null);
     const seenInFile = new Set<string>();
 
     const parsed = rows
@@ -244,10 +350,24 @@ export default function StudentManagement() {
         const name = String(r[mapping.name!]).trim();
         const studentIdFromSheet = mapping.studentId ? String(r[mapping.studentId]).trim() : "";
         const enrolledDate = mapping.enrolledDate ? String(r[mapping.enrolledDate]).trim() : "";
+        let photoRaw = mapping.photoURL ? String(r[mapping.photoURL] ?? "").trim() : "";
+        if (!looksLikePhotoUrl(photoRaw) && photoColIdx >= 0) {
+          const sheetRow = hasHeaderRow ? idx + 1 : idx;
+          const link = getCellHyperlink(ws, sheetRow, photoColIdx);
+          if (link) photoRaw = link;
+        }
+        const photoURL = normalizeStudentPhotoUrl(photoRaw);
         const studentId = studentIdFromSheet || (email ? buildStudentId(email, idx) : "");
         const duplicateInFile = email ? seenInFile.has(email) : false;
         if (email) seenInFile.add(email);
-        return { studentId, name, email, enrolledDate: enrolledDate || undefined, duplicateInFile };
+        return {
+          studentId,
+          name,
+          email,
+          enrolledDate: enrolledDate || undefined,
+          photoURL,
+          duplicateInFile,
+        };
       })
       .filter((r) => r.email && r.name);
 
@@ -317,6 +437,7 @@ export default function StudentManagement() {
           status: importStatus,
           batchId: importBatchId,
           enrolledDate: row.enrolledDate || new Date().toISOString().split("T")[0],
+          ...(row.photoURL ? { photoURL: row.photoURL } : {}),
         });
         created += 1;
         existingEmailSet.add(email);
@@ -336,8 +457,21 @@ export default function StudentManagement() {
     setImporting(false);
   };
 
+  const applyPhotoToStudent = async (studentId: string) => {
+    if (photoFile) {
+      const url = await uploadStudentProfileImage(studentId, photoFile);
+      await updateStudent(studentId, { photoURL: url });
+      return;
+    }
+    const normalized = normalizeStudentPhotoUrl(photoUrlText);
+    if (normalized) {
+      await updateStudent(studentId, { photoURL: normalized });
+    }
+  };
+
   const handleRemovePhoto = async () => {
     setPhotoFile(null);
+    setPhotoUrlText("");
     if (editingStudent) {
       try {
         await clearStudentPhoto(editingStudent.id);
@@ -357,24 +491,19 @@ export default function StudentManagement() {
     try {
       if (editingStudent) {
         await updateStudent(editingStudent.id, formData);
-        if (photoFile) {
-          const url = await uploadStudentProfileImage(editingStudent.id, photoFile);
-          await updateStudent(editingStudent.id, { photoURL: url });
-        }
+        await applyPhotoToStudent(editingStudent.id);
         setEditingStudent(null);
       } else {
         const newId = await addStudent({
           ...formData,
           enrolledDate: new Date().toISOString().split("T")[0],
         });
-        if (photoFile) {
-          const url = await uploadStudentProfileImage(newId, photoFile);
-          await updateStudent(newId, { photoURL: url });
-        }
+        await applyPhotoToStudent(newId);
         setIsAddDialogOpen(false);
       }
 
       setPhotoFile(null);
+      setPhotoUrlText("");
       setFormData({
         studentId: "",
         name: "",
@@ -391,6 +520,7 @@ export default function StudentManagement() {
 
   const handleEdit = (student: Student) => {
     setPhotoFile(null);
+    setPhotoUrlText(student.photoURL || "");
     setEditingStudent(student);
     setFormData({
       studentId: student.studentId,
@@ -417,6 +547,7 @@ export default function StudentManagement() {
 
   const resetForm = () => {
     setPhotoFile(null);
+    setPhotoUrlText("");
     setFormData({
       studentId: "",
       name: "",
@@ -553,11 +684,13 @@ export default function StudentManagement() {
                   </Select>
                 </div>
                 <StudentPhotoFields
-                  previewUrl={blobPreviewUrl || null}
+                  previewUrl={photoPreviewDisplay}
                   displayName={formData.name}
+                  photoUrlText={photoUrlText}
+                  onPhotoUrlTextChange={setPhotoUrlText}
                   onPickFile={setPhotoFile}
                   onRemove={handleRemovePhoto}
-                  canRemove={!!photoFile}
+                  canRemove={!!(photoFile || photoUrlText.trim() || editingStudent?.photoURL)}
                 />
               </div>
               <DialogFooter>
@@ -599,8 +732,11 @@ export default function StudentManagement() {
             <DialogHeader>
               <DialogTitle>Import students from Excel</DialogTitle>
               <DialogDescription>
-                Upload an <span className="font-medium">.xlsx</span> file and we will create students in bulk.
-                The sheet must have columns like <span className="font-medium">Email</span> and <span className="font-medium">Name</span>.
+                Upload an <span className="font-medium">.xlsx</span> file to create students in bulk. Required:{" "}
+                <span className="font-medium">Email</span> and <span className="font-medium">Name</span>. Optional:{" "}
+                <span className="font-medium">Photo URL</span> (Google Drive share links work — file must be shared as
+                &quot;Anyone with the link&quot;). Column order like Date → Name → Email → Photo URL is detected
+                automatically.
               </DialogDescription>
             </DialogHeader>
 
@@ -682,6 +818,7 @@ export default function StudentManagement() {
                         <Table>
                           <TableHeader>
                             <TableRow>
+                              <TableHead className="w-12">Photo</TableHead>
                               <TableHead>Student ID</TableHead>
                               <TableHead>Name</TableHead>
                               <TableHead>Email</TableHead>
@@ -690,6 +827,9 @@ export default function StudentManagement() {
                           <TableBody>
                             {importRows.slice(0, 10).map((r, idx) => (
                               <TableRow key={`${r.email}-${idx}`}>
+                                <TableCell>
+                                  <StudentAvatar name={r.name} photoURL={r.photoURL} size="sm" />
+                                </TableCell>
                                 <TableCell className="font-medium">{r.studentId}</TableCell>
                                 <TableCell>{r.name}</TableCell>
                                 <TableCell className="text-sm text-slate-600">{r.email}</TableCell>
@@ -883,11 +1023,13 @@ export default function StudentManagement() {
                             ? photoPreviewDisplay
                             : student.photoURL || null
                         }
+                        photoUrlText={photoUrlText}
+                        onPhotoUrlTextChange={setPhotoUrlText}
                         onPhotoPick={setPhotoFile}
                         onPhotoRemove={handleRemovePhoto}
                         canRemovePhoto={
                           editingStudent?.id === student.id
-                            ? !!(photoFile || editingStudent.photoURL)
+                            ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
                             : false
                         }
                       />
@@ -941,11 +1083,13 @@ export default function StudentManagement() {
                               ? photoPreviewDisplay
                               : student.photoURL || null
                           }
+                          photoUrlText={photoUrlText}
+                          onPhotoUrlTextChange={setPhotoUrlText}
                           onPhotoPick={setPhotoFile}
                           onPhotoRemove={handleRemovePhoto}
                           canRemovePhoto={
                             editingStudent?.id === student.id
-                              ? !!(photoFile || editingStudent.photoURL)
+                              ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
                               : false
                           }
                         />
@@ -1002,11 +1146,13 @@ export default function StudentManagement() {
                               ? photoPreviewDisplay
                               : student.photoURL || null
                           }
+                          photoUrlText={photoUrlText}
+                          onPhotoUrlTextChange={setPhotoUrlText}
                           onPhotoPick={setPhotoFile}
                           onPhotoRemove={handleRemovePhoto}
                           canRemovePhoto={
                             editingStudent?.id === student.id
-                              ? !!(photoFile || editingStudent.photoURL)
+                              ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
                               : false
                           }
                         />
@@ -1045,6 +1191,8 @@ interface StudentRowProps {
   getBatchName: (batchId?: string) => string;
   showBatchColumn?: boolean;
   photoPreviewUrl: string | null;
+  photoUrlText: string;
+  onPhotoUrlTextChange: (value: string) => void;
   onPhotoPick: (file: File | null) => void;
   onPhotoRemove: () => void | Promise<void>;
   canRemovePhoto: boolean;
@@ -1063,6 +1211,8 @@ function StudentRow({
   getBatchName,
   showBatchColumn = true,
   photoPreviewUrl,
+  photoUrlText,
+  onPhotoUrlTextChange,
   onPhotoPick,
   onPhotoRemove,
   canRemovePhoto,
@@ -1203,6 +1353,8 @@ function StudentRow({
                   <StudentPhotoFields
                     previewUrl={photoPreviewUrl}
                     displayName={formData.name}
+                    photoUrlText={photoUrlText}
+                    onPhotoUrlTextChange={onPhotoUrlTextChange}
                     onPickFile={onPhotoPick}
                     onRemove={onPhotoRemove}
                     canRemove={canRemovePhoto}

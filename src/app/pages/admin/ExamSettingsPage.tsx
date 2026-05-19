@@ -7,6 +7,12 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { Checkbox } from "../../components/ui/checkbox";
+import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
+import {
+  DEFAULT_MARKS_PER_QUESTION,
+  normalizeQuestionMarks,
+  type QuestionMarkOption,
+} from "../../features/exams/examMarks";
 import { sha256Base64 } from "../../features/exams/password";
 import { getExamTest, updateExamTest } from "../../features/exams/examApi";
 import {
@@ -21,6 +27,7 @@ type FormState = {
   instructions: string;
   durationMinutes: string;
   negativeMarkPerWrong: string;
+  defaultMarksPerQuestion: QuestionMarkOption;
   passcode: string;
   settings: Required<ExamAdvancedSettings>;
   identifierCsv: string;
@@ -51,6 +58,10 @@ export default function ExamSettingsPage() {
           instructions: t.instructions || "",
           durationMinutes: String(t.durationMinutes || 60),
           negativeMarkPerWrong: String(t.negativeMarkPerWrong || 0),
+          defaultMarksPerQuestion: normalizeQuestionMarks(
+            t.defaultMarksPerQuestion,
+            DEFAULT_MARKS_PER_QUESTION,
+          ) as QuestionMarkOption,
           passcode: "",
           settings: {
             ...settings,
@@ -136,6 +147,7 @@ export default function ExamSettingsPage() {
         negativeMarkPerWrong: form.settings.negativeMarkingEnabled
           ? Math.max(0, parseFloat(form.negativeMarkPerWrong || "0") || 0)
           : 0,
+        defaultMarksPerQuestion: form.defaultMarksPerQuestion,
         visibility,
         selectedStudentRecordIds: visibility === "SELECTIVE" ? selectiveStudentIds : [],
         settings,
@@ -210,6 +222,11 @@ export default function ExamSettingsPage() {
           <CardTitle>Question Settings</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <QuestionMarksSelect
+            value={form.defaultMarksPerQuestion}
+            onChange={(v) => setForm({ ...form, defaultMarksPerQuestion: v })}
+            hint="Applies when you add new questions on the Questions tab."
+          />
           <SettingToggle
             label="Show all test questions on one page"
             checked={form.settings.paginationMode === "all_on_one_page"}

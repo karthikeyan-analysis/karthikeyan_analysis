@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import bannerImage from "../../../banner.jpeg";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
@@ -8,6 +8,7 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } from "../../features/exams/examApi";
+import { resolveStudentPhotoDisplayUrl } from "../../features/students/studentPhotoUrl";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 function formatEta(totalSeconds: number) {
@@ -40,6 +41,13 @@ export default function ExamResult() {
   const testId = id || "";
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const allowPdfDownload =
+    (location.state as { allowPdfDownload?: boolean } | null)?.allowPdfDownload === true;
+  const studentPhotoSrc = useMemo(
+    () => resolveStudentPhotoDisplayUrl(user?.photoURL),
+    [user?.photoURL],
+  );
 
   const [loading, setLoading] = useState(true);
   const [test, setTest] = useState<ExamTest | null>(null);
@@ -168,8 +176,8 @@ export default function ExamResult() {
   const watermarkText = `${studentName} • ${studentIdValue}`;
 
   const downloadPdf = () => {
-    const passportInner = user.photoURL?.trim()
-      ? `<img src="${escapeHtml(user.photoURL.trim())}" alt="" />`
+    const passportInner = studentPhotoSrc
+      ? `<img src="${escapeHtml(studentPhotoSrc)}" alt="" />`
       : `<div class="profile-fallback">${escapeHtml(initialsFromName(studentName))}</div>`;
 
     // Lightweight "Download as PDF": open print-friendly window and let user save as PDF.
@@ -342,9 +350,9 @@ export default function ExamResult() {
                 className="relative w-[92px] h-[118px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm"
                 title="Student photo"
               >
-                {user.photoURL?.trim() ? (
+                {studentPhotoSrc ? (
                   <img
-                    src={user.photoURL.trim()}
+                    src={studentPhotoSrc}
                     alt=""
                     className="max-w-full max-h-full w-full h-full object-contain object-center"
                   />
@@ -363,7 +371,9 @@ export default function ExamResult() {
 
         <Card className="border-slate-200">
           <CardContent className="pt-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div
+              className={`grid gap-4 grid-cols-1 ${allowPdfDownload ? "md:grid-cols-3" : "md:grid-cols-2"}`}
+            >
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="text-xs text-slate-500">Score</div>
                 <div className="text-3xl font-bold text-slate-900">
@@ -376,17 +386,23 @@ export default function ExamResult() {
                   {Object.values(attempt.answers || {}).filter((v) => v != null).length} / {questions.length}
                 </div>
               </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-4">
-                <div className="text-xs text-slate-500">Download</div>
-                <div className="mt-2">
-                  <Button variant="outline" onClick={downloadPdf} disabled={!keys && test.showAnswersAfter !== "never"}>
-                    <Download className="w-4 h-4 mr-2" /> Download PDF
-                  </Button>
+              {allowPdfDownload ? (
+                <div className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div className="text-xs text-slate-500">Download</div>
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      onClick={downloadPdf}
+                      disabled={!keys && test.showAnswersAfter !== "never"}
+                    >
+                      <Download className="w-4 h-4 mr-2" /> Download PDF
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-2">
+                    Available now only — save your PDF before leaving this page.
+                  </p>
                 </div>
-                <div className="text-[11px] text-slate-500 mt-2">
-                  Exports questions, your answers, correct answers, and score.
-                </div>
-              </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>

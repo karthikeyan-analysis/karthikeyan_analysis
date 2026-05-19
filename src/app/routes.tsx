@@ -10,6 +10,7 @@ import BatchManagement from "./pages/admin/BatchManagement";
 import StudentManagement from "./pages/admin/StudentManagement";
 import MediaManager from "./pages/admin/MediaManager";
 import ExamManagement from "./pages/admin/ExamManagement";
+import LiveExamMonitor from "./pages/admin/LiveExamMonitor";
 import AllTestsAnalytics from "./pages/admin/AllTestsAnalytics";
 import StudentTestReports from "./pages/admin/StudentTestReports";
 import ExamStudioLayout from "./pages/admin/ExamStudioLayout";
@@ -97,6 +98,7 @@ export const router = createBrowserRouter([
       { path: "students", element: <StudentManagement /> },
       { path: "media", element: <MediaManager /> },
       { path: "tests", element: <ExamManagement /> },
+      { path: "tests/live-monitor", element: <LiveExamMonitor /> },
       { path: "tests/analytics", element: <AllTestsAnalytics /> },
       { path: "reports/student-tests", element: <StudentTestReports /> },
       { path: "tests/new", element: <ExamCreatePage /> },

@@ -166,14 +166,6 @@ export default function Login({ role = "student" }: LoginProps) {
                   </Link>
                 </p>
               )}
-              {role === "student" && (
-                <p className="text-sm text-center text-slate-600 mt-2">
-                  Not enrolled?{" "}
-                  <Link to="/student/join-test" className="text-indigo-600 hover:underline font-medium">
-                    Join a test with passcode
-                  </Link>
-                </p>
-              )}
             </div>
           </form>
         </CardContent>

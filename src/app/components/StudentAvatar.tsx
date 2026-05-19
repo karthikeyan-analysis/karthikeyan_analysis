@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { resolveStudentPhotoDisplayUrl } from "../features/students/studentPhotoUrl";
 import { cn } from "./ui/utils";
 
 function initialsFromName(name: string) {
@@ -29,9 +30,10 @@ export default function StudentAvatar({
   size?: Size;
 }) {
   const label = name.trim() || "Student";
+  const displaySrc = resolveStudentPhotoDisplayUrl(photoURL);
   return (
     <Avatar className={cn(sizeClass[size], className)}>
-      {photoURL ? <AvatarImage src={photoURL} alt="" className="object-cover" /> : null}
+      {displaySrc ? <AvatarImage src={displaySrc} alt="" className="object-cover" /> : null}
       <AvatarFallback className="bg-indigo-600 text-white font-semibold">
         {initialsFromName(label)}
       </AvatarFallback>

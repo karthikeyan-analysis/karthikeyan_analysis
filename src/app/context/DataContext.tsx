@@ -41,7 +41,7 @@ export interface Student {
   enrolledDate: string;
   status: "active" | "inactive";
   batchId?: string; // Batch enrollment
-  /** Public download URL for profile image (Firebase Storage). */
+  /** Profile image URL (Firebase Storage download link or external link e.g. Google Drive). */
   photoURL?: string;
 }
 

@@ -27,6 +27,7 @@ import {
   saveAttemptProgress,
   startAttempt,
 } from "../../features/exams/examApi";
+import { resolveStudentPhotoDisplayUrl } from "../../features/students/studentPhotoUrl";
 import type {
   ExamQuestionPrivate,
   ExamQuestionPublic,
@@ -76,6 +77,10 @@ export default function TakeExam() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const studentPhotoSrc = useMemo(
+    () => resolveStudentPhotoDisplayUrl(user?.photoURL),
+    [user?.photoURL],
+  );
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -421,7 +426,10 @@ export default function TakeExam() {
       setAttemptStatus("submitted");
       setAttemptSubmittedAtIso(new Date().toISOString());
       setScore({ score: s, maxScore: max });
-      navigate(`/student/tests/${testId}/result`, { replace: true });
+      navigate(`/student/tests/${testId}/result`, {
+        replace: true,
+        state: { allowPdfDownload: true },
+      });
     } catch (e) {
       console.error("Submit failed", e);
       autoSubmitTriggered.current = false;
@@ -512,16 +520,10 @@ export default function TakeExam() {
             <div>
               <div className="text-lg font-semibold text-slate-900">Test closed</div>
               <p className="text-sm text-slate-600 mt-2">
-                This test is no longer accepting new attempts. If you already submitted, you can view
-                your results from the test schedule.
+                This test is no longer accepting new attempts. If you already submitted, your result
+                was shown when you finished — download the PDF from that screen only.
               </p>
             </div>
-            <Button
-              className="bg-indigo-600 hover:bg-indigo-700"
-              onClick={() => navigate(`/student/tests/${testId}/result`)}
-            >
-              View results
-            </Button>
             <Button variant="outline" onClick={() => navigate("/student/tests")}>
               Back to schedule
             </Button>
@@ -934,9 +936,9 @@ export default function TakeExam() {
                   className="relative w-[84px] h-[108px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm shrink-0"
                   title="Student photo"
                 >
-                  {user.photoURL ? (
+                  {studentPhotoSrc ? (
                     <img
-                      src={user.photoURL}
+                      src={studentPhotoSrc}
                       alt=""
                       className="max-w-full max-h-full w-full h-full object-contain object-center"
                       loading="lazy"

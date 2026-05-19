@@ -12,7 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
 import { createExamTest } from "../../features/exams/examApi";
+import {
+  DEFAULT_MARKS_PER_QUESTION,
+  type QuestionMarkOption,
+} from "../../features/exams/examMarks";
 import { DEFAULT_EXAM_SETTINGS } from "../../features/exams/settings";
 
 export default function ExamCreatePage() {
@@ -22,6 +27,8 @@ export default function ExamCreatePage() {
   const [testName, setTestName] = useState("demo");
   const [batchId, setBatchId] = useState(batches[0]?.id || "");
   const [subject, setSubject] = useState("");
+  const [defaultMarksPerQuestion, setDefaultMarksPerQuestion] =
+    useState<QuestionMarkOption>(DEFAULT_MARKS_PER_QUESTION);
 
   const subjects = useMemo(() => {
     const batch = batches.find((b) => b.id === batchId);
@@ -57,6 +64,7 @@ export default function ExamCreatePage() {
         durationMinutes: 60,
         totalQuestions: 0,
         totalMarks: 0,
+        defaultMarksPerQuestion,
         negativeMarkPerWrong: 0,
         showAnswersAfter: "after_end",
         visibility: "BATCH",
@@ -121,6 +129,11 @@ export default function ExamCreatePage() {
               <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
             )}
           </div>
+          <QuestionMarksSelect
+            value={defaultMarksPerQuestion}
+            onChange={setDefaultMarksPerQuestion}
+            hint="Used for each new question you add. You can still change marks per question later."
+          />
           <div className="flex justify-end">
             <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void create()} disabled={creating}>
               {creating ? "Creating..." : "Create and Continue"}

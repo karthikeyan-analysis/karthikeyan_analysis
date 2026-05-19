@@ -11,6 +11,7 @@ import {
   ClipboardList,
   BarChart3,
   FileSpreadsheet,
+  Radio,
 } from "lucide-react";
 import { cn } from "../ui/utils";
 
@@ -34,6 +35,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     { to: "/admin/students", icon: Users, label: "Students", end: true },
     { to: "/admin/media", icon: Upload, label: "Media Manager", end: true },
     { to: "/admin/tests", icon: ClipboardList, label: "Test Management", end: true },
+    { to: "/admin/tests/live-monitor", icon: Radio, label: "Live monitor", end: true },
     { to: "/admin/tests/analytics", icon: BarChart3, label: "Test analytics", end: true },
     { to: "/admin/reports/student-tests", icon: FileSpreadsheet, label: "Student test reports", end: true },
   ];

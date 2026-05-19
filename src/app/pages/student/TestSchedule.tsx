@@ -18,7 +18,7 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { Calendar, CheckCircle2, FileCheck2, KeyRound, Zap } from "lucide-react";
+import { Calendar, CheckCircle2, KeyRound, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getAttempt, getExamTest, listExamTestsForStudent } from "../../features/exams/examApi";
 import { getExamWindowStatus } from "../../features/exams/examAvailability";
@@ -243,20 +243,12 @@ export default function TestSchedule() {
                       <TableCell className="text-right">
                         {isExam ? (
                           attemptByExamId[test.id]?.status === "submitted" ? (
-                            <Button
-                              onClick={() => navigate(`/student/tests/${test.id}/result`)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                              size="sm"
-                            >
-                              <FileCheck2 className="w-3 h-3 mr-1" /> Check results
+                            <Button disabled variant="outline" size="sm" className="text-xs">
+                              Completed
                             </Button>
                           ) : getExamWindowStatus(test, now) === "closed" ? (
-                            <Button
-                              onClick={() => navigate(`/student/tests/${test.id}/result`)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
-                              size="sm"
-                            >
-                              <FileCheck2 className="w-3 h-3 mr-1" /> Results
+                            <Button disabled variant="outline" size="sm" className="text-xs">
+                              Closed
                             </Button>
                           ) : getExamWindowStatus(test, now) === "upcoming" ? (
                             <Button disabled variant="outline" size="sm" className="text-xs">

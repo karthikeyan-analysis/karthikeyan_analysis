@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { BarChart3, Calendar, Edit2, FileSpreadsheet, Trash2 } from "lucide-react";
+import { BarChart3, Calendar, Edit2, FileSpreadsheet, Radio, Trash2 } from "lucide-react";
 import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
 import { ExamCloseToggleButton } from "../../components/exams/ExamCloseToggleButton";
 import { deleteExamTest, listExamTestsForAdmin } from "../../features/exams/examApi";
@@ -87,6 +87,10 @@ export default function ExamManagement() {
         <div className="flex flex-wrap gap-2">
           <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => navigate("/admin/tests/new")}>
             Create a New Test
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/admin/tests/live-monitor")}>
+            <Radio className="w-4 h-4 mr-2" />
+            Live monitor
           </Button>
           <Button variant="outline" onClick={() => navigate("/admin/tests/analytics")}>
             <BarChart3 className="w-4 h-4 mr-2" />

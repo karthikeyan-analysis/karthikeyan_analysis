@@ -6,6 +6,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
+import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
 import { cn } from "../../components/ui/utils";
 import { useNavigate, useParams } from "react-router";
 import {
@@ -17,6 +18,11 @@ import {
   uploadQuestionImage,
   upsertQuestion,
 } from "../../features/exams/examApi";
+import {
+  DEFAULT_MARKS_PER_QUESTION,
+  normalizeQuestionMarks,
+  type QuestionMarkOption,
+} from "../../features/exams/examMarks";
 import type { ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { Plus, Save, Trash2 } from "lucide-react";
 
@@ -49,13 +55,13 @@ function fromPublicQuestion(q: ExamQuestionPublic, correctIndex = 0): EditorQues
   };
 }
 
-function newQuestion(): EditorQuestion {
+function newQuestion(defaultMarks: QuestionMarkOption = DEFAULT_MARKS_PER_QUESTION): EditorQuestion {
   return {
     localId: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     text: "",
     options: [...DEFAULT_5_OPTIONS],
     correctIndex: 0,
-    marks: "1",
+    marks: String(defaultMarks),
     imageUrl: "",
     imageFile: null,
     imagePreviewUrl: "",
@@ -75,7 +81,13 @@ export default function ExamQuestionsPage() {
   const [test, setTest] = useState<ExamTest | null>(null);
   const [questions, setQuestions] = useState<ExamQuestionPublic[]>([]);
   const [editorQuestions, setEditorQuestions] = useState<EditorQuestion[]>([]);
+  const [savingDefaultMarks, setSavingDefaultMarks] = useState(false);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const testDefaultMarks = normalizeQuestionMarks(
+    test?.defaultMarksPerQuestion,
+    DEFAULT_MARKS_PER_QUESTION,
+  ) as QuestionMarkOption;
 
   const loadData = async () => {
     const [t, qs, privateQs] = await Promise.all([
@@ -180,7 +192,21 @@ export default function ExamQuestionsPage() {
   };
 
   const addQuestion = () => {
-    setEditorQuestions((prev) => [...prev, newQuestion()]);
+    setEditorQuestions((prev) => [...prev, newQuestion(testDefaultMarks)]);
+  };
+
+  const updateTestDefaultMarks = async (value: QuestionMarkOption) => {
+    if (!testId || !test) return;
+    setSavingDefaultMarks(true);
+    try {
+      await updateExamTest(testId, { defaultMarksPerQuestion: value });
+      setTest((prev) => (prev ? { ...prev, defaultMarksPerQuestion: value } : prev));
+    } catch (e) {
+      console.error(e);
+      alert("Could not update default marks.");
+    } finally {
+      setSavingDefaultMarks(false);
+    }
   };
 
   const removeQuestion = async (localId: string) => {
@@ -238,7 +264,7 @@ export default function ExamQuestionsPage() {
             text: q.text.trim(),
             imageUrl: q.imageUrl.trim(),
             options,
-            marks: Math.max(1, parseFloat(q.marks || "1") || 1),
+            marks: normalizeQuestionMarks(q.marks, testDefaultMarks),
           },
           privateData: {
             correctIndex: clamp(q.correctIndex, 0, options.length - 1),
@@ -259,7 +285,7 @@ export default function ExamQuestionsPage() {
               text: q.text.trim(),
               imageUrl: uploadedUrl,
               options,
-              marks: Math.max(1, parseFloat(q.marks || "1") || 1),
+              marks: normalizeQuestionMarks(q.marks, testDefaultMarks),
             },
             privateData: {
               correctIndex: clamp(q.correctIndex, 0, options.length - 1),
@@ -282,6 +308,24 @@ export default function ExamQuestionsPage() {
 
   return (
     <div className="space-y-6">
+      <Card className="border-indigo-100 bg-indigo-50/40">
+        <CardContent className="pt-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <QuestionMarksSelect
+              value={testDefaultMarks}
+              onChange={(v) => void updateTestDefaultMarks(v)}
+              label="Default marks per question"
+              hint="New questions and pasted uploads use this value. Change individual questions below if needed."
+              disabled={savingDefaultMarks}
+              id="exam-default-marks"
+            />
+            {savingDefaultMarks ? (
+              <span className="text-xs text-slate-500">Saving default…</span>
+            ) : null}
+          </div>
+        </CardContent>
+      </Card>
+
       {editorQuestions.length === 0 ? (
         <Card>
           <CardContent className="py-8 text-sm text-slate-500">No questions added yet.</CardContent>
@@ -407,19 +451,13 @@ export default function ExamQuestionsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-2 md:max-w-[160px]">
-                    <Label>Marks</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={q.marks}
-                      onChange={(e) =>
-                        updateQuestion(q.localId, (prev) => ({ ...prev, marks: e.target.value }))
-                      }
-                    />
-                  </div>
-                </div>
+                <QuestionMarksSelect
+                  value={normalizeQuestionMarks(q.marks, testDefaultMarks) as QuestionMarkOption}
+                  onChange={(v) =>
+                    updateQuestion(q.localId, (prev) => ({ ...prev, marks: String(v) }))
+                  }
+                  label="Marks for this question"
+                />
               </CardContent>
             </Card>
           ))}
