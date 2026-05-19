@@ -425,7 +425,15 @@ export default function LiveExamMonitor() {
                         <TableCell>
                           <UrgencyDot urgency={r.urgency} />
                         </TableCell>
-                        <TableCell className="min-w-[140px]">
+                        <TableCell className="min-w-[180px]">
+                          <div className="flex items-center gap-2.5">
+                            <StudentAvatar
+                              name={r.participantName}
+                              photoURL={r.photoURL}
+                              size="sm"
+                              className="shrink-0"
+                            />
+                            <div className="min-w-0">
                           <div className="font-medium text-slate-900">{r.participantName}</div>
                           <div className="text-xs text-slate-500 truncate max-w-[180px]">{r.email || "—"}</div>
                           {r.isGuest ? (
@@ -433,6 +441,8 @@ export default function LiveExamMonitor() {
                               Guest
                             </Badge>
                           ) : null}
+                            </div>
+                          </div>
                         </TableCell>
                         <TableCell className="text-sm font-mono text-slate-700">{r.studentId}</TableCell>
                         <TableCell className="min-w-[120px]">
