@@ -1,6 +1,7 @@
 import type { Student } from "../../context/DataContext";
 import { displayNameForAttempt } from "./participantUtils";
 import { examIncludesBatch } from "./examBatchUtils";
+import { enrolledStudentsCanAccessTest } from "./settings";
 import type { ExamAttempt, ExamTest } from "./types";
 
 export function toIsoOrEmpty(value: unknown) {
@@ -40,6 +41,7 @@ export function isEligibleForExam(student: Student, test: ExamTest): boolean {
     const ids = test.selectedStudentRecordIds;
     return Array.isArray(ids) && ids.includes(student.id);
   }
+  if (!enrolledStudentsCanAccessTest(test)) return false;
   return examIncludesBatch(test, student.batchId);
 }
 

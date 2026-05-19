@@ -17,7 +17,8 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db } from "../../../config/firebase";
 import { storage } from "../../../config/firebase";
-import { allowsPasscodeGuestAccess } from "./settings";
+import { allowsPasscodeGuestAccess, enrolledStudentsCanAccessTest } from "./settings";
+import { examIncludesBatch } from "./examBatchUtils";
 import { sha256Base64 } from "./password";
 import type {
   ExamAttempt,
@@ -77,9 +78,12 @@ export async function listExamTestsForStudent(params: {
   }
   const tests = [...byId.values()];
   const visible = tests.filter((t) => {
-    if (t.visibility === "BATCH") return true;
-    if (!params.studentRecordId) return false;
-    return (t.selectedStudentRecordIds || []).includes(params.studentRecordId);
+    if (!examIncludesBatch(t, params.batchId)) return false;
+    if (!enrolledStudentsCanAccessTest(t)) return false;
+    if (t.visibility === "SELECTIVE" && params.studentRecordId) {
+      return (t.selectedStudentRecordIds || []).includes(params.studentRecordId);
+    }
+    return true;
   });
   return visible.sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime());
 }

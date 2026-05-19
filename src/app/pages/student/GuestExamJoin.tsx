@@ -300,7 +300,7 @@ export default function GuestExamJoin() {
               />
             </div>
             <div className="space-y-2">
-              <Label>{test?.settings?.identityPrompt?.trim() || "Full name"}</Label>
+              <Label>Full name</Label>
               <Input value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="space-y-2">

@@ -4,10 +4,16 @@ export type ExamShowAnswersAfter = "immediate" | "after_end" | "never";
 
 export type ExamStatus = "draft" | "published";
 
+/** Who can take the test (stored in settings.accessMode). */
 export type ExamAccessMode =
-  | "anyone"
+  | "batch"
   | "passcode"
+  | "both"
+  /** @deprecated use `batch` */
+  | "anyone"
+  /** @deprecated use `batch` — batches are chosen in Basic Settings */
   | "identifier_list"
+  /** @deprecated use `batch` */
   | "email_list";
 
 export interface ExamAdvancedSettings {

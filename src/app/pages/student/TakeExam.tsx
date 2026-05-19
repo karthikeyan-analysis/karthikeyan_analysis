@@ -43,7 +43,12 @@ import { submitAttempt } from "../../features/exams/examApi";
 import { sha256Base64 } from "../../features/exams/password";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
-import { allowsPasscodeGuestAccess } from "../../features/exams/settings";
+import {
+  allowsPasscodeGuestAccess,
+  enrolledStudentsCanAccessTest,
+  getEffectiveExamSettings,
+  normalizeAccessMode,
+} from "../../features/exams/settings";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -188,8 +193,16 @@ export default function TakeExam() {
         setTest(t);
 
         const guestOk = isGuestParticipant && allowsPasscodeGuestAccess(t);
+        const enrolledOk =
+          !isGuestParticipant &&
+          !!user?.batchId &&
+          examIncludesBatch(t, user.batchId) &&
+          enrolledStudentsCanAccessTest(t);
+        const accessMode = normalizeAccessMode(getEffectiveExamSettings(t).accessMode);
+        const enrolledBypassPasscode =
+          enrolledOk && (accessMode === "batch" || accessMode === "both");
         const alreadyOk = sessionStorage.getItem(pwSessionKey) === "1";
-        setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk);
+        setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk || enrolledBypassPasscode);
         if (guestOk) sessionStorage.setItem(pwSessionKey, "1");
       } catch (e) {
         console.error(e);
@@ -202,7 +215,7 @@ export default function TakeExam() {
     return () => {
       cancelled = true;
     };
-  }, [isGuestParticipant, pwSessionKey, testId, uid]);
+  }, [isGuestParticipant, pwSessionKey, testId, uid, user?.batchId]);
 
   useEffect(() => {
     if (!uid || !testId) return;
@@ -496,7 +509,17 @@ export default function TakeExam() {
   const canAccessAsGuest =
     isGuestParticipant && allowsPasscodeGuestAccess(test) && user.guestExamTestId === testId;
 
-  if (!canAccessAsGuest && !examIncludesBatch(test, user.batchId)) {
+  const canAccessAsEnrolled =
+    !isGuestParticipant &&
+    !!user.batchId &&
+    examIncludesBatch(test, user.batchId) &&
+    enrolledStudentsCanAccessTest(test);
+
+  const accessMode = normalizeAccessMode(getEffectiveExamSettings(test).accessMode);
+  const enrolledBypassPasscode =
+    canAccessAsEnrolled && (accessMode === "batch" || accessMode === "both");
+
+  if (!canAccessAsGuest && !canAccessAsEnrolled) {
     return (
       <Alert variant="destructive">
         <XCircle className="h-4 w-4" />
@@ -534,7 +557,7 @@ export default function TakeExam() {
     );
   }
 
-  if (test.accessPasswordHash && !pwVerified) {
+  if (test.accessPasswordHash && !pwVerified && !enrolledBypassPasscode) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <Card className="w-full max-w-md">

@@ -5,7 +5,6 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import { Textarea } from "../../components/ui/textarea";
 import { Checkbox } from "../../components/ui/checkbox";
 import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
 import {
@@ -15,17 +14,17 @@ import {
 } from "../../features/exams/examMarks";
 import { sha256Base64 } from "../../features/exams/password";
 import { getExamTest, updateExamTest } from "../../features/exams/examApi";
-import {
-  applySystemExamSettingLocks,
-  getEffectiveExamSettings,
-  parseCsvList,
-} from "../../features/exams/settings";
+import { applySystemExamSettingLocks, getEffectiveExamSettings } from "../../features/exams/settings";
 import ExamBatchAssignmentFields, {
   inferExamBatchMode,
   type ExamBatchMode,
 } from "../../components/exams/ExamBatchAssignmentFields";
-import { getExamBatchIds, normalizeExamBatchFields } from "../../features/exams/examBatchUtils";
-import type { ExamAccessMode, ExamAdvancedSettings, ExamTest, ExamVisibility } from "../../features/exams/types";
+import {
+  formatExamBatchLabel,
+  getExamBatchIds,
+  normalizeExamBatchFields,
+} from "../../features/exams/examBatchUtils";
+import type { ExamAccessMode, ExamAdvancedSettings, ExamTest } from "../../features/exams/types";
 
 type FormState = {
   title: string;
@@ -36,7 +35,6 @@ type FormState = {
   defaultMarksPerQuestion: QuestionMarkOption;
   passcode: string;
   settings: Required<ExamAdvancedSettings>;
-  identifierCsv: string;
 };
 
 export default function ExamSettingsPage() {
@@ -71,12 +69,7 @@ export default function ExamSettingsPage() {
             DEFAULT_MARKS_PER_QUESTION,
           ) as QuestionMarkOption,
           passcode: "",
-          settings: {
-            ...settings,
-            // Email-list mode removed from UI; fallback to ID-list for older records.
-            accessMode: settings.accessMode === "email_list" ? "identifier_list" : settings.accessMode,
-          },
-          identifierCsv: (settings.allowedIdentifiers || []).join(", "),
+          settings,
         });
       } catch (e) {
         console.error(e);
@@ -90,39 +83,19 @@ export default function ExamSettingsPage() {
     };
   }, [testId]);
 
-  const selectiveStudentIds = useMemo(() => {
-    if (!form) return [];
-    if (form.settings.accessMode === "identifier_list") {
-      const identifiers = new Set(parseCsvList(form.identifierCsv).map((x) => x.toLowerCase()));
-      const batchIdSet = new Set(form.batchIds);
-      return students
-        .filter((s) => s.batchId && batchIdSet.has(s.batchId))
-        .filter((s) => identifiers.has((s.studentId || "").toLowerCase()))
-        .map((s) => s.id);
-    }
-    return [];
-  }, [form, students]);
-
-  const batchStudents = useMemo(() => {
-    if (!form) return [];
+  const batchStudentCount = useMemo(() => {
+    if (!form) return 0;
     const batchIdSet = new Set(form.batchIds);
-    return students.filter((s) => s.batchId && batchIdSet.has(s.batchId));
+    return students.filter((s) => s.batchId && batchIdSet.has(s.batchId)).length;
   }, [form, students]);
 
-  const selectedIdentifierSet = useMemo(() => {
-    return new Set(parseCsvList(form?.identifierCsv || "").map((x) => x.toLowerCase()));
-  }, [form?.identifierCsv]);
-
-  const toggleIdentifier = (studentId: string) => {
-    if (!form || !studentId.trim()) return;
-    const current = parseCsvList(form.identifierCsv);
-    const normalized = studentId.trim().toLowerCase();
-    const exists = current.some((x) => x.toLowerCase() === normalized);
-    const next = exists
-      ? current.filter((x) => x.toLowerCase() !== normalized)
-      : [...current, studentId.trim()];
-    setForm({ ...form, identifierCsv: next.join(", ") });
-  };
+  const selectedBatchLabel = useMemo(() => {
+    if (!form) return "—";
+    return formatExamBatchLabel(
+      { batchId: form.batchIds[0] || "", batchIds: form.batchIds },
+      batches,
+    );
+  }, [form, batches]);
 
   const save = async () => {
     if (!form || !test) return;
@@ -145,12 +118,16 @@ export default function ExamSettingsPage() {
     const endAt = test.endAt || new Date(now + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
 
     const accessMode = form.settings.accessMode as ExamAccessMode;
-    const visibility: ExamVisibility =
-      accessMode === "identifier_list" ? "SELECTIVE" : "BATCH";
+    const usesPasscode = accessMode === "passcode" || accessMode === "both";
+
+    if (usesPasscode && !form.passcode.trim() && !test.accessPasswordHash) {
+      alert("Set a passcode for this access mode.");
+      return;
+    }
 
     const settings: ExamAdvancedSettings = applySystemExamSettingLocks({
       ...form.settings,
-      allowedIdentifiers: parseCsvList(form.identifierCsv),
+      allowedIdentifiers: [],
       allowedEmails: [],
     });
 
@@ -167,13 +144,13 @@ export default function ExamSettingsPage() {
           ? Math.max(0, parseFloat(form.negativeMarkPerWrong || "0") || 0)
           : 0,
         defaultMarksPerQuestion: form.defaultMarksPerQuestion,
-        visibility,
-        selectedStudentRecordIds: visibility === "SELECTIVE" ? selectiveStudentIds : [],
+        visibility: "BATCH",
+        selectedStudentRecordIds: [],
         settings,
       };
 
-      const clearPassword = accessMode !== "passcode";
-      const wantsPassword = accessMode === "passcode" && form.passcode.trim().length > 0;
+      const clearPassword = accessMode === "batch";
+      const wantsPassword = usesPasscode && form.passcode.trim().length > 0;
       if (clearPassword) {
         (updates as Partial<ExamTest> & { accessPasswordHash?: string | null }).accessPasswordHash = null;
       } else if (wantsPassword) {
@@ -315,63 +292,46 @@ export default function ExamSettingsPage() {
                 })
               }
             >
-              <option value="anyone">Anyone</option>
+              <option value="batch">Students in selected batch(es) only</option>
               <option value="passcode">Anyone who enters a passcode</option>
-              <option value="identifier_list">Anyone whose student ID is in my list</option>
+              <option value="both">Both — selected batch(es) and passcode link</option>
             </select>
           </div>
 
-          {form.settings.accessMode === "passcode" ? (
+          {form.settings.accessMode === "batch" || form.settings.accessMode === "both" ? (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
+              <div className="text-xs font-medium text-slate-700">Selected batch(es)</div>
+              <div className="text-sm text-slate-900">{selectedBatchLabel}</div>
+              <div className="text-xs text-slate-600">
+                {batchStudentCount} enrolled student{batchStudentCount === 1 ? "" : "s"} can take this test from
+                their schedule. Change batches in Basic Settings above.
+              </div>
+            </div>
+          ) : null}
+
+          {form.settings.accessMode === "passcode" || form.settings.accessMode === "both" ? (
             <div className="space-y-2">
               <Label>Passcode</Label>
               <Input
                 type="password"
                 value={form.passcode}
                 onChange={(e) => setForm({ ...form, passcode: e.target.value })}
-                placeholder="Set or change passcode"
+                placeholder={
+                  test.accessPasswordHash ? "Leave blank to keep current passcode" : "Set passcode"
+                }
               />
+              {test.accessPasswordHash ? (
+                <p className="text-xs text-slate-500">A passcode is already set. Enter a new one only to change it.</p>
+              ) : null}
               <p className="text-xs text-slate-600">
-                Unenrolled students can join at{" "}
+                {form.settings.accessMode === "both"
+                  ? "Unenrolled students can also join at "
+                  : "Students join at "}
                 <span className="font-mono text-slate-800">/student/join-test</span> with this passcode.
-                They will enter their name and email before starting; results appear in analytics like enrolled
-                students.
+                {form.settings.accessMode === "both"
+                  ? " Enrolled students in the selected batch(es) use their normal login — no passcode required."
+                  : " They enter name and email before starting; results appear in analytics."}
               </p>
-            </div>
-          ) : null}
-
-          {form.settings.accessMode === "identifier_list" ? (
-            <div className="space-y-2">
-              <Label>Allowed student IDs (comma separated)</Label>
-              <Textarea
-                value={form.identifierCsv}
-                onChange={(e) => setForm({ ...form, identifierCsv: e.target.value })}
-              />
-              <div className="rounded-lg border border-slate-200 p-3">
-                <div className="text-xs font-medium text-slate-700 mb-2">Available students</div>
-                <div className="max-h-52 overflow-y-auto space-y-2">
-                  {batchStudents.map((s) => (
-                    <label
-                      key={s.id}
-                      className="flex items-center justify-between gap-3 rounded-md border border-slate-200 px-3 py-2 cursor-pointer"
-                    >
-                      <div className="min-w-0">
-                        <div className="text-sm font-medium text-slate-900 truncate">{s.name}</div>
-                        <div className="text-xs text-slate-600 truncate">
-                          {s.studentId || "No student ID"} • {s.email}
-                        </div>
-                      </div>
-                      <Checkbox
-                        checked={selectedIdentifierSet.has((s.studentId || "").toLowerCase())}
-                        onCheckedChange={() => toggleIdentifier(s.studentId || "")}
-                        disabled={!s.studentId}
-                      />
-                    </label>
-                  ))}
-                  {batchStudents.length === 0 ? (
-                    <div className="text-sm text-slate-500">No students found in this batch.</div>
-                  ) : null}
-                </div>
-              </div>
             </div>
           ) : null}
 
