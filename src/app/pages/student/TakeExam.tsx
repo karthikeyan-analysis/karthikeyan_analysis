@@ -772,103 +772,94 @@ export default function TakeExam() {
       <div className="shrink-0 px-3 pt-3 md:px-5 md:pt-4">
         <header className="rounded-2xl border border-slate-200/90 bg-white shadow-md overflow-hidden">
           <div className="h-1 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500" aria-hidden />
-          <motion.div className="p-4 sm:p-5">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="shrink-0">
-              <img
-                src={bannerImage}
-                alt="Karthikeyan Analysis"
-                className="block h-9 sm:h-10 w-auto max-w-[200px] sm:max-w-[240px] object-contain object-left"
-              />
-            </div>
-            <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-base sm:text-lg font-semibold text-slate-900 truncate">
-                  {test.title}
-                </h1>
-                <Badge variant="outline" className="text-xs bg-white">
-                  {test.subject}
-                </Badge>
-                {isAttemptSubmitted ? (
-                  <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
-                ) : (
-                  <Badge className="bg-indigo-100 text-indigo-800">In progress</Badge>
-                )}
+          <div className="p-4 sm:p-5">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch xl:gap-5">
+              <div className="shrink-0">
+                <img
+                  src={bannerImage}
+                  alt="Karthikeyan Analysis"
+                  className="block h-9 sm:h-10 w-auto max-w-[180px] sm:max-w-[220px] object-contain object-left"
+                />
               </div>
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-slate-600">
-                <div>
-                  Batch:{" "}
-                  <span className="font-semibold text-slate-800">
-                    {formatExamBatchLabel(test, batches)}
-                  </span>
+              <div className="hidden xl:block w-px self-stretch bg-slate-200 shrink-0" aria-hidden />
+              <div className="min-w-0 flex-1 flex flex-col gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-tight">
+                    {test.title}
+                  </h1>
+                  <Badge variant="outline" className="text-xs font-medium border-slate-300 bg-white">
+                    {test.subject}
+                  </Badge>
+                  {isAttemptSubmitted ? (
+                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200/80">Submitted</Badge>
+                  ) : (
+                    <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200/80">In progress</Badge>
+                  )}
                 </div>
-                <div>
-                  Questions: <span className="font-semibold text-slate-800">{questions.length}</span>
-                </div>
-                <div>
-                  Total Marks: <span className="font-semibold text-slate-800">{test.totalMarks}</span>
-                </div>
-                <div>
-                  Duration:{" "}
-                  <span className="font-semibold text-slate-800">
-                    {formatTimeLeft((test.durationMinutes || 0) * 60)}
-                  </span>
+                <div className="flex flex-wrap gap-2">
+                  <ExamMetaStat icon={Layers} label="Batch" value={batchLabel} wide />
+                  <ExamMetaStat icon={FileQuestion} label="Questions" value={String(questions.length)} />
+                  <ExamMetaStat icon={Award} label="Total marks" value={String(test.totalMarks)} />
+                  <ExamMetaStat icon={Timer} label="Duration" value={durationLabel} />
                 </div>
               </div>
-            </div>
-
-            <div
-              className={cn(
-                "shrink-0 flex flex-col items-center justify-center rounded-xl border-2 px-6 py-3 min-w-[132px]",
-                timeLeftSeconds <= 60 && !isAttemptSubmitted
-                  ? "border-red-300 bg-red-50"
-                  : "border-indigo-200 bg-indigo-50/80",
-              )}
-              aria-live="polite"
-              aria-atomic="true"
-            >
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                Time left
-              </span>
-              <span
+              <div
                 className={cn(
-                  "mt-0.5 text-3xl sm:text-4xl font-extrabold tabular-nums leading-none tracking-tight",
-                  timeLeftSeconds <= 60 && !isAttemptSubmitted ? "text-red-700" : "text-slate-900",
+                  "shrink-0 flex flex-col items-center justify-center rounded-2xl px-5 py-3 sm:px-7 sm:py-4 min-w-[140px] shadow-inner",
+                  timerUrgent
+                    ? "bg-gradient-to-br from-red-50 to-red-100/80 border-2 border-red-300 ring-2 ring-red-200/50"
+                    : "bg-gradient-to-br from-indigo-50 to-violet-50/80 border-2 border-indigo-200/90",
                 )}
+                aria-live="polite"
+                aria-atomic="true"
               >
-                {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
-              </span>
+                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                  <Clock className={cn("w-3.5 h-3.5", timerUrgent && "text-red-600")} />
+                  Time left
+                </div>
+                <span
+                  className={cn(
+                    "mt-1 text-4xl sm:text-[2.75rem] font-black tabular-nums leading-none tracking-tight",
+                    timerUrgent ? "text-red-700" : "text-indigo-950",
+                  )}
+                >
+                  {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        </header>
+      </div>
 
-      {/* Main grid */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-4 min-h-0">
-        {/* Question panel */}
-        <Card className="min-h-0">
-          <CardContent className="p-0 h-full flex flex-col min-h-0">
-            <div className="border-b border-slate-200 px-4 py-3 flex items-center justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Badge className="bg-slate-900 text-white hover:bg-slate-900">
-                  Q{currentIndex + 1}
-                </Badge>
-                <span className="text-sm text-slate-600">
-                  Mark: {currentQuestion?.marks ?? 0}
-                </span>
-                {currentQuestion && markedForReview.includes(currentQuestion.id) && (
-                  <Badge className="bg-violet-100 text-violet-800 border border-violet-200/80">Marked</Badge>
-                )}
+      <div className="flex-1 min-h-0 px-3 pb-3 md:px-5 md:pb-4 pt-3">
+        <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-3 md:gap-4 min-h-0">
+          <Card className="min-h-0 flex flex-col overflow-hidden shadow-md border-slate-200/90">
+            <CardContent className="p-0 flex flex-col min-h-0 flex-1">
+              <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-slate-900 text-white hover:bg-slate-900 px-2.5">
+                    Q{currentIndex + 1}
+                  </Badge>
+                  <span className="text-sm text-slate-600">
+                    Mark: <span className="font-semibold text-slate-900">{currentQuestion?.marks ?? 0}</span>
+                  </span>
+                  {currentQuestion && markedForReview.includes(currentQuestion.id) && (
+                    <Badge className="bg-violet-100 text-violet-800 border border-violet-200/80">Marked</Badge>
+                  )}
+                </div>
+                <span className="text-xs text-slate-500 hidden sm:inline">Scroll to view full question</span>
               </div>
-            </div>
 
-            <div className="p-4 overflow-y-auto flex-1 min-h-0 flex flex-col gap-3">
-              {currentQuestion?.imageUrl ? (
-                <ExamQuestionImageFrame
-                  src={currentQuestion.imageUrl}
-                  alt={`Question ${currentIndex + 1} figure`}
-                  questionNo={currentQuestion.questionNo ?? currentIndex + 1}
-                />
-              ) : null}
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth">
+                <div className="p-4 flex flex-col gap-4">
+                  {currentQuestion?.imageUrl ? (
+                    <ExamQuestionImageFrame
+                      src={currentQuestion.imageUrl}
+                      alt={`Question ${currentIndex + 1} figure`}
+                      questionNo={currentQuestion.questionNo ?? currentIndex + 1}
+                      display="full"
+                    />
+                  ) : null}
 
               {currentQuestion?.text?.trim() ? (
                 <div className="text-slate-900 text-base leading-relaxed whitespace-pre-wrap">
@@ -876,7 +867,7 @@ export default function TakeExam() {
                 </div>
               ) : null}
 
-              <div className="mt-auto pt-2 flex flex-col gap-0.5 shrink-0">
+              <div className="border-t border-slate-100 pt-3 flex flex-col gap-0.5">
                 {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
                   const selected = answers[currentQuestion.id] === idx;
                   const correctIndex = correctIndexById.get(currentQuestion.id);
@@ -946,9 +937,10 @@ export default function TakeExam() {
                   </Alert>
                 </div>
               )}
-            </div>
+                </div>
+              </div>
 
-            <div className="border-t border-slate-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="shrink-0 border-t border-slate-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   variant="outline"
@@ -986,9 +978,8 @@ export default function TakeExam() {
           </CardContent>
         </Card>
 
-        {/* Side panel */}
-        <Card className="min-h-0">
-          <CardContent className="p-4 h-full flex flex-col min-h-0">
+        <Card className="min-h-0 flex flex-col overflow-hidden">
+          <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-y-auto">
             <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
@@ -1109,6 +1100,38 @@ export default function TakeExam() {
           </CardContent>
         </Card>
       </div>
+      </div>
+    </div>
+  );
+}
+
+function ExamMetaStat({
+  icon: Icon,
+  label,
+  value,
+  wide = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  wide?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white px-3 py-2 shadow-sm",
+        wide ? "max-w-full min-w-[140px] flex-1 basis-[200px]" : "min-w-[100px]",
+      )}
+    >
+      <Icon className="w-4 h-4 text-indigo-600 shrink-0" aria-hidden />
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
+        <div
+          className={cn("text-sm font-semibold text-slate-900", wide && "line-clamp-2")}
+          title={typeof value === "string" ? value : undefined}
+        >
+          {value}
+        </div>
       </div>
     </div>
   );
