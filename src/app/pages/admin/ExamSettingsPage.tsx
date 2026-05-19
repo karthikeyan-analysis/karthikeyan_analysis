@@ -345,15 +345,6 @@ export default function ExamSettingsPage() {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>What should test takers enter to identify themselves?</Label>
-            <Input
-              value={form.settings.identityPrompt}
-              onChange={(e) =>
-                setForm({ ...form, settings: { ...form.settings, identityPrompt: e.target.value } })
-              }
-            />
-          </div>
         </CardContent>
       </Card>
 
