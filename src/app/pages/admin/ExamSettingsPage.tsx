@@ -29,7 +29,6 @@ import type { ExamAccessMode, ExamAdvancedSettings, ExamTest, ExamVisibility } f
 
 type FormState = {
   title: string;
-  instructions: string;
   batchMode: ExamBatchMode;
   batchIds: string[];
   durationMinutes: string;
@@ -63,7 +62,6 @@ export default function ExamSettingsPage() {
         const loadedBatchIds = getExamBatchIds(t);
         setForm({
           title: t.title || "",
-          instructions: t.instructions || "",
           batchMode: inferExamBatchMode(loadedBatchIds),
           batchIds: loadedBatchIds,
           durationMinutes: String(t.durationMinutes || 60),
@@ -160,7 +158,6 @@ export default function ExamSettingsPage() {
     try {
       const updates: Partial<ExamTest> = {
         title: form.title.trim(),
-        instructions: form.instructions,
         batchId: batchFields.batchId,
         batchIds: batchFields.batchIds,
         startAt,
@@ -227,14 +224,6 @@ export default function ExamSettingsPage() {
           <div className="space-y-2">
             <Label>Test Name</Label>
             <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          </div>
-          <div className="space-y-2">
-            <Label>Introduction</Label>
-            <Textarea
-              value={form.instructions}
-              onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              className="min-h-24"
-            />
           </div>
           <ExamBatchAssignmentFields
             batches={batches.map((b) => ({ id: b.id, name: b.name }))}

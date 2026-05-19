@@ -42,7 +42,6 @@ export default function ExamPublishPage() {
     if (!test) return [];
     const list: string[] = [];
     if (questionCount === 0) list.push("Your test doesn't have any questions.");
-    if (!test.instructions?.trim()) list.push("No introduction text is set.");
     if ((test.durationMinutes || 0) < 5) list.push("Duration is very low.");
     if ((test.endAt && test.startAt) && new Date(test.endAt).getTime() <= new Date(test.startAt).getTime()) {
       list.push("Schedule window is invalid.");
