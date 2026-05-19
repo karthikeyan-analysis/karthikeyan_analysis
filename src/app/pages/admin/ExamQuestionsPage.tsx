@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
+import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { cn } from "../../components/ui/utils";
 import { useNavigate, useParams } from "react-router";
 import {
@@ -310,16 +311,16 @@ export default function ExamQuestionsPage() {
                     />
 
                     {q.imagePreviewUrl ? (
-                      <img
+                      <ExamQuestionImageFrame
                         src={q.imagePreviewUrl}
                         alt={`Question ${idx + 1} preview`}
-                        className="w-full max-h-80 object-contain rounded-lg border border-slate-200 bg-slate-50"
+                        questionNo={q.questionNo}
                       />
                     ) : q.imageUrl ? (
-                      <img
+                      <ExamQuestionImageFrame
                         src={q.imageUrl}
                         alt={`Question ${idx + 1}`}
-                        className="w-full max-h-80 object-contain rounded-lg border border-slate-200 bg-slate-50"
+                        questionNo={q.questionNo}
                       />
                     ) : (
                       <div className="text-xs text-slate-500">

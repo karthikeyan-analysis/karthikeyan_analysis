@@ -251,8 +251,8 @@ export default function ExamResult() {
     .badge-wrong{border-color:#fda4af; background:#fff1f2}
     .badge-unanswered{border-color:#cbd5e1; background:#f8fafc}
     .badge-answered{border-color:#cbd5e1; background:#f8fafc}
-    .img-wrap{margin-top:10px; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#f8fafc}
-    img{max-width:100%; display:block}
+    .img-wrap{margin-top:10px; border:2px solid #e2e8f0; border-radius:12px; overflow:hidden; background:#f8fafc; height:280px; display:flex; align-items:center; justify-content:center; padding:8px}
+    .img-wrap img{max-width:100%; max-height:100%; object-fit:contain; display:block}
     .opts{margin-top:10px; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px}
     .opt{border:1px solid #e2e8f0; border-radius:10px; padding:8px; font-size:12px; display:flex; gap:8px; align-items:flex-start}
     .opt-letter{font-weight:800; color:#334155}
@@ -446,9 +446,12 @@ export default function ExamResult() {
                       </div>
                     </div>
                     {q.imageUrl ? (
-                      <div className="mt-3 rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
-                        <img src={q.imageUrl} alt={`Q${idx + 1}`} className="w-full max-h-[360px] object-contain" />
-                      </div>
+                      <ExamQuestionImageFrame
+                        src={q.imageUrl}
+                        alt={`Question ${idx + 1} figure`}
+                        questionNo={q.questionNo ?? idx + 1}
+                        className="mt-3"
+                      />
                     ) : null}
 
                     <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
