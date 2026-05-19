@@ -25,6 +25,10 @@ import {
   upsertQuestion,
   updateExamTest,
 } from "../../features/exams/examApi";
+import ExamBatchAssignmentFields, {
+  inferExamBatchMode,
+  type ExamBatchMode,
+} from "../../components/exams/ExamBatchAssignmentFields";
 import {
   getExamBatchIds,
   normalizeExamBatchFields,
@@ -75,6 +79,7 @@ export default function ExamEditor() {
   const [metaSaving, setMetaSaving] = useState(false);
   const [metaForm, setMetaForm] = useState<{
     title: string;
+    batchMode: ExamBatchMode;
     batchIds: string[];
     subject: string;
     instructions: string;
@@ -131,9 +136,11 @@ export default function ExamEditor() {
         d.getMinutes(),
       )}`;
     };
+    const loadedBatchIds = getExamBatchIds(test);
     setMetaForm({
       title: test.title || "",
-      batchIds: getExamBatchIds(test),
+      batchMode: inferExamBatchMode(loadedBatchIds),
+      batchIds: loadedBatchIds,
       subject: test.subject || "",
       instructions: test.instructions || "",
       accessPassword: "",

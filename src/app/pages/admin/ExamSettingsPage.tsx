@@ -20,12 +20,18 @@ import {
   getEffectiveExamSettings,
   parseCsvList,
 } from "../../features/exams/settings";
-import { getExamBatchIds } from "../../features/exams/examBatchUtils";
+import ExamBatchAssignmentFields, {
+  inferExamBatchMode,
+  type ExamBatchMode,
+} from "../../components/exams/ExamBatchAssignmentFields";
+import { getExamBatchIds, normalizeExamBatchFields } from "../../features/exams/examBatchUtils";
 import type { ExamAccessMode, ExamAdvancedSettings, ExamTest, ExamVisibility } from "../../features/exams/types";
 
 type FormState = {
   title: string;
   instructions: string;
+  batchMode: ExamBatchMode;
+  batchIds: string[];
   durationMinutes: string;
   negativeMarkPerWrong: string;
   defaultMarksPerQuestion: QuestionMarkOption;
@@ -38,7 +44,7 @@ export default function ExamSettingsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const testId = id || "";
-  const { students } = useData();
+  const { students, batches } = useData();
   const [test, setTest] = useState<ExamTest | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -54,9 +60,12 @@ export default function ExamSettingsPage() {
         if (!t || cancelled) return;
         const settings = getEffectiveExamSettings(t);
         setTest(t);
+        const loadedBatchIds = getExamBatchIds(t);
         setForm({
           title: t.title || "",
           instructions: t.instructions || "",
+          batchMode: inferExamBatchMode(loadedBatchIds),
+          batchIds: loadedBatchIds,
           durationMinutes: String(t.durationMinutes || 60),
           negativeMarkPerWrong: String(t.negativeMarkPerWrong || 0),
           defaultMarksPerQuestion: normalizeQuestionMarks(
@@ -84,23 +93,23 @@ export default function ExamSettingsPage() {
   }, [testId]);
 
   const selectiveStudentIds = useMemo(() => {
-    if (!form || !test) return [];
+    if (!form) return [];
     if (form.settings.accessMode === "identifier_list") {
       const identifiers = new Set(parseCsvList(form.identifierCsv).map((x) => x.toLowerCase()));
-      const batchIds = new Set(getExamBatchIds(test));
+      const batchIdSet = new Set(form.batchIds);
       return students
-        .filter((s) => s.batchId && batchIds.has(s.batchId))
+        .filter((s) => s.batchId && batchIdSet.has(s.batchId))
         .filter((s) => identifiers.has((s.studentId || "").toLowerCase()))
         .map((s) => s.id);
     }
     return [];
-  }, [form, students, test]);
+  }, [form, students]);
 
   const batchStudents = useMemo(() => {
-    if (!test) return [];
-    const batchIds = new Set(getExamBatchIds(test));
-    return students.filter((s) => s.batchId && batchIds.has(s.batchId));
-  }, [students, test]);
+    if (!form) return [];
+    const batchIdSet = new Set(form.batchIds);
+    return students.filter((s) => s.batchId && batchIdSet.has(s.batchId));
+  }, [form, students]);
 
   const selectedIdentifierSet = useMemo(() => {
     return new Set(parseCsvList(form?.identifierCsv || "").map((x) => x.toLowerCase()));
@@ -124,6 +133,14 @@ export default function ExamSettingsPage() {
       return;
     }
 
+    let batchFields: { batchId: string; batchIds: string[] };
+    try {
+      batchFields = normalizeExamBatchFields(form.batchIds);
+    } catch {
+      alert("Select at least one batch.");
+      return;
+    }
+
     // Schedule is system-managed to keep tests available without manual windows.
     const now = Date.now();
     const startAt = test.startAt || new Date(now - 60_000).toISOString();
@@ -144,6 +161,8 @@ export default function ExamSettingsPage() {
       const updates: Partial<ExamTest> = {
         title: form.title.trim(),
         instructions: form.instructions,
+        batchId: batchFields.batchId,
+        batchIds: batchFields.batchIds,
         startAt,
         endAt,
         durationMinutes: Math.max(1, parseInt(form.durationMinutes || "60", 10) || 60),
@@ -217,6 +236,19 @@ export default function ExamSettingsPage() {
               className="min-h-24"
             />
           </div>
+          <ExamBatchAssignmentFields
+            batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+            mode={form.batchMode}
+            batchIds={form.batchIds}
+            onModeChange={(batchMode) => setForm({ ...form, batchMode })}
+            onBatchIdsChange={(batchIds) =>
+              setForm({
+                ...form,
+                batchIds,
+                batchMode: inferExamBatchMode(batchIds),
+              })
+            }
+          />
         </CardContent>
       </Card>
 

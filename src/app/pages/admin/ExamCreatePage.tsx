@@ -3,7 +3,6 @@ import { useNavigate } from "react-router";
 import { useData } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -13,6 +12,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import ExamBatchAssignmentFields, {
+  inferExamBatchMode,
+  type ExamBatchMode,
+} from "../../components/exams/ExamBatchAssignmentFields";
 import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
 import { normalizeExamBatchFields } from "../../features/exams/examBatchUtils";
 import { createExamTest } from "../../features/exams/examApi";
@@ -27,6 +30,7 @@ export default function ExamCreatePage() {
   const { batches } = useData();
   const [creating, setCreating] = useState(false);
   const [testName, setTestName] = useState("demo");
+  const [batchMode, setBatchMode] = useState<ExamBatchMode>("single");
   const [batchIds, setBatchIds] = useState<string[]>(() =>
     batches[0]?.id ? [batches[0].id] : [],
   );
@@ -45,19 +49,6 @@ export default function ExamCreatePage() {
     }
     return [...names].sort((a, b) => a.localeCompare(b));
   }, [batchIds, batches]);
-
-  const toggleBatch = (id: string, checked: boolean) => {
-    setBatchIds((prev) => {
-      const next = checked ? [...prev, id] : prev.filter((b) => b !== id);
-      return next;
-    });
-    setSubject((prev) => {
-      if (!checked) return prev;
-      const batch = batches.find((b) => b.id === id);
-      const first = batch?.subjects?.[0]?.trim();
-      return prev || first || prev;
-    });
-  };
 
   const create = async () => {
     if (!testName.trim()) {
@@ -116,44 +107,23 @@ export default function ExamCreatePage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-slate-600">
-            Start with basic details. You can configure all advanced settings in the next step.
+            Start with basic details. You can change batch assignment later under Setup Test.
           </p>
           <div className="space-y-2">
             <Label>Test Name</Label>
             <Input value={testName} onChange={(e) => setTestName(e.target.value)} />
           </div>
-          <div className="space-y-2">
-            <Label>Batches *</Label>
-            <p className="text-xs text-slate-500">
-              Select one or more batches. Students in any selected batch will see this test.
-            </p>
-            <div className="rounded-lg border border-slate-200 p-3 max-h-48 overflow-y-auto space-y-2">
-              {batches.length === 0 ? (
-                <p className="text-sm text-slate-500">No batches yet. Create a batch first.</p>
-              ) : (
-                batches.map((batch) => {
-                  const checked = batchIds.includes(batch.id);
-                  return (
-                    <label
-                      key={batch.id}
-                      className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-slate-50 cursor-pointer"
-                    >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={(v) => toggleBatch(batch.id, v === true)}
-                      />
-                      <span className="text-sm font-medium text-slate-800">{batch.name}</span>
-                    </label>
-                  );
-                })
-              )}
-            </div>
-            {batchIds.length > 0 ? (
-              <p className="text-xs text-slate-600">
-                Selected: {batchIds.length} batch{batchIds.length === 1 ? "" : "es"}
-              </p>
-            ) : null}
-          </div>
+          <ExamBatchAssignmentFields
+            batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+            mode={batchMode}
+            batchIds={batchIds}
+            onModeChange={setBatchMode}
+            onBatchIdsChange={(ids) => {
+              setBatchIds(ids);
+              setBatchMode(inferExamBatchMode(ids));
+            }}
+            hint="Choose single batch or multiple batches. You can adjust this anytime in test settings."
+          />
           <div className="space-y-2">
             <Label>Subject</Label>
             {subjects.length > 0 ? (
