@@ -38,7 +38,18 @@ import type {
   ExamTest,
 } from "../../features/exams/types";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { Clock, Flag, Loader2, Save, XCircle } from "lucide-react";
+import {
+  Award,
+  Clock,
+  FileQuestion,
+  Flag,
+  Layers,
+  Loader2,
+  Save,
+  Timer,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
 import { submitAttempt } from "../../features/exams/examApi";
 import { sha256Base64 } from "../../features/exams/password";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
@@ -752,10 +763,16 @@ export default function TakeExam() {
     );
   }
 
+  const batchLabel = formatExamBatchLabel(test, batches);
+  const durationLabel = formatTimeLeft((test.durationMinutes || 0) * 60);
+  const timerUrgent = timeLeftSeconds <= 60 && !isAttemptSubmitted;
+
   return (
-    <div className="min-h-screen bg-slate-50 p-3 md:p-6">
-      <div className="h-[calc(100vh-3rem)] flex flex-col gap-4">
-        <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
+    <div className="h-[100dvh] flex flex-col overflow-hidden bg-gradient-to-b from-slate-100 to-slate-50">
+      <div className="shrink-0 px-3 pt-3 md:px-5 md:pt-4">
+        <header className="rounded-2xl border border-slate-200/90 bg-white shadow-md overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500" aria-hidden />
+          <motion.div className="p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="shrink-0">
               <img
