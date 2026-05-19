@@ -46,6 +46,8 @@ import * as XLSX from "xlsx";
 import StudentAvatar from "../../components/StudentAvatar";
 import { uploadStudentProfileImage } from "../../features/students/studentPhotoStorage";
 import {
+  extractUrlFromExcelCell,
+  findPhotoUrlInValues,
   looksLikePhotoUrl,
   normalizeStudentPhotoUrl,
   resolveStudentPhotoDisplayUrl,
@@ -294,13 +296,34 @@ export default function StudentManagement() {
     return mapping;
   };
 
-  const getCellHyperlink = (ws: XLSX.WorkSheet, row: number, col: number): string | undefined => {
-    const addr = XLSX.utils.encode_cell({ r: row, c: col });
-    const cell = ws[addr] as { l?: { Target?: string }; v?: unknown } | undefined;
-    if (!cell) return undefined;
-    if (cell.l?.Target && /^https?:\/\//i.test(cell.l.Target)) return cell.l.Target.trim();
-    if (typeof cell.v === "string" && /^https?:\/\//i.test(cell.v)) return cell.v.trim();
+  const extractPhotoFromSheetRow = (
+    ws: XLSX.WorkSheet,
+    sheetRow: number,
+    colStart: number,
+    colEnd: number,
+  ) => {
+    for (let c = colStart; c <= colEnd; c++) {
+      const addr = XLSX.utils.encode_cell({ r: sheetRow, c });
+      const url = extractUrlFromExcelCell(ws[addr] as { v?: unknown; l?: { Target?: string }; f?: string });
+      if (url && looksLikePhotoUrl(url)) return url;
+    }
     return undefined;
+  };
+
+  const detectHeaderRowIndex = (ws: XLSX.WorkSheet, colStart: number, colEnd: number) => {
+    const ref = ws["!ref"];
+    if (!ref) return 0;
+    const range = XLSX.utils.decode_range(ref);
+    for (let r = range.s.r; r <= Math.min(range.s.r + 3, range.e.r); r++) {
+      let headerHits = 0;
+      for (let c = colStart; c <= colEnd; c++) {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const label = String(ws[addr]?.v ?? "").trim();
+        if (guessFieldFromHeader(label)) headerHits += 1;
+      }
+      if (headerHits >= 2) return r;
+    }
+    return range.s.r;
   };
 
   const buildStudentId = (email: string, index: number) => {
@@ -315,14 +338,20 @@ export default function StudentManagement() {
     setImportRows([]);
 
     const buf = await file.arrayBuffer();
-    const wb = XLSX.read(buf, { type: "array" });
+    const wb = XLSX.read(buf, { type: "array", cellFormula: true });
     const wsName = wb.SheetNames?.[0];
     if (!wsName) throw new Error("No sheets found in Excel file.");
 
     const ws = wb.Sheets[wsName];
+    const sheetRange = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
+    const colStart = sheetRange?.s.c ?? 0;
+    const colEnd = sheetRange?.e.c ?? 0;
+    const headerRowIndex = sheetRange ? detectHeaderRowIndex(ws, colStart, colEnd) : 0;
+
     const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
       defval: "",
       raw: false,
+      range: headerRowIndex,
     });
     if (!rows.length) throw new Error("No rows found in the first sheet.");
 
@@ -340,8 +369,6 @@ export default function StudentManagement() {
       );
     }
 
-    const photoColIdx = mapping.photoURL ? headers.indexOf(mapping.photoURL) : -1;
-    const hasHeaderRow = headers.some((h) => guessFieldFromHeader(h) != null);
     const seenInFile = new Set<string>();
 
     const parsed = rows
@@ -351,10 +378,12 @@ export default function StudentManagement() {
         const studentIdFromSheet = mapping.studentId ? String(r[mapping.studentId]).trim() : "";
         const enrolledDate = mapping.enrolledDate ? String(r[mapping.enrolledDate]).trim() : "";
         let photoRaw = mapping.photoURL ? String(r[mapping.photoURL] ?? "").trim() : "";
-        if (!looksLikePhotoUrl(photoRaw) && photoColIdx >= 0) {
-          const sheetRow = hasHeaderRow ? idx + 1 : idx;
-          const link = getCellHyperlink(ws, sheetRow, photoColIdx);
-          if (link) photoRaw = link;
+        if (!looksLikePhotoUrl(photoRaw)) {
+          photoRaw = findPhotoUrlInValues(Object.values(r)) ?? "";
+        }
+        if (!looksLikePhotoUrl(photoRaw) && sheetRange) {
+          const sheetRow = headerRowIndex + 1 + idx;
+          photoRaw = extractPhotoFromSheetRow(ws, sheetRow, colStart, colEnd) ?? "";
         }
         const photoURL = normalizeStudentPhotoUrl(photoRaw);
         const studentId = studentIdFromSheet || (email ? buildStudentId(email, idx) : "");
@@ -376,10 +405,24 @@ export default function StudentManagement() {
     }
 
     // Keep duplicates in preview so user can see why rows may skip later
-    setImportRows(parsed.map(({ duplicateInFile, ...rest }) => rest));
+    const previewRows = parsed.map(({ duplicateInFile, ...rest }) => rest);
+    setImportRows(previewRows);
+
+    const withPhoto = previewRows.filter((p) => p.photoURL).length;
+    const warnings: string[] = [];
     if (parsed.some((p) => p.duplicateInFile)) {
-      setImportError("Warning: Your Excel has duplicate emails. Duplicates will be skipped during import.");
+      warnings.push("Your Excel has duplicate emails. Duplicates will be skipped during import.");
     }
+    if (withPhoto === 0) {
+      warnings.push(
+        'No photo links were found. Add a column like "Upload your photo" with Google Drive URLs (shared as "Anyone with the link"), or use visible hyperlinks in Excel.',
+      );
+    } else if (withPhoto < previewRows.length) {
+      warnings.push(
+        `Photos detected for ${withPhoto} of ${previewRows.length} rows. Rows without a Drive link will use initials only.`,
+      );
+    }
+    setImportError(warnings.join(" "));
   };
 
   const runImport = async () => {
@@ -743,7 +786,17 @@ export default function StudentManagement() {
             <div className="flex-1 overflow-y-auto pr-1">
               <div className="space-y-4 py-2">
                 {importError && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                  <div
+                    className={`p-3 border rounded-lg text-sm ${
+                      /Could not detect|No rows found|No sheets found|No valid rows|Failed to parse/i.test(
+                        importError,
+                      )
+                        ? "bg-red-50 border-red-200 text-red-800"
+                        : importError.includes("No photo links were found")
+                          ? "bg-amber-50 border-amber-200 text-amber-900"
+                          : "bg-sky-50 border-sky-200 text-sky-900"
+                    }`}
+                  >
                     {importError}
                   </div>
                 )}
@@ -809,8 +862,11 @@ export default function StudentManagement() {
                 {importRows.length > 0 && (
                   <Card className="border-slate-200">
                     <CardHeader className="py-3">
-                      <CardTitle className="text-sm">
-                        Preview ({importRows.length} rows)
+                      <CardTitle className="text-sm flex flex-wrap items-center justify-between gap-2">
+                        <span>Preview ({importRows.length} rows)</span>
+                        <span className="text-xs font-normal text-slate-500">
+                          {importRows.filter((r) => r.photoURL).length} with photo link
+                        </span>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">

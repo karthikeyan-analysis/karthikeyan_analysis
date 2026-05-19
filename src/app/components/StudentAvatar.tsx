@@ -33,7 +33,14 @@ export default function StudentAvatar({
   const displaySrc = resolveStudentPhotoDisplayUrl(photoURL);
   return (
     <Avatar className={cn(sizeClass[size], className)}>
-      {displaySrc ? <AvatarImage src={displaySrc} alt="" className="object-cover" /> : null}
+      {displaySrc ? (
+        <AvatarImage
+          src={displaySrc}
+          alt=""
+          className="object-cover"
+          referrerPolicy="no-referrer"
+        />
+      ) : null}
       <AvatarFallback className="bg-indigo-600 text-white font-semibold">
         {initialsFromName(label)}
       </AvatarFallback>

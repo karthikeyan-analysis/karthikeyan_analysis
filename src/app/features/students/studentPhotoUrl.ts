@@ -62,8 +62,42 @@ export function normalizeStudentPhotoUrl(raw: string | undefined | null): string
   return undefined;
 }
 
-/** URL suitable for &lt;img src&gt; (same as stored form for our normalizers). */
+/** Google Drive thumbnail — loads more reliably in &lt;img&gt; than uc?export=view. */
+export function googleDriveThumbnailUrl(fileId: string, size = 400): string {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}`;
+}
+
+/** URL suitable for &lt;img src&gt;. Drive links use the thumbnail endpoint for reliable previews. */
 export function resolveStudentPhotoDisplayUrl(photoURL?: string | null): string | undefined {
   if (!photoURL?.trim()) return undefined;
+  const driveId = extractGoogleDriveFileId(photoURL);
+  if (driveId) return googleDriveThumbnailUrl(driveId);
   return normalizeStudentPhotoUrl(photoURL) ?? photoURL.trim();
+}
+
+/** First photo-like URL in a list of cell values (import row scan). */
+export function findPhotoUrlInValues(values: unknown[]): string | undefined {
+  for (const v of values) {
+    const s = String(v ?? "").trim();
+    if (looksLikePhotoUrl(s)) return normalizeStudentPhotoUrl(s) ?? s;
+  }
+  return undefined;
+}
+
+type ExcelCellLike = {
+  v?: unknown;
+  l?: { Target?: string };
+  f?: string;
+};
+
+/** Read URL from an Excel cell value, hyperlink, or HYPERLINK() formula. */
+export function extractUrlFromExcelCell(cell: ExcelCellLike | undefined): string | undefined {
+  if (!cell) return undefined;
+  if (cell.l?.Target && /^https?:\/\//i.test(cell.l.Target)) return cell.l.Target.trim();
+  if (typeof cell.v === "string" && /^https?:\/\//i.test(cell.v)) return cell.v.trim();
+  if (cell.f && /HYPERLINK/i.test(cell.f)) {
+    const m = cell.f.match(/HYPERLINK\s*\(\s*"((?:[^"\\]|\\.)*)"/i);
+    if (m?.[1]) return m[1].replace(/\\"/g, '"').trim();
+  }
+  return undefined;
 }
