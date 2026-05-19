@@ -158,6 +158,9 @@ export default function TakeExam() {
   const timeLeftSeconds = hardEndMs ? Math.max(0, Math.floor((hardEndMs - nowTick) / 1000)) : 0;
 
   const currentQuestion = questions[currentIndex];
+  const isCurrentMarkedForReview = Boolean(
+    currentQuestion && markedForReview.includes(currentQuestion.id),
+  );
 
   const questionIdOrder = useMemo(() => questions.map((q) => q.id), [questions]);
 
@@ -769,62 +772,58 @@ export default function TakeExam() {
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-gradient-to-b from-slate-100 to-slate-50">
-      <div className="shrink-0 px-3 pt-3 md:px-5 md:pt-4">
-        <header className="rounded-2xl border border-slate-200/90 bg-white shadow-md overflow-hidden">
-          <div className="h-1 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500" aria-hidden />
-          <div className="p-4 sm:p-5">
-            <div className="flex flex-col gap-4 xl:flex-row xl:items-stretch xl:gap-5">
+      <div className="shrink-0 px-3 pt-2 md:px-5 md:pt-3">
+        <header className="rounded-xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
+          <div className="h-0.5 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500" aria-hidden />
+          <div className="px-3 py-2 sm:px-4 sm:py-2.5">
+            <div className="flex items-center gap-2.5 sm:gap-3">
               <div className="shrink-0">
                 <img
                   src={bannerImage}
                   alt="Karthikeyan Analysis"
-                  className="block h-9 sm:h-10 w-auto max-w-[180px] sm:max-w-[220px] object-contain object-left"
+                  className="block h-8 w-auto max-w-[150px] sm:max-w-[190px] object-contain object-left"
                 />
               </div>
-              <div className="hidden xl:block w-px self-stretch bg-slate-200 shrink-0" aria-hidden />
-              <div className="min-w-0 flex-1 flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight leading-tight">
-                    {test.title}
-                  </h1>
-                  <Badge variant="outline" className="text-xs font-medium border-slate-300 bg-white">
-                    {test.subject}
-                  </Badge>
-                  {isAttemptSubmitted ? (
-                    <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200/80">Submitted</Badge>
-                  ) : (
-                    <Badge className="bg-indigo-100 text-indigo-800 border-indigo-200/80">In progress</Badge>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <ExamMetaStat icon={Layers} label="Batch" value={batchLabel} wide />
-                  <ExamMetaStat icon={FileQuestion} label="Questions" value={String(questions.length)} />
-                  <ExamMetaStat icon={Award} label="Total marks" value={String(test.totalMarks)} />
-                  <ExamMetaStat icon={Timer} label="Duration" value={durationLabel} />
+              <div className="hidden sm:block w-px h-8 bg-slate-200 shrink-0" aria-hidden />
+              <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
+                  {test.title}
+                </h1>
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium border-slate-300 bg-white">
+                  {test.subject}
+                </Badge>
+                {isAttemptSubmitted ? (
+                  <Badge className="text-[10px] px-1.5 py-0 h-5 bg-emerald-100 text-emerald-800">Submitted</Badge>
+                ) : (
+                  <Badge className="text-[10px] px-1.5 py-0 h-5 bg-indigo-100 text-indigo-800">In progress</Badge>
+                )}
+                <div className="hidden lg:flex items-center gap-1 w-full xl:w-auto">
+                  <ExamMetaStat icon={Layers} label="Batch" value={batchLabel} wide compact />
+                  <ExamMetaStat icon={FileQuestion} label="Qs" value={String(questions.length)} compact />
+                  <ExamMetaStat icon={Award} label="Marks" value={String(test.totalMarks)} compact />
+                  <ExamMetaStat icon={Timer} label="Dur" value={durationLabel} compact />
                 </div>
               </div>
               <div
                 className={cn(
-                  "shrink-0 flex flex-col items-center justify-center rounded-2xl px-5 py-3 sm:px-7 sm:py-4 min-w-[140px] shadow-inner",
-                  timerUrgent
-                    ? "bg-gradient-to-br from-red-50 to-red-100/80 border-2 border-red-300 ring-2 ring-red-200/50"
-                    : "bg-gradient-to-br from-indigo-50 to-violet-50/80 border-2 border-indigo-200/90",
+                  "shrink-0 flex items-center gap-2 rounded-lg border px-2.5 py-1 sm:px-3",
+                  timerUrgent ? "bg-red-50 border-red-300" : "bg-indigo-50/90 border-indigo-200",
                 )}
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                  <Clock className={cn("w-3.5 h-3.5", timerUrgent && "text-red-600")} />
-                  Time left
+                <Clock className={cn("w-3.5 h-3.5 shrink-0", timerUrgent ? "text-red-600" : "text-indigo-600")} />
+                <div className="leading-none">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Time left</div>
+                  <span
+                    className={cn(
+                      "text-xl sm:text-2xl font-black tabular-nums tracking-tight",
+                      timerUrgent ? "text-red-700" : "text-indigo-950",
+                    )}
+                  >
+                    {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
+                  </span>
                 </div>
-                <span
-                  className={cn(
-                    "mt-1 text-4xl sm:text-[2.75rem] font-black tabular-nums leading-none tracking-tight",
-                    timerUrgent ? "text-red-700" : "text-indigo-950",
-                  )}
-                >
-                  {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
-                </span>
               </div>
             </div>
           </div>
@@ -867,7 +866,7 @@ export default function TakeExam() {
                 </div>
               ) : null}
 
-              <div className="border-t border-slate-100 pt-3 flex flex-col gap-0.5">
+              <div className="border-t border-slate-100 pt-3 flex flex-col gap-1" role="radiogroup" aria-label="Answer choices">
                 {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
                   const selected = answers[currentQuestion.id] === idx;
                   const correctIndex = correctIndexById.get(currentQuestion.id);
@@ -877,40 +876,66 @@ export default function TakeExam() {
                   const letter = String.fromCharCode(65 + idx);
                   const label = (opt || "").trim() || letter;
                   const isLetterOnly = label.toUpperCase() === letter;
+                  const radioFilled = selected || isCorrect || isWrongSelected;
 
                   return (
                     <button
                       key={idx}
                       type="button"
+                      role="radio"
+                      aria-checked={selected}
                       title={label}
                       className={cn(
-                        "w-full text-left py-2.5 px-1 flex items-start gap-3 rounded-md transition-colors",
-                        "hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1",
-                        selected && !showCorrect && "bg-indigo-50",
-                        isCorrect && "bg-emerald-50",
-                        isWrongSelected && "bg-red-50",
+                        "w-full text-left py-2 px-2 sm:px-3 flex items-center gap-3 rounded-lg border transition-colors",
+                        "hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1",
+                        !showCorrect && !selected && "border-transparent",
+                        selected && !showCorrect && "border-indigo-200 bg-indigo-50/80",
+                        isCorrect && "border-emerald-300 bg-emerald-50/80",
+                        isWrongSelected && "border-red-300 bg-red-50/80",
+                        !radioFilled && !showCorrect && "border-slate-100",
                       )}
                       onClick={() => handleSelect(idx)}
                       disabled={!isAttemptActive}
                     >
                       <span
                         className={cn(
-                          "text-base font-bold shrink-0 leading-snug",
+                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-colors",
+                          isCorrect && "border-emerald-600",
+                          isWrongSelected && "border-red-600",
+                          selected && !showCorrect && "border-indigo-600",
+                          !radioFilled && "border-slate-400",
+                        )}
+                        aria-hidden
+                      >
+                        {radioFilled ? (
+                          <span
+                            className={cn(
+                              "h-2.5 w-2.5 rounded-full",
+                              isCorrect && "bg-emerald-600",
+                              isWrongSelected && "bg-red-600",
+                              selected && !showCorrect && "bg-indigo-600",
+                            )}
+                          />
+                        ) : null}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-base font-bold shrink-0 tabular-nums",
                           selected && !showCorrect && "text-indigo-700",
                           isCorrect && "text-emerald-700",
                           isWrongSelected && "text-red-700",
-                          !selected && !isCorrect && !isWrongSelected && "text-slate-700",
+                          !radioFilled && "text-slate-700",
                         )}
                       >
                         {letter}.
                       </span>
                       <span
                         className={cn(
-                          "text-base leading-snug",
-                          selected && !showCorrect && "font-semibold text-indigo-900",
-                          isCorrect && "font-semibold text-emerald-900",
-                          isWrongSelected && "font-semibold text-red-900",
-                          !selected && !isCorrect && !isWrongSelected && "text-slate-900",
+                          "text-base leading-snug min-w-0 flex-1",
+                          selected && !showCorrect && "font-medium text-indigo-900",
+                          isCorrect && "font-medium text-emerald-900",
+                          isWrongSelected && "font-medium text-red-900",
+                          !radioFilled && "text-slate-900",
                           isLetterOnly && "sr-only",
                         )}
                       >
@@ -943,16 +968,22 @@ export default function TakeExam() {
             <div className="shrink-0 border-t border-slate-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
-                  variant="outline"
+                  variant={isCurrentMarkedForReview ? "default" : "outline"}
                   size="sm"
+                  className={cn(
+                    isCurrentMarkedForReview &&
+                      "bg-violet-600 hover:bg-violet-700 text-white border-violet-600",
+                  )}
                   onClick={() => {
                     toggleMarkForReview();
                     goNext();
                   }}
                   disabled={!isAttemptActive || currentIndex === questions.length - 1}
                 >
-                  <Flag className="w-4 h-4 mr-2" />
-                  Mark for Review &amp; Next
+                  <Flag
+                    className={cn("w-4 h-4 mr-2", isCurrentMarkedForReview && "fill-current")}
+                  />
+                  {isCurrentMarkedForReview ? "Unmark & Next" : "Mark for Review & Next"}
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleClear} disabled={!isAttemptActive}>
                   Clear Response
@@ -982,13 +1013,21 @@ export default function TakeExam() {
           <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-y-auto">
             <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="text-xs uppercase tracking-wide text-slate-500">Candidate</div>
                   <div className="mt-1 text-sm font-semibold text-slate-900 truncate" title={user.name}>
                     {user.name || "Student"}
                   </div>
                   <div className="text-xs text-slate-600 mt-0.5">
                     {user.studentId || user.studentRecordId || "ID not available"}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+                    <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                      Answered: <span className="font-semibold text-slate-900">{answeredCount}</span>
+                    </div>
+                    <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                      Marked: <span className="font-semibold text-slate-900">{reviewCount}</span>
+                    </div>
                   </div>
                 </div>
                 <div
@@ -1010,14 +1049,6 @@ export default function TakeExam() {
                       {initialsFromName(user.name || "Student")}
                     </span>
                   )}
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-slate-600">
-                <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                  Answered: <span className="font-semibold text-slate-900">{answeredCount}</span>
-                </div>
-                <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                  Marked: <span className="font-semibold text-slate-900">{reviewCount}</span>
                 </div>
               </div>
             </div>
@@ -1110,24 +1141,41 @@ function ExamMetaStat({
   label,
   value,
   wide = false,
+  compact = false,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   wide?: boolean;
+  compact?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-lg border border-slate-200/90 bg-white px-3 py-2 shadow-sm",
-        wide ? "max-w-full min-w-[140px] flex-1 basis-[200px]" : "min-w-[100px]",
+        "inline-flex items-center rounded-md border border-slate-200/90 bg-white shadow-sm",
+        compact ? "gap-1 px-1.5 py-0.5" : "gap-2 px-3 py-2 rounded-lg",
+        wide ? (compact ? "max-w-[180px] min-w-0" : "max-w-full min-w-[140px] flex-1 basis-[200px]") : compact ? "" : "min-w-[100px]",
       )}
     >
-      <Icon className="w-4 h-4 text-indigo-600 shrink-0" aria-hidden />
+      <Icon
+        className={cn("text-indigo-600 shrink-0", compact ? "w-3 h-3" : "w-4 h-4")}
+        aria-hidden
+      />
       <div className="min-w-0">
-        <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label}</div>
         <div
-          className={cn("text-sm font-semibold text-slate-900", wide && "line-clamp-2")}
+          className={cn(
+            "font-semibold uppercase tracking-wide text-slate-500",
+            compact ? "text-[8px] leading-none" : "text-[10px]",
+          )}
+        >
+          {label}
+        </div>
+        <div
+          className={cn(
+            "font-semibold text-slate-900",
+            compact ? "text-[11px] leading-tight truncate" : "text-sm",
+            wide && !compact && "line-clamp-2",
+          )}
           title={typeof value === "string" ? value : undefined}
         >
           {value}
