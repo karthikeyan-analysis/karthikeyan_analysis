@@ -756,15 +756,15 @@ export default function TakeExam() {
     <div className="min-h-screen bg-slate-50 p-3 md:p-6">
       <div className="h-[calc(100vh-3rem)] flex flex-col gap-4">
         <div className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 sm:px-5 sm:py-4 shadow-sm">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 flex-1">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="shrink-0">
               <img
                 src={bannerImage}
-                alt="EduHub banner"
-                className="block h-16 sm:h-20 lg:h-24 w-auto max-w-full object-contain object-left"
+                alt="Karthikeyan Analysis"
+                className="block h-9 sm:h-10 w-auto max-w-[200px] sm:max-w-[240px] object-contain object-left"
               />
             </div>
-            <div className="w-full lg:w-auto lg:min-w-[360px] rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+            <div className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-base sm:text-lg font-semibold text-slate-900 truncate">
                   {test.title}
@@ -778,7 +778,7 @@ export default function TakeExam() {
                   <Badge className="bg-indigo-100 text-indigo-800">In progress</Badge>
                 )}
               </div>
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 text-xs text-slate-600">
                 <div>
                   Batch:{" "}
                   <span className="font-semibold text-slate-800">
@@ -797,13 +797,30 @@ export default function TakeExam() {
                     {formatTimeLeft((test.durationMinutes || 0) * 60)}
                   </span>
                 </div>
-                <div className="sm:col-span-2">
-                  Time Left:{" "}
-                  <span className={cn("font-semibold tabular-nums", timeLeftSeconds <= 60 ? "text-rose-700" : "text-slate-900")}>
-                    {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
-                  </span>
-                </div>
               </div>
+            </div>
+
+            <div
+              className={cn(
+                "shrink-0 flex flex-col items-center justify-center rounded-xl border-2 px-6 py-3 min-w-[132px]",
+                timeLeftSeconds <= 60 && !isAttemptSubmitted
+                  ? "border-red-300 bg-red-50"
+                  : "border-indigo-200 bg-indigo-50/80",
+              )}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                Time left
+              </span>
+              <span
+                className={cn(
+                  "mt-0.5 text-3xl sm:text-4xl font-extrabold tabular-nums leading-none tracking-tight",
+                  timeLeftSeconds <= 60 && !isAttemptSubmitted ? "text-red-700" : "text-slate-900",
+                )}
+              >
+                {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
+              </span>
             </div>
           </div>
         </div>
@@ -842,7 +859,7 @@ export default function TakeExam() {
                 </div>
               ) : null}
 
-              <div className="mt-auto pt-2 grid grid-cols-5 gap-2 shrink-0">
+              <div className="mt-auto pt-2 flex flex-col gap-0.5 shrink-0">
                 {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
                   const selected = answers[currentQuestion.id] === idx;
                   const correctIndex = correctIndexById.get(currentQuestion.id);
@@ -859,29 +876,36 @@ export default function TakeExam() {
                       type="button"
                       title={label}
                       className={cn(
-                        "h-11 rounded-xl border bg-white transition-all flex items-center justify-center gap-2",
-                        "border-slate-200 text-slate-800 hover:bg-slate-50 hover:border-slate-300",
-                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2",
-                        "active:scale-[0.99]",
-                        selected && "border-indigo-600 bg-indigo-600 text-white shadow-sm",
-                        isCorrect && "border-emerald-600 bg-emerald-600 text-white shadow-sm",
-                        isWrongSelected && "border-rose-600 bg-rose-600 text-white shadow-sm",
+                        "w-full text-left py-2.5 px-1 flex items-start gap-3 rounded-md transition-colors",
+                        "hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1",
+                        selected && !showCorrect && "bg-indigo-50",
+                        isCorrect && "bg-emerald-50",
+                        isWrongSelected && "bg-red-50",
                       )}
                       onClick={() => handleSelect(idx)}
                       disabled={!isAttemptActive}
                     >
                       <span
                         className={cn(
-                          "h-7 w-7 rounded-full grid place-items-center text-xs font-bold border",
-                          selected || isCorrect || isWrongSelected
-                            ? "border-white/60 bg-white/15 text-white"
-                            : "border-slate-300 bg-white text-slate-700",
+                          "text-base font-bold shrink-0 leading-snug",
+                          selected && !showCorrect && "text-indigo-700",
+                          isCorrect && "text-emerald-700",
+                          isWrongSelected && "text-red-700",
+                          !selected && !isCorrect && !isWrongSelected && "text-slate-700",
                         )}
-                        aria-hidden="true"
                       >
-                        {letter}
+                        {letter}.
                       </span>
-                      <span className={cn("text-sm font-semibold", isLetterOnly && "sr-only")}>
+                      <span
+                        className={cn(
+                          "text-base leading-snug",
+                          selected && !showCorrect && "font-semibold text-indigo-900",
+                          isCorrect && "font-semibold text-emerald-900",
+                          isWrongSelected && "font-semibold text-red-900",
+                          !selected && !isCorrect && !isWrongSelected && "text-slate-900",
+                          isLetterOnly && "sr-only",
+                        )}
+                      >
                         {label}
                       </span>
                     </button>
@@ -1007,7 +1031,7 @@ export default function TakeExam() {
                     : st === "marked_for_review"
                       ? "bg-violet-600 text-white border-violet-600"
                       : st === "not_answered"
-                        ? "bg-rose-500 text-white border-rose-500"
+                        ? "bg-red-600 text-white border-red-600"
                         : "bg-white text-slate-900 border-slate-200";
 
                 return (
@@ -1016,7 +1040,12 @@ export default function TakeExam() {
                     className={cn(
                       "h-9 rounded-lg border text-xs font-semibold transition-all",
                       base,
-                      isCurrent && "ring-2 ring-indigo-400 ring-offset-2",
+                      isCurrent &&
+                        st === "not_answered" &&
+                        "ring-2 ring-red-800 ring-offset-2",
+                      isCurrent &&
+                        st !== "not_answered" &&
+                        "ring-2 ring-indigo-400 ring-offset-2",
                       st === "not_visited" && "hover:bg-slate-50",
                     )}
                     onClick={() => setCurrentIndex(idx)}
@@ -1029,7 +1058,7 @@ export default function TakeExam() {
 
             <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
               <LegendChip color="bg-emerald-600" label="Answered" />
-              <LegendChip color="bg-rose-500" label="Not Answered" />
+              <LegendChip color="bg-red-600" label="Not Answered" />
               <LegendChip color="bg-violet-600" label="Marked" />
               <LegendChip color="bg-white border border-slate-200" label="Not Visited" />
             </div>
