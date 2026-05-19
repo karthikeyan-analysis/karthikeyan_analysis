@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Badge } from "../../components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Download, Loader2, ArrowLeft } from "lucide-react";
+import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import {
@@ -73,7 +74,7 @@ export default function AllTestsAnalytics() {
 
   const rows: Row[] = useMemo(() => {
     return pairs.map(({ test, attempts }) => {
-      const batchName = batches.find((b) => b.id === test.batchId)?.name || test.batchId;
+      const batchName = formatExamBatchLabel(test, batches);
       const submittedAtt = attempts.filter((a) => a.status === "submitted");
       const inProgress = attempts.filter((a) => a.status === "in_progress").length;
       const percents = submittedAtt

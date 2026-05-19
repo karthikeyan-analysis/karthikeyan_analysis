@@ -15,6 +15,7 @@ import {
 } from "../../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { ArrowLeft, Download, Loader2, Users } from "lucide-react";
+import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import {
@@ -101,7 +102,7 @@ export default function StudentTestReports() {
     return pairs.map(({ test, attempts }) => ({
       test,
       attempts,
-      batchName: batches.find((b) => b.id === test.batchId)?.name || test.batchId,
+      batchName: formatExamBatchLabel(test, batches),
     }));
   }, [pairs, batches]);
 

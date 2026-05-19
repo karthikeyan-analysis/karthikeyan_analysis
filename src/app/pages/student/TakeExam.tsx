@@ -28,7 +28,9 @@ import {
   startAttempt,
 } from "../../features/exams/examApi";
 import StudentPhotoImage from "../../components/StudentPhotoImage";
+import { examIncludesBatch, formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
+import { useData } from "../../context/DataContext";
 import type {
   ExamQuestionPrivate,
   ExamQuestionPublic,
@@ -78,6 +80,7 @@ export default function TakeExam() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { batches } = useData();
   const { photoURL } = useStudentPhoto();
 
   const [loading, setLoading] = useState(true);
@@ -493,7 +496,7 @@ export default function TakeExam() {
   const canAccessAsGuest =
     isGuestParticipant && allowsPasscodeGuestAccess(test) && user.guestExamTestId === testId;
 
-  if (!canAccessAsGuest && (!user.batchId || user.batchId !== test.batchId)) {
+  if (!canAccessAsGuest && !examIncludesBatch(test, user.batchId)) {
     return (
       <Alert variant="destructive">
         <XCircle className="h-4 w-4" />
@@ -754,7 +757,10 @@ export default function TakeExam() {
               </div>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-600">
                 <div>
-                  Batch: <span className="font-semibold text-slate-800">{test.batchId}</span>
+                  Batch:{" "}
+                  <span className="font-semibold text-slate-800">
+                    {formatExamBatchLabel(test, batches)}
+                  </span>
                 </div>
                 <div>
                   Questions: <span className="font-semibold text-slate-800">{questions.length}</span>

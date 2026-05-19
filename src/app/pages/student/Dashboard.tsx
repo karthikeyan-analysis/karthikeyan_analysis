@@ -6,6 +6,7 @@ import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { BookOpen, Video, FileText, Layers3, CalendarClock } from "lucide-react";
 import StudentAvatar from "../../components/StudentAvatar";
+import { examIncludesBatch } from "../../features/exams/examBatchUtils";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import { useNavigate } from "react-router";
 import { listExamTestsForStudent } from "../../features/exams/examApi";
@@ -102,7 +103,7 @@ export default function StudentDashboard() {
       .filter((x) => x.when > now);
 
     const internal = tests
-      .filter((t) => user?.batchId && t.batchId === user.batchId)
+      .filter((t) => user?.batchId && examIncludesBatch(t, user.batchId))
       .map((t) => {
         const ts = new Date(`${t.testDate}T${t.startTime || "00:00"}`).getTime();
         return {

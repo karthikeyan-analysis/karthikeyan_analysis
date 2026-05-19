@@ -19,6 +19,7 @@ import StudentAvatar from "../../components/StudentAvatar";
 import { listExamTestsForAdmin } from "../../features/exams/examApi";
 import { subscribeInProgressAttempts } from "../../features/exams/liveMonitorApi";
 import type { ExamTest } from "../../features/exams/types";
+import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import {
   buildLiveAttemptRow,
   formatClockTime,
@@ -133,12 +134,10 @@ export default function LiveExamMonitor() {
   }, []);
 
   const testsById = useMemo(() => new Map(tests.map((t) => [t.id, t])), [tests]);
-  const batchNameById = useMemo(() => new Map(batches.map((b) => [b.id, b.name])), [batches]);
-
   const rows = useMemo(() => {
     return liveSnapshots.map(({ attempt, testId }) => {
       const test = testsById.get(testId);
-      const batchName = batchNameById.get(test?.batchId || "") || test?.batchId || "—";
+      const batchName = test ? formatExamBatchLabel(test, batches) : "—";
       return buildLiveAttemptRow({
         attempt,
         testId,
@@ -148,7 +147,7 @@ export default function LiveExamMonitor() {
         nowMs,
       });
     });
-  }, [batchNameById, liveSnapshots, nowMs, students, testsById]);
+  }, [batches, liveSnapshots, nowMs, students, testsById]);
 
   const testSummaries = useMemo(() => summarizeByTest(rows), [rows]);
 

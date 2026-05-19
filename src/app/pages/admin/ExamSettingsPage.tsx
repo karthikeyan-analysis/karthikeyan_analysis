@@ -20,6 +20,7 @@ import {
   getEffectiveExamSettings,
   parseCsvList,
 } from "../../features/exams/settings";
+import { getExamBatchIds } from "../../features/exams/examBatchUtils";
 import type { ExamAccessMode, ExamAdvancedSettings, ExamTest, ExamVisibility } from "../../features/exams/types";
 
 type FormState = {
@@ -86,8 +87,9 @@ export default function ExamSettingsPage() {
     if (!form || !test) return [];
     if (form.settings.accessMode === "identifier_list") {
       const identifiers = new Set(parseCsvList(form.identifierCsv).map((x) => x.toLowerCase()));
+      const batchIds = new Set(getExamBatchIds(test));
       return students
-        .filter((s) => s.batchId === test.batchId)
+        .filter((s) => s.batchId && batchIds.has(s.batchId))
         .filter((s) => identifiers.has((s.studentId || "").toLowerCase()))
         .map((s) => s.id);
     }
@@ -96,7 +98,8 @@ export default function ExamSettingsPage() {
 
   const batchStudents = useMemo(() => {
     if (!test) return [];
-    return students.filter((s) => s.batchId === test.batchId);
+    const batchIds = new Set(getExamBatchIds(test));
+    return students.filter((s) => s.batchId && batchIds.has(s.batchId));
   }, [students, test]);
 
   const selectedIdentifierSet = useMemo(() => {

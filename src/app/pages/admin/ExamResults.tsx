@@ -11,6 +11,7 @@ import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } f
 import { useData } from "../../context/DataContext";
 import * as XLSX from "xlsx";
 import { displayNameForAttempt, resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
+import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 
 function safeFileName(name: string) {
   return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
@@ -91,7 +92,7 @@ export default function ExamResults() {
 
   const batchName = useMemo(() => {
     if (!test) return "";
-    return batches.find((b) => b.id === test.batchId)?.name || test.batchId;
+    return formatExamBatchLabel(test, batches);
   }, [batches, test]);
 
   /** Matches Excel export: submitted highest marks first, then in-progress / not submitted. */

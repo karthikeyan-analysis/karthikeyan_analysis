@@ -16,6 +16,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { BarChart3, Calendar, Edit2, FileSpreadsheet, Radio, Trash2 } from "lucide-react";
 import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
 import { ExamCloseToggleButton } from "../../components/exams/ExamCloseToggleButton";
+import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { deleteExamTest, listExamTestsForAdmin } from "../../features/exams/examApi";
 import {
   examWindowStatusLabel,
@@ -134,7 +135,7 @@ export default function ExamManagement() {
                 </TableHeader>
                 <TableBody>
                   {tests.map((t) => {
-                    const batchName = batches.find((b) => b.id === t.batchId)?.name || t.batchId;
+                    const batchName = formatExamBatchLabel(t, batches);
                     return (
                       <TableRow key={t.id} className="hover:bg-slate-50">
                         <TableCell className="font-medium text-slate-900">{t.title}</TableCell>

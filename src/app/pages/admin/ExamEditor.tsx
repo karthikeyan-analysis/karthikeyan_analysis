@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
@@ -24,6 +25,10 @@ import {
   upsertQuestion,
   updateExamTest,
 } from "../../features/exams/examApi";
+import {
+  getExamBatchIds,
+  normalizeExamBatchFields,
+} from "../../features/exams/examBatchUtils";
 import type { ExamQuestionPublic, ExamShowAnswersAfter, ExamTest, ExamVisibility } from "../../features/exams/types";
 import { ArrowLeft, Edit2, Image as ImageIcon, Plus, Settings2, Trash2 } from "lucide-react";
 import { useData } from "../../context/DataContext";
@@ -70,7 +75,7 @@ export default function ExamEditor() {
   const [metaSaving, setMetaSaving] = useState(false);
   const [metaForm, setMetaForm] = useState<{
     title: string;
-    batchId: string;
+    batchIds: string[];
     subject: string;
     instructions: string;
     accessPassword: string;
@@ -128,7 +133,7 @@ export default function ExamEditor() {
     };
     setMetaForm({
       title: test.title || "",
-      batchId: test.batchId || "",
+      batchIds: getExamBatchIds(test),
       subject: test.subject || "",
       instructions: test.instructions || "",
       accessPassword: "",
@@ -190,15 +195,32 @@ export default function ExamEditor() {
   }, [test, testId, totals.totalMarks, totals.totalQuestions]);
 
   const batchStudents = useMemo(() => {
-    const batchId = metaForm?.batchId || test?.batchId || "";
-    if (!batchId) return [];
-    return getStudentsByBatch(batchId);
-  }, [getStudentsByBatch, metaForm?.batchId, test?.batchId]);
+    const ids = metaForm?.batchIds?.length ? metaForm.batchIds : test ? getExamBatchIds(test) : [];
+    if (!ids.length) return [];
+    const seen = new Set<string>();
+    const list: ReturnType<typeof getStudentsByBatch> = [];
+    for (const id of ids) {
+      for (const s of getStudentsByBatch(id)) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id);
+          list.push(s);
+        }
+      }
+    }
+    return list;
+  }, [getStudentsByBatch, metaForm?.batchIds, test]);
 
   const saveMeta = async () => {
     if (!testId || !metaForm) return;
-    if (!metaForm.title.trim() || !metaForm.batchId || !metaForm.subject.trim()) {
-      alert("Title, Batch, and Subject are required.");
+    let batchFields: { batchId: string; batchIds: string[] };
+    try {
+      batchFields = normalizeExamBatchFields(metaForm.batchIds);
+    } catch {
+      alert("Select at least one batch.");
+      return;
+    }
+    if (!metaForm.title.trim() || !metaForm.subject.trim()) {
+      alert("Title and Subject are required.");
       return;
     }
     if (!metaForm.startAtLocal || !metaForm.endAtLocal) {
@@ -217,7 +239,8 @@ export default function ExamEditor() {
       const pw = metaForm.accessPassword.trim();
       const updates: Partial<ExamTest> = {
         title: metaForm.title.trim(),
-        batchId: metaForm.batchId,
+        batchId: batchFields.batchId,
+        batchIds: batchFields.batchIds,
         subject: metaForm.subject.trim(),
         instructions: metaForm.instructions.trim(),
         startAt: startIso,
@@ -416,33 +439,38 @@ export default function ExamEditor() {
                     />
                   </div>
 
-                  <div className="space-y-2">
-                    <Label>Batch *</Label>
-                    <Select
-                      value={metaForm?.batchId || test.batchId}
-                      onValueChange={(v) =>
-                        setMetaForm((p) =>
-                          p
-                            ? {
-                                ...p,
-                                batchId: v,
-                                selectedStudentRecordIds: [],
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Batches *</Label>
+                    <div className="rounded-lg border border-slate-200 p-3 max-h-40 overflow-y-auto space-y-2">
+                      {batches.map((b) => {
+                        const checked = (metaForm?.batchIds || []).includes(b.id);
+                        return (
+                          <label
+                            key={b.id}
+                            className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-slate-50 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(v) =>
+                                setMetaForm((p) => {
+                                  if (!p) return p;
+                                  const nextIds =
+                                    v === true
+                                      ? [...new Set([...p.batchIds, b.id])]
+                                      : p.batchIds.filter((id) => id !== b.id);
+                                  return {
+                                    ...p,
+                                    batchIds: nextIds,
+                                    selectedStudentRecordIds: [],
+                                  };
+                                })
                               }
-                            : p,
-                        )
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select batch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {batches.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                            />
+                            <span className="text-sm font-medium text-slate-800">{b.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   <div className="space-y-2">

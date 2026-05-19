@@ -42,7 +42,10 @@ export interface ExamAdvancedSettings {
 export interface ExamTest {
   id: string;
   title: string;
+  /** Primary batch (legacy). Same as the first entry in `batchIds` when multiple batches are set. */
   batchId: string;
+  /** All batches that can access this test (BATCH visibility). */
+  batchIds?: string[];
   subject: string;
   instructions?: string;
   /**

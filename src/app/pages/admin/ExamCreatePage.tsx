@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { useData } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import {
@@ -13,6 +14,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
+import { normalizeExamBatchFields } from "../../features/exams/examBatchUtils";
 import { createExamTest } from "../../features/exams/examApi";
 import {
   DEFAULT_MARKS_PER_QUESTION,
@@ -25,23 +27,48 @@ export default function ExamCreatePage() {
   const { batches } = useData();
   const [creating, setCreating] = useState(false);
   const [testName, setTestName] = useState("demo");
-  const [batchId, setBatchId] = useState(batches[0]?.id || "");
+  const [batchIds, setBatchIds] = useState<string[]>(() =>
+    batches[0]?.id ? [batches[0].id] : [],
+  );
   const [subject, setSubject] = useState("");
   const [defaultMarksPerQuestion, setDefaultMarksPerQuestion] =
     useState<QuestionMarkOption>(DEFAULT_MARKS_PER_QUESTION);
 
   const subjects = useMemo(() => {
-    const batch = batches.find((b) => b.id === batchId);
-    return (batch?.subjects || []).map((s) => s.trim()).filter(Boolean);
-  }, [batchId, batches]);
+    const names = new Set<string>();
+    for (const id of batchIds) {
+      const batch = batches.find((b) => b.id === id);
+      for (const s of batch?.subjects || []) {
+        const t = s.trim();
+        if (t) names.add(t);
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [batchIds, batches]);
+
+  const toggleBatch = (id: string, checked: boolean) => {
+    setBatchIds((prev) => {
+      const next = checked ? [...prev, id] : prev.filter((b) => b !== id);
+      return next;
+    });
+    setSubject((prev) => {
+      if (!checked) return prev;
+      const batch = batches.find((b) => b.id === id);
+      const first = batch?.subjects?.[0]?.trim();
+      return prev || first || prev;
+    });
+  };
 
   const create = async () => {
     if (!testName.trim()) {
       alert("Please enter test name.");
       return;
     }
-    if (!batchId) {
-      alert("Please select a batch.");
+    let normalized: { batchId: string; batchIds: string[] };
+    try {
+      normalized = normalizeExamBatchFields(batchIds);
+    } catch {
+      alert("Please select at least one batch.");
       return;
     }
     if (!subject.trim()) {
@@ -51,12 +78,12 @@ export default function ExamCreatePage() {
     setCreating(true);
     try {
       const now = Date.now();
-      // Keep schedule always-open by default; duration controls per-attempt timer.
       const start = new Date(now - 60_000).toISOString();
       const end = new Date(now + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
       const id = await createExamTest({
         title: testName.trim(),
-        batchId,
+        batchId: normalized.batchId,
+        batchIds: normalized.batchIds,
         subject: subject.trim(),
         instructions: "",
         startAt: start,
@@ -96,19 +123,36 @@ export default function ExamCreatePage() {
             <Input value={testName} onChange={(e) => setTestName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Batch</Label>
-            <Select value={batchId} onValueChange={(v) => setBatchId(v)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select batch" />
-              </SelectTrigger>
-              <SelectContent>
-                {batches.map((batch) => (
-                  <SelectItem key={batch.id} value={batch.id}>
-                    {batch.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Batches *</Label>
+            <p className="text-xs text-slate-500">
+              Select one or more batches. Students in any selected batch will see this test.
+            </p>
+            <div className="rounded-lg border border-slate-200 p-3 max-h-48 overflow-y-auto space-y-2">
+              {batches.length === 0 ? (
+                <p className="text-sm text-slate-500">No batches yet. Create a batch first.</p>
+              ) : (
+                batches.map((batch) => {
+                  const checked = batchIds.includes(batch.id);
+                  return (
+                    <label
+                      key={batch.id}
+                      className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-slate-50 cursor-pointer"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(v) => toggleBatch(batch.id, v === true)}
+                      />
+                      <span className="text-sm font-medium text-slate-800">{batch.name}</span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            {batchIds.length > 0 ? (
+              <p className="text-xs text-slate-600">
+                Selected: {batchIds.length} batch{batchIds.length === 1 ? "" : "es"}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <Label>Subject</Label>
@@ -144,4 +188,3 @@ export default function ExamCreatePage() {
     </div>
   );
 }
-

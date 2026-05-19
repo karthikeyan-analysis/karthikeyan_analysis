@@ -66,10 +66,16 @@ export async function listExamTestsForStudent(params: {
   batchId: string;
   studentRecordId?: string;
 }): Promise<ExamTest[]> {
-  // Avoid composite-index requirement by sorting client-side.
-  const snap = await getDocs(query(collection(db, TESTS), where("batchId", "==", params.batchId)));
-
-  const tests = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
+  // Legacy single-batch field + multi-batch array (dedupe).
+  const [legacySnap, multiSnap] = await Promise.all([
+    getDocs(query(collection(db, TESTS), where("batchId", "==", params.batchId))),
+    getDocs(query(collection(db, TESTS), where("batchIds", "array-contains", params.batchId))),
+  ]);
+  const byId = new Map<string, ExamTest>();
+  for (const d of [...legacySnap.docs, ...multiSnap.docs]) {
+    byId.set(d.id, { id: d.id, ...(d.data() as object) } as ExamTest);
+  }
+  const tests = [...byId.values()];
   const visible = tests.filter((t) => {
     if (t.visibility === "BATCH") return true;
     if (!params.studentRecordId) return false;
@@ -123,8 +129,12 @@ export async function saveGuestProfile(params: {
 export async function createExamTest(
   test: Omit<ExamTest, "id" | "createdAt" | "updatedAt">,
 ): Promise<string> {
+  const batchIds = test.batchIds?.length ? test.batchIds : test.batchId ? [test.batchId] : [];
   const docRef = await addDoc(collection(db, TESTS), {
     ...test,
+    ...(batchIds.length
+      ? { batchId: batchIds[0], batchIds: [...new Set(batchIds)] }
+      : {}),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     createdAtServer: serverTimestamp(),
@@ -143,6 +153,11 @@ export async function updateExamTest(testId: string, updates: Partial<ExamTest>)
     updatedAt: new Date().toISOString(),
     updatedAtServer: serverTimestamp(),
   };
+  if (u.batchIds?.length) {
+    const unique = [...new Set(u.batchIds.filter(Boolean))];
+    payload.batchIds = unique;
+    payload.batchId = unique[0];
+  }
   if (u.accessPasswordHash === null) payload.accessPasswordHash = deleteField();
   if (u.manuallyClosedAt === null) payload.manuallyClosedAt = deleteField();
   await updateDoc(examTestRef(testId), payload as any);
