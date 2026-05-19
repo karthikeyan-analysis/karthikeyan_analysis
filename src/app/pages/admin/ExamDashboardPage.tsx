@@ -5,11 +5,13 @@ import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { getExamTest, listAttemptsForAdmin, listPublicQuestions } from "../../features/exams/examApi";
+import { examWindowStatusLabel } from "../../features/exams/examAvailability";
 import {
   allowsPasscodeGuestAccess,
   guestJoinUrl,
   isPasscodeGuestTestConfigured,
 } from "../../features/exams/settings";
+import { ExamCloseToggleButton } from "../../components/exams/ExamCloseToggleButton";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { Link2 } from "lucide-react";
 import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
@@ -21,6 +23,8 @@ export default function ExamDashboardPage() {
   const [questions, setQuestions] = useState(0);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const patchTest = (updated: ExamTest) => setTest(updated);
 
   useEffect(() => {
     if (!testId) return;
@@ -64,13 +68,15 @@ export default function ExamDashboardPage() {
           <CardTitle>Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <StatCard label="Questions" value={String(questions)} />
             <StatCard label="Attempts" value={String(attempts.length)} />
             <StatCard label="Submissions" value={String(submitted)} />
-            <StatCard label="Status" value={test.status === "published" ? "Published" : "Draft"} />
+            <StatCard label="Publish" value={test.status === "published" ? "Published" : "Draft"} />
+            <StatCard label="Availability" value={examWindowStatusLabel(test)} />
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+            <ExamCloseToggleButton test={test} onUpdated={patchTest} />
             <Button className="bg-indigo-600 hover:bg-indigo-700" asChild>
               <Link to={`/admin/tests/${testId}/settings`}>Setup Test</Link>
             </Button>

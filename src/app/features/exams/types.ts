@@ -60,6 +60,8 @@ export interface ExamTest {
   visibility: ExamVisibility;
   selectedStudentRecordIds?: string[];
   status?: ExamStatus;
+  /** When set, the test is closed for new attempts (admin action). */
+  manuallyClosedAt?: string;
   publishedAt?: string;
   settings?: ExamAdvancedSettings;
   createdAt: string; // ISO

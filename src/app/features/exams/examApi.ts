@@ -82,7 +82,7 @@ export async function listExamTestsForStudent(params: {
 export async function listPasscodeGuestExamTests(): Promise<ExamTest[]> {
   const snap = await getDocs(query(collection(db, TESTS), orderBy("createdAt", "desc")));
   const tests = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
-  return tests.filter((t) => allowsPasscodeGuestAccess(t));
+  return tests.filter((t) => allowsPasscodeGuestAccess(t) && !t.manuallyClosedAt);
 }
 
 export async function verifyExamPasscode(test: ExamTest, passcode: string): Promise<boolean> {
@@ -134,14 +134,24 @@ export async function createExamTest(
 }
 
 export async function updateExamTest(testId: string, updates: Partial<ExamTest>) {
-  const u = updates as Partial<ExamTest> & { accessPasswordHash?: string | null };
+  const u = updates as Partial<ExamTest> & {
+    accessPasswordHash?: string | null;
+    manuallyClosedAt?: string | null;
+  };
   const payload: Record<string, any> = {
     ...u,
     updatedAt: new Date().toISOString(),
     updatedAtServer: serverTimestamp(),
   };
   if (u.accessPasswordHash === null) payload.accessPasswordHash = deleteField();
+  if (u.manuallyClosedAt === null) payload.manuallyClosedAt = deleteField();
   await updateDoc(examTestRef(testId), payload as any);
+}
+
+export async function setExamManuallyClosed(testId: string, closed: boolean): Promise<void> {
+  await updateExamTest(testId, {
+    manuallyClosedAt: closed ? new Date().toISOString() : (null as unknown as string),
+  } as Partial<ExamTest> & { manuallyClosedAt: string | null });
 }
 
 export async function deleteExamTest(testId: string) {

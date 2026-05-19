@@ -21,6 +21,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Calendar, CheckCircle2, FileCheck2, KeyRound, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getAttempt, getExamTest, listExamTestsForStudent } from "../../features/exams/examApi";
+import { getExamWindowStatus } from "../../features/exams/examAvailability";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { useNavigate } from "react-router";
 import StudentAvatar from "../../components/StudentAvatar";
@@ -119,11 +120,9 @@ export default function TestSchedule() {
     const items = [...examTests].sort(
       (a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime(),
     );
-    const active = items.filter(
-      (t) => now >= new Date(t.startAt).getTime() && now <= new Date(t.endAt).getTime(),
-    );
-    const upcoming = items.filter((t) => now < new Date(t.startAt).getTime());
-    const closed = items.filter((t) => now > new Date(t.endAt).getTime());
+    const active = items.filter((t) => getExamWindowStatus(t, now) === "active");
+    const upcoming = items.filter((t) => getExamWindowStatus(t, now) === "upcoming");
+    const closed = items.filter((t) => getExamWindowStatus(t, now) === "closed");
     return { active, upcoming, closed, all: items };
   }, [examTests, now]);
 
@@ -230,10 +229,9 @@ export default function TestSchedule() {
                         {isExam ? (
                           attemptByExamId[test.id]?.status === "submitted" ? (
                             <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
-                          ) : now >= new Date(test.startAt).getTime() &&
-                            now <= new Date(test.endAt).getTime() ? (
+                          ) : getExamWindowStatus(test, now) === "active" ? (
                             <Badge className="bg-green-100 text-green-800">START NOW</Badge>
-                          ) : now < new Date(test.startAt).getTime() ? (
+                          ) : getExamWindowStatus(test, now) === "upcoming" ? (
                             <Badge className="bg-blue-100 text-blue-800">Upcoming</Badge>
                           ) : (
                             <Badge className="bg-gray-100 text-gray-800">Closed</Badge>
@@ -252,7 +250,7 @@ export default function TestSchedule() {
                             >
                               <FileCheck2 className="w-3 h-3 mr-1" /> Check results
                             </Button>
-                          ) : now > new Date(test.endAt).getTime() ? (
+                          ) : getExamWindowStatus(test, now) === "closed" ? (
                             <Button
                               onClick={() => navigate(`/student/tests/${test.id}/result`)}
                               className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
@@ -260,7 +258,7 @@ export default function TestSchedule() {
                             >
                               <FileCheck2 className="w-3 h-3 mr-1" /> Results
                             </Button>
-                          ) : now < new Date(test.startAt).getTime() ? (
+                          ) : getExamWindowStatus(test, now) === "upcoming" ? (
                             <Button disabled variant="outline" size="sm" className="text-xs">
                               Coming
                             </Button>

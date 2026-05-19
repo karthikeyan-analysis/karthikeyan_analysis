@@ -37,6 +37,8 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Clock, Flag, Loader2, Save, XCircle } from "lucide-react";
 import { submitAttempt } from "../../features/exams/examApi";
 import { sha256Base64 } from "../../features/exams/password";
+import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
+import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
 import { allowsPasscodeGuestAccess } from "../../features/exams/settings";
 
 function clamp(n: number, min: number, max: number) {
@@ -96,6 +98,7 @@ export default function TakeExam() {
   const [attemptSubmittedAtIso, setAttemptSubmittedAtIso] = useState<string | null>(null);
   const [attemptStatus, setAttemptStatus] = useState<"in_progress" | "submitted" | null>(null);
   const [score, setScore] = useState<{ score: number; maxScore: number } | null>(null);
+  const [closedForNewAttempts, setClosedForNewAttempts] = useState(false);
 
   const autosaveTimer = useRef<number | null>(null);
 
@@ -213,6 +216,12 @@ export default function TakeExam() {
         if (cancelled) return;
 
         if (!attempt) {
+          if (!canStartNewExamAttempt(test)) {
+            setClosedForNewAttempts(true);
+            setQuestions(qs);
+            return;
+          }
+          setClosedForNewAttempts(false);
           const startMs = Date.now();
           const hardEnd = new Date(startMs + (test.durationMinutes || 0) * 60 * 1000).toISOString();
           await startAttempt({
@@ -234,6 +243,7 @@ export default function TakeExam() {
           setMarkedForReview([]);
           setVisited(qs.length ? { [qs[0].id]: true } : {});
         } else {
+          setClosedForNewAttempts(false);
           setAttemptStartedAtIso(attempt.startedAt);
           setAttemptStatus(attempt.status);
           setAttemptSubmittedAtIso(attempt.submittedAt || null);
@@ -493,7 +503,33 @@ export default function TakeExam() {
     );
   }
 
-  // Exams can be started any time; the attempt timer runs from the moment the attempt starts.
+  if (closedForNewAttempts && !attemptStatus) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <XCircle className="w-10 h-10 text-slate-400 mx-auto" />
+            <div>
+              <div className="text-lg font-semibold text-slate-900">Test closed</div>
+              <p className="text-sm text-slate-600 mt-2">
+                This test is no longer accepting new attempts. If you already submitted, you can view
+                your results from the test schedule.
+              </p>
+            </div>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => navigate(`/student/tests/${testId}/result`)}
+            >
+              View results
+            </Button>
+            <Button variant="outline" onClick={() => navigate("/student/tests")}>
+              Back to schedule
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (test.accessPasswordHash && !pwVerified) {
     return (
@@ -762,23 +798,22 @@ export default function TakeExam() {
               </div>
             </div>
 
-            <div className="p-4 overflow-y-auto flex-1 min-h-0">
-              <div className="text-slate-900 text-base leading-relaxed whitespace-pre-wrap">
-                {currentQuestion?.text}
-              </div>
-
+            <div className="p-4 overflow-y-auto flex-1 min-h-0 flex flex-col gap-3">
               {currentQuestion?.imageUrl ? (
-                <div className="mt-4 rounded-xl border border-slate-200 overflow-hidden bg-slate-50">
-                  <img
-                    src={currentQuestion.imageUrl}
-                    alt={`Question ${currentIndex + 1}`}
-                    className="w-full max-h-[360px] object-contain"
-                    loading="lazy"
-                  />
+                <ExamQuestionImageFrame
+                  src={currentQuestion.imageUrl}
+                  alt={`Question ${currentIndex + 1} figure`}
+                  questionNo={currentQuestion.questionNo ?? currentIndex + 1}
+                />
+              ) : null}
+
+              {currentQuestion?.text?.trim() ? (
+                <div className="text-slate-900 text-base leading-relaxed whitespace-pre-wrap">
+                  {currentQuestion.text}
                 </div>
               ) : null}
 
-              <div className="mt-5 grid grid-cols-5 gap-2">
+              <div className="mt-auto pt-2 grid grid-cols-5 gap-2 shrink-0">
                 {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
                   const selected = answers[currentQuestion.id] === idx;
                   const correctIndex = correctIndexById.get(currentQuestion.id);

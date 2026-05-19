@@ -15,7 +15,13 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { BarChart3, Calendar, Edit2, FileSpreadsheet, Trash2 } from "lucide-react";
 import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
+import { ExamCloseToggleButton } from "../../components/exams/ExamCloseToggleButton";
 import { deleteExamTest, listExamTestsForAdmin } from "../../features/exams/examApi";
+import {
+  examWindowStatusLabel,
+  getExamWindowStatus,
+  isExamManuallyClosed,
+} from "../../features/exams/examAvailability";
 import type { ExamTest } from "../../features/exams/types";
 
 export default function ExamManagement() {
@@ -44,6 +50,10 @@ export default function ExamManagement() {
     };
   }, []);
 
+  const patchTest = (updated: ExamTest) => {
+    setTests((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+  };
+
   const remove = async (testId: string) => {
     if (!confirm("Delete this exam? (Subcollections need Firebase CLI recursive delete)")) return;
     try {
@@ -55,19 +65,20 @@ export default function ExamManagement() {
     }
   };
 
-  const statusOf = (t: ExamTest) => {
-    const now = Date.now();
-    const s = new Date(t.startAt).getTime();
-    const e = new Date(t.endAt).getTime();
-    if (now >= s && now <= e) return "active";
-    if (now < s) return "upcoming";
-    return "closed";
-  };
+  const statusBadge = (t: ExamTest) => {
+    const windowStatus = getExamWindowStatus(t);
+    const label = examWindowStatusLabel(t);
 
-  const statusBadge = (s: string) => {
-    if (s === "active") return <Badge className="bg-green-100 text-green-800">Active</Badge>;
-    if (s === "upcoming") return <Badge className="bg-blue-100 text-blue-800">Upcoming</Badge>;
-    return <Badge className="bg-gray-100 text-gray-800">Closed</Badge>;
+    if (isExamManuallyClosed(t)) {
+      return <Badge className="bg-slate-200 text-slate-800">{label}</Badge>;
+    }
+    if (windowStatus === "active") {
+      return <Badge className="bg-green-100 text-green-800">{label}</Badge>;
+    }
+    if (windowStatus === "upcoming") {
+      return <Badge className="bg-blue-100 text-blue-800">{label}</Badge>;
+    }
+    return <Badge className="bg-gray-100 text-gray-800">{label}</Badge>;
   };
 
   return (
@@ -86,10 +97,10 @@ export default function ExamManagement() {
 
       <Alert className="border-indigo-200 bg-indigo-50">
         <Calendar className="h-4 w-4 text-indigo-600" />
-        <AlertTitle className="text-indigo-900">Security</AlertTitle>
+        <AlertTitle className="text-indigo-900">Test control</AlertTitle>
         <AlertDescription className="text-indigo-800">
-          Correct answers are stored in a private subcollection and become readable to students only
-          after submission (and optionally after exam end), enforced via Firestore rules.
+          Use the lock icon to end a test for new attempts. Students already taking the exam can
+          finish; results and exports remain available. Reopen anytime with the unlock icon.
         </AlertDescription>
       </Alert>
 
@@ -112,54 +123,65 @@ export default function ExamManagement() {
                     <TableHead>Subject</TableHead>
                     <TableHead>Window</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Publish</TableHead>
                     <TableHead>Questions</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {tests.map((t) => {
-                    const s = statusOf(t);
                     const batchName = batches.find((b) => b.id === t.batchId)?.name || t.batchId;
                     return (
                       <TableRow key={t.id} className="hover:bg-slate-50">
                         <TableCell className="font-medium text-slate-900">{t.title}</TableCell>
                         <TableCell className="text-sm">{batchName}</TableCell>
                         <TableCell className="text-sm">{t.subject}</TableCell>
-                        <TableCell className="text-xs text-slate-600">
+                        <TableCell className="text-xs text-slate-600 max-w-[200px]">
                           {new Date(t.startAt).toLocaleString()} – {new Date(t.endAt).toLocaleString()}
                         </TableCell>
-                        <TableCell>{statusBadge(s)}</TableCell>
+                        <TableCell>{statusBadge(t)}</TableCell>
+                        <TableCell>
+                          {t.status === "published" ? (
+                            <Badge className="bg-emerald-100 text-emerald-800">Published</Badge>
+                          ) : (
+                            <Badge variant="outline">Draft</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">
                           <span className="font-semibold">{t.totalQuestions}</span> /{" "}
                           <span className="font-semibold">{t.totalMarks}</span>
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end items-center gap-1">
-                          <CopyGuestLinkButton test={t} />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-indigo-700 hover:bg-indigo-50"
-                            onClick={() => navigate(`/admin/tests/${t.id}/dashboard`)}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-emerald-700 hover:bg-emerald-50"
-                            onClick={() => navigate(`/admin/tests/${t.id}/results`)}
-                          >
-                            <FileSpreadsheet className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-rose-700 hover:bg-rose-50"
-                            onClick={() => void remove(t.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            <ExamCloseToggleButton test={t} onUpdated={patchTest} />
+                            <CopyGuestLinkButton test={t} />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-indigo-700 hover:bg-indigo-50"
+                              onClick={() => navigate(`/admin/tests/${t.id}/dashboard`)}
+                              aria-label="Edit test"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-emerald-700 hover:bg-emerald-50"
+                              onClick={() => navigate(`/admin/tests/${t.id}/results`)}
+                              aria-label="View results"
+                            >
+                              <FileSpreadsheet className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-rose-700 hover:bg-rose-50"
+                              onClick={() => void remove(t.id)}
+                              aria-label="Delete test"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -174,4 +196,3 @@ export default function ExamManagement() {
     </div>
   );
 }
-

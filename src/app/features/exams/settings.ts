@@ -1,3 +1,4 @@
+import { isExamManuallyClosed } from "./examAvailability";
 import type { ExamAdvancedSettings, ExamTest } from "./types";
 
 export const DEFAULT_EXAM_SETTINGS: Required<ExamAdvancedSettings> = {
@@ -88,9 +89,10 @@ export function isPasscodeGuestTestConfigured(
 
 /** Passcode tests that allow unenrolled guests (name + email collected at join). */
 export function allowsPasscodeGuestAccess(
-  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "status">,
+  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "status" | "manuallyClosedAt">,
 ): boolean {
   if (test.status && test.status !== "published") return false;
+  if (isExamManuallyClosed(test)) return false;
   return isPasscodeGuestTestConfigured(test);
 }
 

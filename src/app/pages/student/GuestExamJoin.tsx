@@ -28,6 +28,7 @@ import {
   listPasscodeGuestExamTests,
   verifyExamPasscode,
 } from "../../features/exams/examApi";
+import { isExamManuallyClosed } from "../../features/exams/examAvailability";
 import { allowsPasscodeGuestAccess } from "../../features/exams/settings";
 import type { ExamTest } from "../../features/exams/types";
 
@@ -248,6 +249,13 @@ export default function GuestExamJoin() {
               <span className="font-medium">{test.title}</span>
               <span className="text-emerald-800"> — {test.subject}</span>
             </div>
+          ) : test && isExamManuallyClosed(test) ? (
+            <Alert variant="destructive">
+              <AlertTitle>Test closed</AlertTitle>
+              <AlertDescription>
+                This test has been closed by the instructor and is not accepting new entries.
+              </AlertDescription>
+            </Alert>
           ) : test && !guestAllowed ? (
             <Alert variant="destructive">
               <AlertTitle>Not available</AlertTitle>
