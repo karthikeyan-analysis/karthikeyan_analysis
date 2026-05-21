@@ -293,7 +293,14 @@ export default function ExamResults() {
         return base;
       });
 
-      const ws = XLSX.utils.json_to_sheet(summaryRows);
+      const rankedResultRows = summaryRows.map((row) => ({
+        rank: row.rank,
+        studentName: row.studentName,
+        marksObtained: row.marksObtained,
+        correctCount: row.correctCount,
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rankedResultRows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Ranked results");
 

@@ -53,6 +53,10 @@ export interface ExamTest {
   /** All batches that can access this test (BATCH visibility). */
   batchIds?: string[];
   subject: string;
+  /** How the subject label was assigned while creating the test. */
+  subjectMode?: "common" | "per_batch";
+  /** Optional per-batch subject labels for shared tests across different batches. */
+  subjectByBatchId?: Record<string, string>;
   instructions?: string;
   /**
    * Optional access password hash (SHA-256, base64).

@@ -15,7 +15,7 @@ export const DEFAULT_EXAM_SETTINGS: Required<ExamAdvancedSettings> = {
   reviewShowCorrectness: true,
   reviewShowCorrectAnswer: false,
   reviewShowExplanation: false,
-  accessMode: "batch",
+  accessMode: "both",
   passcodeHint: "",
   allowedIdentifiers: [],
   allowedEmails: [],

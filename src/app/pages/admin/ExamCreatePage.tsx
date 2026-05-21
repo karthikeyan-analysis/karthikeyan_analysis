@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import { RadioGroup, RadioGroupItem } from "../../components/ui/radio-group";
 import ExamBatchAssignmentFields, {
   inferExamBatchMode,
   type ExamBatchMode,
@@ -19,28 +20,50 @@ import ExamBatchAssignmentFields, {
 import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
 import { normalizeExamBatchFields } from "../../features/exams/examBatchUtils";
 import { createExamTest } from "../../features/exams/examApi";
+import { sha256Base64 } from "../../features/exams/password";
 import {
   DEFAULT_MARKS_PER_QUESTION,
   type QuestionMarkOption,
 } from "../../features/exams/examMarks";
 import { DEFAULT_EXAM_SETTINGS } from "../../features/exams/settings";
 
+type AudienceMode = "selected_batches" | "all_batches";
+type SubjectMode = "common" | "per_batch";
+
 export default function ExamCreatePage() {
   const navigate = useNavigate();
   const { batches } = useData();
   const [creating, setCreating] = useState(false);
   const [testName, setTestName] = useState("demo");
+  const [audienceMode, setAudienceMode] = useState<AudienceMode>("selected_batches");
   const [batchMode, setBatchMode] = useState<ExamBatchMode>("single");
   const [batchIds, setBatchIds] = useState<string[]>(() =>
     batches[0]?.id ? [batches[0].id] : [],
   );
+  const [subjectMode, setSubjectMode] = useState<SubjectMode>("common");
   const [subject, setSubject] = useState("");
+  const [subjectByBatchId, setSubjectByBatchId] = useState<Record<string, string>>({});
+  const [passcode, setPasscode] = useState("");
   const [defaultMarksPerQuestion, setDefaultMarksPerQuestion] =
     useState<QuestionMarkOption>(DEFAULT_MARKS_PER_QUESTION);
 
+  const effectiveBatchIds = useMemo(() => {
+    if (audienceMode === "all_batches") return batches.map((b) => b.id);
+    return batchIds;
+  }, [audienceMode, batchIds, batches]);
+
+  const selectedBatches = useMemo(
+    () =>
+      effectiveBatchIds.flatMap((id) => {
+        const batch = batches.find((b) => b.id === id);
+        return batch ? [batch] : [];
+      }),
+    [effectiveBatchIds, batches],
+  );
+
   const subjects = useMemo(() => {
     const names = new Set<string>();
-    for (const id of batchIds) {
+    for (const id of effectiveBatchIds) {
       const batch = batches.find((b) => b.id === id);
       for (const s of batch?.subjects || []) {
         const t = s.trim();
@@ -48,7 +71,7 @@ export default function ExamCreatePage() {
       }
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [batchIds, batches]);
+  }, [effectiveBatchIds, batches]);
 
   const create = async () => {
     if (!testName.trim()) {
@@ -57,13 +80,24 @@ export default function ExamCreatePage() {
     }
     let normalized: { batchId: string; batchIds: string[] };
     try {
-      normalized = normalizeExamBatchFields(batchIds);
+      normalized = normalizeExamBatchFields(effectiveBatchIds);
     } catch {
       alert("Please select at least one batch.");
       return;
     }
-    if (!subject.trim()) {
-      alert("Please select or enter a subject.");
+    const cleanSubjectByBatch = Object.fromEntries(
+      normalized.batchIds.map((id) => [id, (subjectByBatchId[id] || "").trim()]),
+    );
+    if (subjectMode === "common" && !subject.trim()) {
+      alert("Please select or enter a common subject.");
+      return;
+    }
+    if (subjectMode === "per_batch" && Object.values(cleanSubjectByBatch).some((s) => !s)) {
+      alert("Please select a subject for every selected batch.");
+      return;
+    }
+    if (!passcode.trim()) {
+      alert("Passcode is mandatory for every test.");
       return;
     }
     setCreating(true);
@@ -71,12 +105,20 @@ export default function ExamCreatePage() {
       const now = Date.now();
       const start = new Date(now - 60_000).toISOString();
       const end = new Date(now + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
+      const resolvedSubject =
+        subjectMode === "common"
+          ? subject.trim()
+          : [...new Set(Object.values(cleanSubjectByBatch))].join(", ");
+      const accessPasswordHash = await sha256Base64(passcode.trim());
       const id = await createExamTest({
         title: testName.trim(),
         batchId: normalized.batchId,
         batchIds: normalized.batchIds,
-        subject: subject.trim(),
+        subject: resolvedSubject,
+        subjectMode,
+        subjectByBatchId: subjectMode === "per_batch" ? cleanSubjectByBatch : {},
         instructions: "",
+        accessPasswordHash,
         startAt: start,
         endAt: end,
         durationMinutes: 60,
@@ -88,7 +130,7 @@ export default function ExamCreatePage() {
         visibility: "BATCH",
         selectedStudentRecordIds: [],
         status: "draft",
-        settings: DEFAULT_EXAM_SETTINGS,
+        settings: { ...DEFAULT_EXAM_SETTINGS, accessMode: "both" },
       });
       navigate(`/admin/tests/${id}/dashboard`);
     } catch (e) {
@@ -113,35 +155,152 @@ export default function ExamCreatePage() {
             <Label>Test Name</Label>
             <Input value={testName} onChange={(e) => setTestName(e.target.value)} />
           </div>
-          <ExamBatchAssignmentFields
-            batches={batches.map((b) => ({ id: b.id, name: b.name }))}
-            mode={batchMode}
-            batchIds={batchIds}
-            onModeChange={setBatchMode}
-            onBatchIdsChange={(ids) => {
-              setBatchIds(ids);
-              setBatchMode(inferExamBatchMode(ids));
-            }}
-            hint="Choose single batch or multiple batches. You can adjust this anytime in test settings."
-          />
-          <div className="space-y-2">
-            <Label>Subject</Label>
-            {subjects.length > 0 ? (
-              <Select value={subject} onValueChange={(v) => setSubject(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select subject" />
-                </SelectTrigger>
-                <SelectContent>
-                  {subjects.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <div>
+              <Label>Test coverage</Label>
+              <p className="mt-1 text-xs text-slate-500">
+                Choose whether this is a common test for every batch or only selected batches.
+              </p>
+            </div>
+            <RadioGroup
+              value={audienceMode}
+              onValueChange={(v) => {
+                const next = v as AudienceMode;
+                setAudienceMode(next);
+                if (next === "all_batches") {
+                  const ids = batches.map((b) => b.id);
+                  setBatchIds(ids);
+                  setBatchMode(inferExamBatchMode(ids));
+                }
+              }}
+              className="grid gap-2 md:grid-cols-2"
+            >
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <RadioGroupItem value="all_batches" className="mt-0.5" />
+                <span>
+                  <span className="block font-semibold text-slate-900">Common test for all batches</span>
+                  <span className="text-xs text-slate-500">Automatically includes every current batch.</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <RadioGroupItem value="selected_batches" className="mt-0.5" />
+                <span>
+                  <span className="block font-semibold text-slate-900">Selected batch test</span>
+                  <span className="text-xs text-slate-500">Pick one batch or multiple batches manually.</span>
+                </span>
+              </label>
+            </RadioGroup>
+          </div>
+          {audienceMode === "selected_batches" ? (
+            <ExamBatchAssignmentFields
+              batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+              mode={batchMode}
+              batchIds={batchIds}
+              onModeChange={setBatchMode}
+              onBatchIdsChange={(ids) => {
+                setBatchIds(ids);
+                setBatchMode(inferExamBatchMode(ids));
+              }}
+              hint="Choose single batch or multiple batches. You can adjust this anytime in test settings."
+            />
+          ) : (
+            <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 p-3 text-sm text-indigo-900">
+              All {batches.length} batch{batches.length === 1 ? "" : "es"} will be included.
+            </div>
+          )}
+          <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+            <div>
+              <Label>Subject assignment</Label>
+              <p className="mt-1 text-xs text-slate-500">
+                Use one common subject, or set a different subject label for each selected batch.
+              </p>
+            </div>
+            <RadioGroup
+              value={subjectMode}
+              onValueChange={(v) => setSubjectMode(v as SubjectMode)}
+              className="flex flex-col gap-2 sm:flex-row"
+            >
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <RadioGroupItem value="common" />
+                Common subject
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                <RadioGroupItem value="per_batch" />
+                Subject per batch
+              </label>
+            </RadioGroup>
+            {subjectMode === "common" ? (
+              <div className="space-y-2">
+                <Label>Common Subject</Label>
+                {subjects.length > 0 ? (
+                  <Select value={subject} onValueChange={(v) => setSubject(v)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select subject" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {subjects.map((s) => (
+                        <SelectItem key={s} value={s}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+                )}
+              </div>
             ) : (
-              <Input value={subject} onChange={(e) => setSubject(e.target.value)} />
+              <div className="space-y-3">
+                {selectedBatches.map((batch) => {
+                  const batchSubjects = batch?.subjects || [];
+                  return (
+                    <div key={batch.id} className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-[220px_1fr] md:items-center">
+                      <div className="text-sm font-medium text-slate-800">{batch.name}</div>
+                      {batchSubjects.length > 0 ? (
+                        <Select
+                          value={subjectByBatchId[batch.id] || ""}
+                          onValueChange={(v) =>
+                            setSubjectByBatchId((prev) => ({ ...prev, [batch.id]: v }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select subject for this batch" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {batchSubjects.map((s) => (
+                              <SelectItem key={s} value={s}>
+                                {s}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={subjectByBatchId[batch.id] || ""}
+                          onChange={(e) =>
+                            setSubjectByBatchId((prev) => ({ ...prev, [batch.id]: e.target.value }))
+                          }
+                          placeholder="Enter subject"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             )}
+          </div>
+          <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+            <Label>Mandatory Passcode</Label>
+            <Input
+              type="password"
+              value={passcode}
+              onChange={(e) => setPasscode(e.target.value)}
+              placeholder="Set passcode for enrolled students and link users"
+            />
+            <p className="text-xs text-amber-800">
+              Every test is password protected by default. Enrolled students and unenrolled students using the join link
+              must enter the passcode before starting.
+            </p>
           </div>
           <QuestionMarksSelect
             value={defaultMarksPerQuestion}

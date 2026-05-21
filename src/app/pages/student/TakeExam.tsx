@@ -57,8 +57,6 @@ import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
 import {
   allowsPasscodeGuestAccess,
   enrolledStudentsCanAccessTest,
-  getEffectiveExamSettings,
-  normalizeAccessMode,
 } from "../../features/exams/settings";
 
 function clamp(n: number, min: number, max: number) {
@@ -220,16 +218,8 @@ export default function TakeExam() {
         setTest(t);
 
         const guestOk = isGuestParticipant && allowsPasscodeGuestAccess(t);
-        const enrolledOk =
-          !isGuestParticipant &&
-          !!user?.batchId &&
-          examIncludesBatch(t, user.batchId) &&
-          enrolledStudentsCanAccessTest(t);
-        const accessMode = normalizeAccessMode(getEffectiveExamSettings(t).accessMode);
-        const enrolledBypassPasscode =
-          enrolledOk && (accessMode === "batch" || accessMode === "both");
         const alreadyOk = sessionStorage.getItem(pwSessionKey) === "1";
-        setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk || enrolledBypassPasscode);
+        setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk);
         if (guestOk) sessionStorage.setItem(pwSessionKey, "1");
       } catch (e) {
         console.error(e);
@@ -242,7 +232,7 @@ export default function TakeExam() {
     return () => {
       cancelled = true;
     };
-  }, [isGuestParticipant, pwSessionKey, testId, uid, user?.batchId]);
+  }, [isGuestParticipant, pwSessionKey, testId, uid]);
 
   useEffect(() => {
     if (!uid || !testId) return;
@@ -542,10 +532,6 @@ export default function TakeExam() {
     examIncludesBatch(test, user.batchId) &&
     enrolledStudentsCanAccessTest(test);
 
-  const accessMode = normalizeAccessMode(getEffectiveExamSettings(test).accessMode);
-  const enrolledBypassPasscode =
-    canAccessAsEnrolled && (accessMode === "batch" || accessMode === "both");
-
   if (!canAccessAsGuest && !canAccessAsEnrolled) {
     return (
       <Alert variant="destructive">
@@ -584,7 +570,7 @@ export default function TakeExam() {
     );
   }
 
-  if (test.accessPasswordHash && !pwVerified && !enrolledBypassPasscode) {
+  if (test.accessPasswordHash && !pwVerified) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center p-4">
         <Card className="w-full max-w-md">

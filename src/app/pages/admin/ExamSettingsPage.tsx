@@ -24,7 +24,7 @@ import {
   getExamBatchIds,
   normalizeExamBatchFields,
 } from "../../features/exams/examBatchUtils";
-import type { ExamAccessMode, ExamAdvancedSettings, ExamTest } from "../../features/exams/types";
+import type { ExamAdvancedSettings, ExamTest } from "../../features/exams/types";
 
 type FormState = {
   title: string;
@@ -117,8 +117,8 @@ export default function ExamSettingsPage() {
     const startAt = test.startAt || new Date(now - 60_000).toISOString();
     const endAt = test.endAt || new Date(now + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
 
-    const accessMode = form.settings.accessMode as ExamAccessMode;
-    const usesPasscode = accessMode === "passcode" || accessMode === "both";
+    const accessMode = "both";
+    const usesPasscode = true;
 
     if (usesPasscode && !form.passcode.trim() && !test.accessPasswordHash) {
       alert("Set a passcode for this access mode.");
@@ -127,6 +127,7 @@ export default function ExamSettingsPage() {
 
     const settings: ExamAdvancedSettings = applySystemExamSettingLocks({
       ...form.settings,
+      accessMode,
       allowedIdentifiers: [],
       allowedEmails: [],
     });
@@ -149,11 +150,8 @@ export default function ExamSettingsPage() {
         settings,
       };
 
-      const clearPassword = accessMode === "batch";
       const wantsPassword = usesPasscode && form.passcode.trim().length > 0;
-      if (clearPassword) {
-        (updates as Partial<ExamTest> & { accessPasswordHash?: string | null }).accessPasswordHash = null;
-      } else if (wantsPassword) {
+      if (wantsPassword) {
         (updates as Partial<ExamTest> & { accessPasswordHash?: string }).accessPasswordHash =
           await sha256Base64(form.passcode.trim());
       }
@@ -280,60 +278,36 @@ export default function ExamSettingsPage() {
           <CardTitle>Access Control</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Who can take your test?</Label>
-            <select
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm"
-              value={form.settings.accessMode}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  settings: { ...form.settings, accessMode: e.target.value as ExamAccessMode },
-                })
-              }
-            >
-              <option value="batch">Students in selected batch(es) only</option>
-              <option value="passcode">Anyone who enters a passcode</option>
-              <option value="both">Both — selected batch(es) and passcode link</option>
-            </select>
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 space-y-1">
+            <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+              Mandatory passcode access
+            </div>
+            <div className="text-sm font-medium text-slate-900">
+              Selected batch(es) + passcode link users
+            </div>
+            <div className="text-xs text-slate-600">
+              {batchStudentCount} enrolled student{batchStudentCount === 1 ? "" : "s"} from {selectedBatchLabel} can see
+              this test, but everyone must enter the passcode before starting. Unenrolled students can also join with the
+              passcode link.
+            </div>
           </div>
 
-          {form.settings.accessMode === "batch" || form.settings.accessMode === "both" ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-1">
-              <div className="text-xs font-medium text-slate-700">Selected batch(es)</div>
-              <div className="text-sm text-slate-900">{selectedBatchLabel}</div>
-              <div className="text-xs text-slate-600">
-                {batchStudentCount} enrolled student{batchStudentCount === 1 ? "" : "s"} can take this test from
-                their schedule. Change batches in Basic Settings above.
-              </div>
-            </div>
-          ) : null}
-
-          {form.settings.accessMode === "passcode" || form.settings.accessMode === "both" ? (
-            <div className="space-y-2">
-              <Label>Passcode</Label>
-              <Input
-                type="password"
-                value={form.passcode}
-                onChange={(e) => setForm({ ...form, passcode: e.target.value })}
-                placeholder={
-                  test.accessPasswordHash ? "Leave blank to keep current passcode" : "Set passcode"
-                }
-              />
-              {test.accessPasswordHash ? (
-                <p className="text-xs text-slate-500">A passcode is already set. Enter a new one only to change it.</p>
-              ) : null}
-              <p className="text-xs text-slate-600">
-                {form.settings.accessMode === "both"
-                  ? "Unenrolled students can also join at "
-                  : "Students join at "}
-                <span className="font-mono text-slate-800">/student/join-test</span> with this passcode.
-                {form.settings.accessMode === "both"
-                  ? " Enrolled students in the selected batch(es) use their normal login — no passcode required."
-                  : " They enter name and email before starting; results appear in analytics."}
-              </p>
-            </div>
-          ) : null}
+          <div className="space-y-2">
+            <Label>Passcode</Label>
+            <Input
+              type="password"
+              value={form.passcode}
+              onChange={(e) => setForm({ ...form, passcode: e.target.value })}
+              placeholder={test.accessPasswordHash ? "Leave blank to keep current passcode" : "Set passcode"}
+            />
+            {test.accessPasswordHash ? (
+              <p className="text-xs text-slate-500">A passcode is already set. Enter a new one only to change it.</p>
+            ) : null}
+            <p className="text-xs text-slate-600">
+              Enrolled students and unenrolled students at{" "}
+              <span className="font-mono text-slate-800">/student/join-test</span> must enter this passcode.
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label>Time limit (minutes)</Label>
