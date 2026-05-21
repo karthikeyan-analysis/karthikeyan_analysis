@@ -15,6 +15,7 @@ import AllTestsAnalytics from "./pages/admin/AllTestsAnalytics";
 import StudentTestReports from "./pages/admin/StudentTestReports";
 import ExamStudioLayout from "./pages/admin/ExamStudioLayout";
 import ExamResults from "./pages/admin/ExamResults";
+import ExamResponseSheets from "./pages/admin/ExamResponseSheets";
 import ExamCreatePage from "./pages/admin/ExamCreatePage";
 import ExamDashboardPage from "./pages/admin/ExamDashboardPage";
 import ExamSettingsPage from "./pages/admin/ExamSettingsPage";
@@ -112,6 +113,7 @@ export const router = createBrowserRouter([
           { path: "questions", element: <ExamQuestionsPage /> },
           { path: "publish", element: <ExamPublishPage /> },
           { path: "results", element: <ExamResults /> },
+          { path: "response-sheets", element: <ExamResponseSheets /> },
         ],
       },
     ],

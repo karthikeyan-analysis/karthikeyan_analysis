@@ -54,7 +54,9 @@ export default function ExamStudioLayout() {
     };
   }, [questionCount, test]);
 
-  const isResultsPage = location.pathname.includes(`/admin/tests/${testId}/results`);
+  const isResultsPage =
+    location.pathname.includes(`/admin/tests/${testId}/results`) ||
+    location.pathname.includes(`/admin/tests/${testId}/response-sheets`);
 
   if (loading) return <div className="text-sm text-slate-500">Loading test workspace...</div>;
 

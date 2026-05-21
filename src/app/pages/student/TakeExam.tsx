@@ -169,6 +169,9 @@ export default function TakeExam() {
   }, [answers, questionIdOrder]);
 
   const reviewCount = useMemo(() => markedForReview.length, [markedForReview.length]);
+  const markedWithoutAnswerCount = useMemo(() => {
+    return markedForReview.reduce((acc, qid) => (answers[qid] == null ? acc + 1 : acc), 0);
+  }, [answers, markedForReview]);
 
   const notVisitedCount = useMemo(() => {
     const visitedCount = Object.keys(visited).length;
@@ -178,18 +181,28 @@ export default function TakeExam() {
   const paletteStatus = useMemo(() => {
     const statusById: Record<
       string,
-      "not_visited" | "not_answered" | "answered" | "marked_for_review"
+      "not_visited" | "not_answered" | "answered" | "marked_for_review" | "answered_marked"
     > = {};
 
     questionIdOrder.forEach((qid) => {
       const isVisited = !!visited[qid];
+      const hasAnswer = answers[qid] != null;
+      const isMarked = markedForReview.includes(qid);
       if (!isVisited) statusById[qid] = "not_visited";
-      else statusById[qid] = answers[qid] == null ? "not_answered" : "answered";
-      if (markedForReview.includes(qid)) statusById[qid] = "marked_for_review";
+      else if (isMarked && hasAnswer) statusById[qid] = "answered_marked";
+      else if (isMarked) statusById[qid] = "marked_for_review";
+      else statusById[qid] = hasAnswer ? "answered" : "not_answered";
     });
 
     return statusById;
   }, [answers, markedForReview, questionIdOrder, visited]);
+
+  useEffect(() => {
+    if (!currentQuestion) return;
+    if (answers[currentQuestion.id] == null) return;
+    if (!markedForReview.includes(currentQuestion.id)) return;
+    setMarkedForReview((prev) => prev.filter((id) => id !== currentQuestion.id));
+  }, [answers, currentQuestion, markedForReview]);
 
   const autoSubmitTriggered = useRef(false);
 
@@ -818,24 +831,22 @@ export default function TakeExam() {
               </div>
               <div
                 className={cn(
-                  "shrink-0 flex items-center gap-2 rounded-lg border px-2.5 py-1 sm:px-3",
-                  timerUrgent ? "bg-red-50 border-red-300" : "bg-indigo-50/90 border-indigo-200",
+                  "shrink-0 flex items-center gap-1.5 rounded-md border px-2 py-1",
+                  timerUrgent ? "bg-red-50 border-red-300" : "bg-white border-slate-200",
                 )}
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <Clock className={cn("w-3.5 h-3.5 shrink-0", timerUrgent ? "text-red-600" : "text-indigo-600")} />
-                <div className="leading-none">
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Time left</div>
-                  <span
-                    className={cn(
-                      "text-xl sm:text-2xl font-black tabular-nums tracking-tight",
-                      timerUrgent ? "text-red-700" : "text-indigo-950",
-                    )}
-                  >
-                    {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
-                  </span>
-                </div>
+                <Clock className={cn("w-3.5 h-3.5 shrink-0", timerUrgent ? "text-red-600" : "text-slate-500")} />
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Left</span>
+                <span
+                  className={cn(
+                    "text-base sm:text-lg font-black tabular-nums tracking-tight leading-none",
+                    timerUrgent ? "text-red-700" : "text-slate-900",
+                  )}
+                >
+                  {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
+                </span>
               </div>
             </div>
           </div>
@@ -1083,17 +1094,19 @@ export default function TakeExam() {
                 const base =
                   st === "answered"
                     ? "bg-emerald-600 text-white border-emerald-600"
+                    : st === "answered_marked"
+                      ? "bg-emerald-600 text-white border-emerald-600"
                     : st === "marked_for_review"
                       ? "bg-violet-600 text-white border-violet-600"
                       : st === "not_answered"
                         ? "bg-red-600 text-white border-red-600"
-                        : "bg-white text-slate-900 border-slate-200";
+                        : "bg-slate-100 text-slate-900 border-slate-300";
 
                 return (
                   <button
                     key={q.id}
                     className={cn(
-                      "h-9 rounded-lg border text-xs font-semibold transition-all",
+                      "relative h-9 rounded-lg border text-xs font-semibold transition-all",
                       base,
                       isCurrent &&
                         st === "not_answered" &&
@@ -1105,6 +1118,12 @@ export default function TakeExam() {
                     )}
                     onClick={() => setCurrentIndex(idx)}
                   >
+                    {st === "answered_marked" ? (
+                      <span
+                        className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-violet-600"
+                        title="Answered and marked for review"
+                      />
+                    ) : null}
                     {idx + 1}
                   </button>
                 );
@@ -1116,17 +1135,17 @@ export default function TakeExam() {
               <LegendChip color="bg-emerald-600" label="Answered" />
               <LegendChip color="bg-red-600" label="Not Answered" />
               <LegendChip color="bg-violet-600" label="Marked" />
-              <LegendChip color="bg-white border border-slate-200" label="Not Visited" />
+              <LegendChip color="bg-slate-100 border border-slate-300" label="Not Visited" />
             </div>
 
             <div className="mt-3 shrink-0 border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-600">
               <div className="flex items-center justify-between">
-                <span>Answered</span>
+                <span>Counted for evaluation</span>
                 <span className="font-semibold text-slate-900">{answeredCount}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span>Marked</span>
-                <span className="font-semibold text-slate-900">{reviewCount}</span>
+                <span>Marked without answer</span>
+                <span className="font-semibold text-slate-900">{markedWithoutAnswerCount}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span>Not visited (approx)</span>
@@ -1135,6 +1154,10 @@ export default function TakeExam() {
             </div>
 
             <div className="shrink-0 pt-3">
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                Answered questions, including answered and marked for review, will be considered for evaluation.
+                Marked for review without an answer will not be counted.
+              </div>
               <div className="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
                 <Clock className="w-3.5 h-3.5" />
                 Exam ends only when the timer finishes.

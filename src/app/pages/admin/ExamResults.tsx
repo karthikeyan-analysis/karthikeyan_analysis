@@ -349,10 +349,16 @@ export default function ExamResults() {
             {test.title} • {batchName} • {test.subject}
           </div>
         </div>
-        <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void exportExcel()} disabled={exporting}>
-          {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          <span className="ml-2">Download Excel</span>
-        </Button>
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button variant="outline" onClick={() => navigate(`/admin/tests/${testId}/response-sheets`)}>
+            <Download className="w-4 h-4 mr-2" />
+            Response PDFs
+          </Button>
+          <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void exportExcel()} disabled={exporting}>
+            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <span className="ml-2">Download Excel</span>
+          </Button>
+        </div>
       </div>
 
       <Card>

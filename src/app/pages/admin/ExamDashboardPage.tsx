@@ -86,6 +86,9 @@ export default function ExamDashboardPage() {
             <Button variant="outline" asChild>
               <Link to={`/admin/tests/${testId}/publish`}>Publish</Link>
             </Button>
+            <Button variant="outline" asChild>
+              <Link to={`/admin/tests/${testId}/response-sheets`}>Response PDFs</Link>
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -122,6 +125,12 @@ export default function ExamDashboardPage() {
             title="View results"
             description="Track student performance and export score sheets."
             href={`/admin/tests/${testId}/results`}
+          />
+          <TaskRow
+            index={5}
+            title="Download response PDFs"
+            description="Download each submitted student response sheet individually."
+            href={`/admin/tests/${testId}/response-sheets`}
           />
         </CardContent>
       </Card>
