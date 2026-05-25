@@ -3,9 +3,16 @@ import { useNavigate } from "react-router";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Download, Loader2, ArrowLeft } from "lucide-react";
-import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
+import { formatExamBatchLabel, getExamBatchIds } from "../../features/exams/examBatchUtils";
 import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import {
@@ -33,6 +40,10 @@ function participationCellText(a: ExamAttempt | undefined, test: ExamTest) {
   return "In progress";
 }
 
+function roundPercent(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
 type Row = {
   test: ExamTest;
   attempts: ExamAttempt[];
@@ -45,11 +56,46 @@ type Row = {
   maxPercentSubmitted: number | null;
 };
 
+type BatchAnalyticsRow = {
+  batchId: string;
+  batchName: string;
+  studentCount: number;
+  testsCount: number;
+  eligibleSlots: number;
+  started: number;
+  submitted: number;
+  inProgress: number;
+  absent: number;
+  attendanceRate: number | "";
+  submissionRate: number | "";
+  avgPercentSubmitted: number | "";
+  minPercentSubmitted: number | "";
+  maxPercentSubmitted: number | "";
+};
+
+type BatchTestAnalyticsRow = {
+  batchId: string;
+  batchName: string;
+  test: ExamTest;
+  eligibleStudents: number;
+  started: number;
+  submitted: number;
+  inProgress: number;
+  absent: number;
+  attendanceRate: number | "";
+  avgPercentSubmitted: number | "";
+  minPercentSubmitted: number | "";
+  maxPercentSubmitted: number | "";
+  submittedPercentSum: number;
+  submittedPercentCount: number;
+};
+
 export default function AllTestsAnalytics() {
   const navigate = useNavigate();
   const { students, batches } = useData();
   const [loading, setLoading] = useState(true);
-  const [exportMode, setExportMode] = useState<null | "full" | "attendance">(null);
+  const [exportMode, setExportMode] = useState<null | "full" | "attendance" | "batch">(null);
+  const [batchFilter, setBatchFilter] = useState("all");
   const [pairs, setPairs] = useState<{ test: ExamTest; attempts: ExamAttempt[] }[]>([]);
   const exporting = exportMode !== null;
 
@@ -122,6 +168,97 @@ export default function AllTestsAnalytics() {
   const rosterSorted = useMemo(
     () => [...students].sort((a, b) => `${a.name}`.localeCompare(`${b.name}`, undefined, { sensitivity: "base" })),
     [students],
+  );
+
+  const batchTestAnalyticsRows: BatchTestAnalyticsRow[] = useMemo(() => {
+    return batches.flatMap((batch) => {
+      const batchStudents = students.filter((s) => s.batchId === batch.id);
+      return testsSorted
+        .filter((r) => {
+          const assignedToBatch = getExamBatchIds(r.test).includes(batch.id);
+          const hasSelectiveStudent = batchStudents.some((s) => isEligibleForExam(s, r.test));
+          return assignedToBatch || hasSelectiveStudent;
+        })
+        .map((r) => {
+          const eligibleStudents = batchStudents.filter((s) => isEligibleForExam(s, r.test));
+          const attempts = eligibleStudents
+            .map((s) => attemptsMap.get(attemptCompositeKey(r.test.id, s.id)))
+            .filter((a): a is ExamAttempt => Boolean(a));
+          const submittedAttempts = attempts.filter((a) => a.status === "submitted");
+          const percents = submittedAttempts
+            .map((a) => percentScore(a, r.test.totalMarks))
+            .filter((p): p is number => p != null);
+          const started = attempts.length;
+          const submitted = submittedAttempts.length;
+          const inProgress = attempts.filter((a) => a.status === "in_progress").length;
+          const attendanceRate =
+            eligibleStudents.length > 0 ? roundPercent((started / eligibleStudents.length) * 100) : "";
+
+          return {
+            batchId: batch.id,
+            batchName: batch.name,
+            test: r.test,
+            eligibleStudents: eligibleStudents.length,
+            started,
+            submitted,
+            inProgress,
+            absent: Math.max(eligibleStudents.length - started, 0),
+            attendanceRate,
+            avgPercentSubmitted:
+              percents.length > 0 ? roundPercent(percents.reduce((sum, p) => sum + p, 0) / percents.length) : "",
+            minPercentSubmitted: percents.length > 0 ? roundPercent(Math.min(...percents)) : "",
+            maxPercentSubmitted: percents.length > 0 ? roundPercent(Math.max(...percents)) : "",
+            submittedPercentSum: percents.reduce((sum, p) => sum + p, 0),
+            submittedPercentCount: percents.length,
+          };
+        });
+    });
+  }, [attemptsMap, batches, students, testsSorted]);
+
+  const batchAnalyticsRows: BatchAnalyticsRow[] = useMemo(() => {
+    return batches.map((batch) => {
+      const relatedRows = batchTestAnalyticsRows.filter((r) => r.batchId === batch.id);
+      const submittedPercentCount = relatedRows.reduce((sum, r) => sum + r.submittedPercentCount, 0);
+      const submittedPercentSum = relatedRows.reduce((sum, r) => sum + r.submittedPercentSum, 0);
+      const minPercents = relatedRows
+        .map((r) => r.minPercentSubmitted)
+        .filter((p): p is number => typeof p === "number");
+      const maxPercents = relatedRows
+        .map((r) => r.maxPercentSubmitted)
+        .filter((p): p is number => typeof p === "number");
+      const eligibleSlots = relatedRows.reduce((sum, r) => sum + r.eligibleStudents, 0);
+      const started = relatedRows.reduce((sum, r) => sum + r.started, 0);
+      const submitted = relatedRows.reduce((sum, r) => sum + r.submitted, 0);
+      const inProgress = relatedRows.reduce((sum, r) => sum + r.inProgress, 0);
+      return {
+        batchId: batch.id,
+        batchName: batch.name,
+        studentCount: students.filter((s) => s.batchId === batch.id).length,
+        testsCount: relatedRows.length,
+        eligibleSlots,
+        started,
+        submitted,
+        inProgress,
+        absent: Math.max(eligibleSlots - started, 0),
+        attendanceRate: eligibleSlots > 0 ? roundPercent((started / eligibleSlots) * 100) : "",
+        submissionRate: eligibleSlots > 0 ? roundPercent((submitted / eligibleSlots) * 100) : "",
+        avgPercentSubmitted:
+          submittedPercentCount > 0 ? roundPercent(submittedPercentSum / submittedPercentCount) : "",
+        minPercentSubmitted: minPercents.length > 0 ? roundPercent(Math.min(...minPercents)) : "",
+        maxPercentSubmitted: maxPercents.length > 0 ? roundPercent(Math.max(...maxPercents)) : "",
+      };
+    });
+  }, [batchTestAnalyticsRows, batches, students]);
+
+  const filteredBatchRows = useMemo(
+    () => (batchFilter === "all" ? batchAnalyticsRows : batchAnalyticsRows.filter((r) => r.batchId === batchFilter)),
+    [batchAnalyticsRows, batchFilter],
+  );
+
+  const filteredBatchTestRows = useMemo(
+    () =>
+      batchFilter === "all" ? batchTestAnalyticsRows : batchTestAnalyticsRows.filter((r) => r.batchId === batchFilter),
+    [batchFilter, batchTestAnalyticsRows],
   );
 
   const studentLookup = (studentRecordId?: string) =>
@@ -225,6 +362,7 @@ export default function AllTestsAnalytics() {
       for (const r of rows) {
         for (const a of r.attempts) {
           const p = participantFromAttempt(a);
+          const st = studentLookup(a.studentRecordId);
           const rollupKey = a.studentRecordId || a.uid;
           let row = rollupMap.get(rollupKey);
           if (!row) {
@@ -452,6 +590,154 @@ export default function AllTestsAnalytics() {
     }
   };
 
+  const exportBatchAnalyticsExcel = () => {
+    if (batchAnalyticsRows.length === 0) return;
+    setExportMode("batch");
+    try {
+      const scopedBatchIds =
+        batchFilter === "all" ? batches.map((b) => b.id) : batches.filter((b) => b.id === batchFilter).map((b) => b.id);
+      const scopedBatchIdSet = new Set(scopedBatchIds);
+      const scopedBatchRows = batchAnalyticsRows.filter((r) => scopedBatchIdSet.has(r.batchId));
+      const scopedBatchTestRows = batchTestAnalyticsRows.filter((r) => scopedBatchIdSet.has(r.batchId));
+      const scopedStudents = rosterSorted.filter((s) => s.batchId && scopedBatchIdSet.has(s.batchId));
+
+      const batchSummary = scopedBatchRows.map((r) => ({
+        batchId: r.batchId,
+        batchName: r.batchName,
+        enrolledStudents: r.studentCount,
+        testsInScope: r.testsCount,
+        eligibleStudentTestSlots: r.eligibleSlots,
+        started: r.started,
+        submitted: r.submitted,
+        inProgress: r.inProgress,
+        absent: r.absent,
+        attendanceRate_pct: r.attendanceRate,
+        submissionRate_pct: r.submissionRate,
+        avgPercent_amongSubmitted: r.avgPercentSubmitted,
+        minPercent_amongSubmitted: r.minPercentSubmitted,
+        maxPercent_amongSubmitted: r.maxPercentSubmitted,
+      }));
+
+      const batchTestSummary = scopedBatchTestRows.map((r) => ({
+        batchId: r.batchId,
+        batchName: r.batchName,
+        examId: r.test.id,
+        examTitle: r.test.title,
+        subject: r.test.subject,
+        startAt: toIsoOrEmpty(r.test.startAt),
+        endAt: toIsoOrEmpty(r.test.endAt),
+        durationMinutes: r.test.durationMinutes,
+        totalQuestions: r.test.totalQuestions,
+        totalMarks: r.test.totalMarks,
+        eligibleStudents: r.eligibleStudents,
+        started: r.started,
+        submitted: r.submitted,
+        inProgress: r.inProgress,
+        absent: r.absent,
+        attendanceRate_pct: r.attendanceRate,
+        avgPercent_amongSubmitted: r.avgPercentSubmitted,
+        minPercent_amongSubmitted: r.minPercentSubmitted,
+        maxPercent_amongSubmitted: r.maxPercentSubmitted,
+      }));
+
+      const studentSummary = scopedStudents.map((s) => {
+        const batchName = batches.find((b) => b.id === s.batchId)?.name || "";
+        let eligible = 0;
+        let started = 0;
+        let submitted = 0;
+        let inProgress = 0;
+        const percents: number[] = [];
+        for (const r of testsSorted) {
+          if (!isEligibleForExam(s, r.test)) continue;
+          eligible++;
+          const a = attemptsMap.get(attemptCompositeKey(r.test.id, s.id));
+          if (!a) continue;
+          started++;
+          if (a.status === "in_progress") inProgress++;
+          if (a.status === "submitted") {
+            submitted++;
+            const pct = percentScore(a, r.test.totalMarks);
+            if (pct != null) percents.push(pct);
+          }
+        }
+        return {
+          studentRecordId: s.id,
+          studentId: s.studentId,
+          studentName: s.name,
+          studentEmail: s.email,
+          batchId: s.batchId || "",
+          batchName,
+          rosterStatus: s.status,
+          examsEligible: eligible,
+          examsStarted_present: started,
+          examsSubmitted: submitted,
+          examsInProgress: inProgress,
+          examsAbsent_eligibleNoStart: Math.max(eligible - started, 0),
+          attendanceRate_pct: eligible > 0 ? roundPercent((started / eligible) * 100) : "",
+          submissionRate_pct: eligible > 0 ? roundPercent((submitted / eligible) * 100) : "",
+          avgPercent_amongSubmittedTests:
+            percents.length > 0 ? roundPercent(percents.reduce((sum, p) => sum + p, 0) / percents.length) : "",
+          minPercent_amongSubmittedTests: percents.length > 0 ? roundPercent(Math.min(...percents)) : "",
+          maxPercent_amongSubmittedTests: percents.length > 0 ? roundPercent(Math.max(...percents)) : "",
+        };
+      });
+
+      const studentTestDetail = scopedStudents.flatMap((s) => {
+        const batchName = batches.find((b) => b.id === s.batchId)?.name || "";
+        return testsSorted
+          .filter((r) => isEligibleForExam(s, r.test))
+          .map((r) => {
+            const a = attemptsMap.get(attemptCompositeKey(r.test.id, s.id));
+            const pct = a?.status === "submitted" ? percentScore(a, r.test.totalMarks) : null;
+            return {
+              studentRecordId: s.id,
+              studentId: s.studentId,
+              studentName: s.name,
+              studentEmail: s.email,
+              batchId: s.batchId || "",
+              batchName,
+              examId: r.test.id,
+              examTitle: r.test.title,
+              examSubject: r.test.subject,
+              examStartAt: toIsoOrEmpty(r.test.startAt),
+              examEndAt: toIsoOrEmpty(r.test.endAt),
+              presentAbsent: a ? "Present" : "Absent",
+              attemptStatus: a?.status ?? "",
+              score: a?.score ?? "",
+              maxMarks: a ? (a.maxScore ?? r.test.totalMarks) : "",
+              percent: pct ?? "",
+              startedAt: a ? toIsoOrEmpty(a.startedAt) : "",
+              submittedAt: a ? toIsoOrEmpty(a.submittedAt) : "",
+              lastSavedAt: a ? toIsoOrEmpty(a.lastSavedAt) : "",
+            };
+          });
+      });
+
+      const notesAoA: string[][] = [
+        ["Batch-wise analytics export"],
+        [""],
+        ["Eligible student-test slot", "One enrolled student who can access one exam."],
+        ["Present/started", "Student has an attempt record for that exam, submitted or in progress."],
+        ["Absent", "Student was eligible for the exam but has no attempt record."],
+        ["N/A", "Guest/passcode-only attempts are not included in batch roster analytics."],
+        [""],
+        [`Batch filter: ${batchFilter === "all" ? "All batches" : scopedBatchRows[0]?.batchName || batchFilter}`],
+      ];
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(batchSummary), "Batch_summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(batchTestSummary), "Batch_test_summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentSummary), "Batch_student_summary");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(studentTestDetail), "Student_test_detail");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(notesAoA), "Notes");
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      const fileScope = batchFilter === "all" ? "all_batches" : scopedBatchRows[0]?.batchName || batchFilter;
+      XLSX.writeFile(wb, `${safeFileName(`batch_wise_analytics_${fileScope}_${stamp}`)}.xlsx`);
+    } finally {
+      setExportMode(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
@@ -469,6 +755,19 @@ export default function AllTestsAnalytics() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
+          <Button
+            variant="outline"
+            className="border-emerald-300 text-emerald-800 hover:bg-emerald-50"
+            onClick={exportBatchAnalyticsExcel}
+            disabled={loading || exporting || filteredBatchRows.length === 0}
+          >
+            {exportMode === "batch" ? (
+              <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Batch-wise Excel
+          </Button>
           <Button
             variant="outline"
             className="border-slate-300"
@@ -523,6 +822,132 @@ export default function AllTestsAnalytics() {
           </CardHeader>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle>Batch-wise analytics</CardTitle>
+            <CardDescription>
+              Batch-level attendance, submission, and score trends across all eligible CBT tests.
+            </CardDescription>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Select value={batchFilter} onValueChange={setBatchFilter}>
+              <SelectTrigger className="w-full sm:w-[220px]" aria-label="Filter batch analytics">
+                <SelectValue placeholder="Filter by batch" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All batches</SelectItem>
+                {batches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              className="bg-emerald-600 hover:bg-emerald-700"
+              onClick={exportBatchAnalyticsExcel}
+              disabled={loading || exporting || filteredBatchRows.length === 0}
+            >
+              {exportMode === "batch" ? (
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+              ) : (
+                <Download className="w-4 h-4 mr-2" />
+              )}
+              Export Excel
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          {loading ? (
+            <div className="flex items-center gap-2 text-slate-600 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Loading batch analytics…
+            </div>
+          ) : filteredBatchRows.length === 0 ? (
+            <p className="text-sm text-slate-500">No batch analytics found.</p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Batch</TableHead>
+                      <TableHead className="text-right">Students</TableHead>
+                      <TableHead className="text-right">Tests</TableHead>
+                      <TableHead className="text-right">Eligible slots</TableHead>
+                      <TableHead className="text-right">Started</TableHead>
+                      <TableHead className="text-right">Submitted</TableHead>
+                      <TableHead className="text-right">Absent</TableHead>
+                      <TableHead className="text-right">Attendance</TableHead>
+                      <TableHead className="text-right">Avg %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredBatchRows.map((r) => (
+                      <TableRow key={r.batchId}>
+                        <TableCell className="font-medium text-slate-900">{r.batchName}</TableCell>
+                        <TableCell className="text-right">{r.studentCount}</TableCell>
+                        <TableCell className="text-right">{r.testsCount}</TableCell>
+                        <TableCell className="text-right">{r.eligibleSlots}</TableCell>
+                        <TableCell className="text-right">{r.started}</TableCell>
+                        <TableCell className="text-right">{r.submitted}</TableCell>
+                        <TableCell className="text-right">{r.absent}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {r.attendanceRate !== "" ? `${r.attendanceRate}%` : "—"}
+                        </TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {r.avgPercentSubmitted !== "" ? `${r.avgPercentSubmitted}%` : "—"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {batchFilter !== "all" && (
+                <div className="overflow-x-auto border-t border-slate-100 pt-5">
+                  <div className="mb-3">
+                    <h3 className="text-sm font-semibold text-slate-900">Selected batch test breakdown</h3>
+                    <p className="text-xs text-slate-500">Each row is one test for the selected batch.</p>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Test</TableHead>
+                        <TableHead>Subject</TableHead>
+                        <TableHead className="text-right">Eligible</TableHead>
+                        <TableHead className="text-right">Started</TableHead>
+                        <TableHead className="text-right">Submitted</TableHead>
+                        <TableHead className="text-right">Absent</TableHead>
+                        <TableHead className="text-right">Avg %</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBatchTestRows.map((r) => (
+                        <TableRow key={`${r.batchId}-${r.test.id}`}>
+                          <TableCell className="font-medium text-slate-900 max-w-[240px] truncate" title={r.test.title}>
+                            {r.test.title}
+                          </TableCell>
+                          <TableCell className="text-sm">{r.test.subject}</TableCell>
+                          <TableCell className="text-right">{r.eligibleStudents}</TableCell>
+                          <TableCell className="text-right">{r.started}</TableCell>
+                          <TableCell className="text-right">{r.submitted}</TableCell>
+                          <TableCell className="text-right">{r.absent}</TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {r.avgPercentSubmitted !== "" ? `${r.avgPercentSubmitted}%` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -587,7 +1012,8 @@ export default function AllTestsAnalytics() {
       <div className="flex justify-end">
         <Badge variant="outline" className="text-xs font-normal max-w-full justify-center text-center h-auto py-2 leading-relaxed">
           Full workbook sheets: summary, participation matrix, student×test pairs, every-student rollup, raw attempts,
-          overview. Attendance report file: printable grid + TEST_column_key (which TEST.n is which exam).
+          overview. Batch-wise Excel sheets: batch summary, batch×test summary, batch student summary, detail rows.
+          Attendance report file: printable grid + TEST_column_key (which TEST.n is which exam).
         </Badge>
       </div>
     </div>

@@ -3,6 +3,9 @@ import { resolveAttemptParticipant } from "./participantUtils";
 import type { Student } from "../../context/DataContext";
 
 export type LiveUrgency = "ok" | "warning" | "critical";
+export type LiveActivityStatus = "live" | "inactive" | "time_over";
+
+export const LIVE_INACTIVE_AFTER_SECONDS = 45;
 
 export type LiveAttemptRow = {
   key: string;
@@ -19,6 +22,9 @@ export type LiveAttemptRow = {
   joinedAt: string;
   hardEndAt: string;
   lastActiveAt: string;
+  secondsSinceLastActive: number;
+  activityStatus: LiveActivityStatus;
+  activityLabel: string;
   remainingSeconds: number;
   elapsedSeconds: number;
   answeredCount: number;
@@ -47,14 +53,42 @@ export function formatClockTime(iso: string): string {
   }
 }
 
+export function formatRelativeActivity(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ${m % 60}m`;
+  const d = Math.floor(h / 24);
+  return `${d}d ${h % 24}h`;
+}
+
+function finiteDateMs(value?: string | null): number | null {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function effectiveEndMs(attempt: ExamAttempt, test?: Pick<ExamTest, "endAt"> | null): number | null {
+  const hardEndMs = finiteDateMs(attempt.hardEndAt);
+  const testEndMs = finiteDateMs(test?.endAt);
+  if (hardEndMs != null && testEndMs != null) return Math.min(hardEndMs, testEndMs);
+  return hardEndMs ?? testEndMs;
+}
+
 export function computeAttemptProgress(
   attempt: ExamAttempt,
   totalQuestions: number,
   nowMs: number,
+  test?: Pick<ExamTest, "endAt"> | null,
 ): Pick<
   LiveAttemptRow,
   | "remainingSeconds"
   | "elapsedSeconds"
+  | "secondsSinceLastActive"
+  | "activityStatus"
+  | "activityLabel"
   | "answeredCount"
   | "unansweredCount"
   | "markedCount"
@@ -69,10 +103,12 @@ export function computeAttemptProgress(
   const unansweredCount = Math.max(0, total - answeredCount);
   const markedCount = (attempt.markedForReview || []).length;
 
-  const startedMs = attempt.startedAt ? new Date(attempt.startedAt).getTime() : nowMs;
-  const hardEndMs = attempt.hardEndAt ? new Date(attempt.hardEndAt).getTime() : 0;
+  const startedMs = finiteDateMs(attempt.startedAt) ?? nowMs;
+  const lastActiveMs = finiteDateMs(attempt.lastSavedAt) ?? startedMs;
+  const hardEndMs = effectiveEndMs(attempt, test) ?? 0;
   const remainingSeconds = hardEndMs ? Math.max(0, Math.floor((hardEndMs - nowMs) / 1000)) : 0;
   const elapsedSeconds = Math.max(0, Math.floor((nowMs - startedMs) / 1000));
+  const secondsSinceLastActive = Math.max(0, Math.floor((nowMs - lastActiveMs) / 1000));
 
   const progressPercent = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
 
@@ -80,9 +116,22 @@ export function computeAttemptProgress(
   if (remainingSeconds <= 60) urgency = "critical";
   else if (remainingSeconds <= 300) urgency = "warning";
 
+  let activityStatus: LiveActivityStatus = "live";
+  let activityLabel = "Live";
+  if (hardEndMs && nowMs >= hardEndMs) {
+    activityStatus = "time_over";
+    activityLabel = "Time over";
+  } else if (secondsSinceLastActive >= LIVE_INACTIVE_AFTER_SECONDS) {
+    activityStatus = "inactive";
+    activityLabel = "Connection issue";
+  }
+
   return {
     remainingSeconds,
     elapsedSeconds,
+    secondsSinceLastActive,
+    activityStatus,
+    activityLabel,
     answeredCount,
     unansweredCount,
     markedCount,
@@ -102,7 +151,8 @@ export function buildLiveAttemptRow(params: {
 }): LiveAttemptRow {
   const { attempt, testId, test, batchName, students, nowMs } = params;
   const p = resolveAttemptParticipant(attempt, students);
-  const progress = computeAttemptProgress(attempt, test?.totalQuestions || 0, nowMs);
+  const progress = computeAttemptProgress(attempt, test?.totalQuestions || 0, nowMs, test);
+  const endMs = effectiveEndMs(attempt, test);
 
   return {
     key: `${testId}::${attempt.uid}`,
@@ -117,7 +167,7 @@ export function buildLiveAttemptRow(params: {
     photoURL: p.photoURL,
     isGuest: p.isGuest,
     joinedAt: attempt.startedAt,
-    hardEndAt: attempt.hardEndAt || "",
+    hardEndAt: endMs ? new Date(endMs).toISOString() : attempt.hardEndAt || test?.endAt || "",
     lastActiveAt: attempt.lastSavedAt || attempt.startedAt,
     ...progress,
   };
@@ -131,6 +181,9 @@ export type LiveTestSummary = {
   liveCount: number;
   avgProgress: number;
   expiringSoon: number;
+  activeNow: number;
+  connectionIssues: number;
+  timeOver: number;
 };
 
 export function summarizeByTest(rows: LiveAttemptRow[]): LiveTestSummary[] {
@@ -146,13 +199,19 @@ export function summarizeByTest(rows: LiveAttemptRow[]): LiveTestSummary[] {
         liveCount: 0,
         avgProgress: 0,
         expiringSoon: 0,
+        activeNow: 0,
+        connectionIssues: 0,
+        timeOver: 0,
         progressSum: 0,
       };
       map.set(r.testId, s);
     }
     s.liveCount += 1;
     s.progressSum += r.progressPercent;
-    if (r.urgency === "critical" || r.urgency === "warning") s.expiringSoon += 1;
+    if (r.activityStatus === "live") s.activeNow += 1;
+    if (r.activityStatus === "inactive") s.connectionIssues += 1;
+    if (r.activityStatus === "time_over") s.timeOver += 1;
+    if (r.activityStatus === "live" && (r.urgency === "critical" || r.urgency === "warning")) s.expiringSoon += 1;
   }
   return Array.from(map.values())
     .map(({ progressSum, ...rest }) => ({

@@ -1,9 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useData } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import {
   Table,
   TableBody,
@@ -16,6 +23,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { BarChart3, Calendar, Edit2, FileSpreadsheet, Radio, Trash2 } from "lucide-react";
 import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
 import { ExamCloseToggleButton } from "../../components/exams/ExamCloseToggleButton";
+import { ExamLateAccessButton } from "../../components/exams/ExamLateAccessButton";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { deleteExamTest, listExamTestsForAdmin } from "../../features/exams/examApi";
 import {
@@ -25,12 +33,15 @@ import {
 } from "../../features/exams/examAvailability";
 import type { ExamTest } from "../../features/exams/types";
 
+type TestSortKey = "newest" | "oldest" | "title" | "batch" | "subject" | "window" | "status" | "publish";
+
 export default function ExamManagement() {
   const { batches } = useData();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
   const [tests, setTests] = useState<ExamTest[]>([]);
+  const [sortKey, setSortKey] = useState<TestSortKey>("newest");
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +76,25 @@ export default function ExamManagement() {
       alert("Delete failed.");
     }
   };
+
+  const sortedTests = useMemo(() => {
+    const text = (value?: string) => String(value || "").toLowerCase();
+    const timestamp = (value?: string) => {
+      const ms = value ? new Date(value).getTime() : 0;
+      return Number.isFinite(ms) ? ms : 0;
+    };
+
+    return [...tests].sort((a, b) => {
+      if (sortKey === "newest") return timestamp(b.createdAt || b.startAt) - timestamp(a.createdAt || a.startAt);
+      if (sortKey === "oldest") return timestamp(a.createdAt || a.startAt) - timestamp(b.createdAt || b.startAt);
+      if (sortKey === "title") return text(a.title).localeCompare(text(b.title));
+      if (sortKey === "batch") return text(formatExamBatchLabel(a, batches)).localeCompare(text(formatExamBatchLabel(b, batches)));
+      if (sortKey === "subject") return text(a.subject).localeCompare(text(b.subject));
+      if (sortKey === "window") return timestamp(a.startAt) - timestamp(b.startAt);
+      if (sortKey === "status") return getExamWindowStatus(a).localeCompare(getExamWindowStatus(b));
+      return text(a.status || "draft").localeCompare(text(b.status || "draft"));
+    });
+  }, [batches, sortKey, tests]);
 
   const statusBadge = (t: ExamTest) => {
     const windowStatus = getExamWindowStatus(t);
@@ -110,8 +140,26 @@ export default function ExamManagement() {
       </Alert>
 
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>All CBT exams</CardTitle>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500">Arrange by</span>
+            <Select value={sortKey} onValueChange={(value) => setSortKey(value as TestSortKey)}>
+              <SelectTrigger className="w-[210px]" aria-label="Arrange tests">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Newest created first</SelectItem>
+                <SelectItem value="oldest">Oldest created first</SelectItem>
+                <SelectItem value="window">Exam date/time</SelectItem>
+                <SelectItem value="title">Title A-Z</SelectItem>
+                <SelectItem value="batch">Batch A-Z</SelectItem>
+                <SelectItem value="subject">Subject A-Z</SelectItem>
+                <SelectItem value="status">Window status</SelectItem>
+                <SelectItem value="publish">Publish status</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -134,7 +182,7 @@ export default function ExamManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tests.map((t) => {
+                  {sortedTests.map((t) => {
                     const batchName = formatExamBatchLabel(t, batches);
                     return (
                       <TableRow key={t.id} className="hover:bg-slate-50">
@@ -159,6 +207,7 @@ export default function ExamManagement() {
                         <TableCell className="text-right">
                           <div className="flex justify-end items-center gap-1">
                             <ExamCloseToggleButton test={t} onUpdated={patchTest} />
+                            <ExamLateAccessButton test={t} onUpdated={patchTest} />
                             <CopyGuestLinkButton test={t} />
                             <Button
                               variant="ghost"

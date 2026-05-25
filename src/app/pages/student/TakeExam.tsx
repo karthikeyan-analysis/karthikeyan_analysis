@@ -1148,11 +1148,6 @@ export default function TakeExam() {
                 <Clock className="w-3.5 h-3.5" />
                 Exam ends only when the timer finishes.
               </div>
-              {attemptStartedAtIso ? (
-                <div className="mt-1 text-[11px] text-slate-500">
-                  Started: {new Date(attemptStartedAtIso).toLocaleString()}
-                </div>
-              ) : null}
             </div>
           </CardContent>
         </Card>

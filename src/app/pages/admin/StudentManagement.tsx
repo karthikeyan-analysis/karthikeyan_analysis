@@ -53,6 +53,8 @@ import {
   resolveStudentPhotoDisplayUrl,
 } from "../../features/students/studentPhotoUrl";
 
+type StudentSortKey = "name" | "studentId" | "email" | "batch" | "enrolledNewest" | "enrolledOldest" | "status";
+
 function StudentPhotoFields({
   previewUrl,
   displayName,
@@ -136,6 +138,7 @@ export default function StudentManagement() {
     useData();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<string>("all");
+  const [studentSortKey, setStudentSortKey] = useState<StudentSortKey>("name");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -184,19 +187,45 @@ export default function StudentManagement() {
     resolveStudentPhotoDisplayUrl(editingStudent?.photoURL) ||
     null;
 
-  // Filter students by selected batch
-  const batchFilteredStudents =
-    selectedBatch === "all"
-      ? students
-      : students.filter((student) => student.batchId === selectedBatch);
+  const getBatchName = (batchId?: string) => {
+    if (!batchId) return "Not Assigned";
+    return batches.find((b) => b.id === batchId)?.name || "Unknown";
+  };
 
-  // Then filter by search query
-  const filteredStudents = batchFilteredStudents.filter(
-    (student) =>
-      student.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      student.studentId.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const filteredStudents = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const dateValue = (value?: string) => {
+      const ms = value ? new Date(value).getTime() : 0;
+      return Number.isFinite(ms) ? ms : 0;
+    };
+    const textValue = (value?: string) => String(value || "").toLowerCase();
+
+    let list =
+      selectedBatch === "all"
+        ? [...students]
+        : selectedBatch === "unassigned"
+          ? students.filter((student) => !student.batchId)
+          : students.filter((student) => student.batchId === selectedBatch);
+
+    if (q) {
+      list = list.filter(
+        (student) =>
+          student.name.toLowerCase().includes(q) ||
+          student.email.toLowerCase().includes(q) ||
+          student.studentId.toLowerCase().includes(q),
+      );
+    }
+
+    return list.sort((a, b) => {
+      if (studentSortKey === "studentId") return textValue(a.studentId).localeCompare(textValue(b.studentId));
+      if (studentSortKey === "email") return textValue(a.email).localeCompare(textValue(b.email));
+      if (studentSortKey === "batch") return textValue(getBatchName(a.batchId)).localeCompare(textValue(getBatchName(b.batchId)));
+      if (studentSortKey === "enrolledNewest") return dateValue(b.enrolledDate) - dateValue(a.enrolledDate);
+      if (studentSortKey === "enrolledOldest") return dateValue(a.enrolledDate) - dateValue(b.enrolledDate);
+      if (studentSortKey === "status") return textValue(a.status).localeCompare(textValue(b.status));
+      return textValue(a.name).localeCompare(textValue(b.name));
+    });
+  }, [batches, searchQuery, selectedBatch, studentSortKey, students]);
 
   const existingEmailSet = useMemo(() => {
     return new Set(students.map((s) => s.email.trim().toLowerCase()).filter(Boolean));
@@ -600,11 +629,6 @@ export default function StudentManagement() {
     });
     setEditingStudent(null);
     setError("");
-  };
-
-  const getBatchName = (batchId?: string) => {
-    if (!batchId) return "Not Assigned";
-    return batches.find((b) => b.id === batchId)?.name || "Unknown";
   };
 
   const getStudentCountByBatch = (batchId: string) => {
@@ -1032,14 +1056,30 @@ export default function StudentManagement() {
               )}
             </TabsList>
 
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input
-                placeholder="Search students..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Select value={studentSortKey} onValueChange={(value) => setStudentSortKey(value as StudentSortKey)}>
+                <SelectTrigger className="w-[190px]" aria-label="Sort students">
+                  <SelectValue placeholder="Sort students" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name">Name A-Z</SelectItem>
+                  <SelectItem value="studentId">Student ID A-Z</SelectItem>
+                  <SelectItem value="email">Email A-Z</SelectItem>
+                  <SelectItem value="batch">Batch A-Z</SelectItem>
+                  <SelectItem value="enrolledNewest">Newest enrolled</SelectItem>
+                  <SelectItem value="enrolledOldest">Oldest enrolled</SelectItem>
+                  <SelectItem value="status">Status</SelectItem>
+                </SelectContent>
+              </Select>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  placeholder="Search students..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
             </div>
           </div>
 

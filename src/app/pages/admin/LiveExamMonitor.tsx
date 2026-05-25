@@ -24,6 +24,8 @@ import {
   buildLiveAttemptRow,
   formatClockTime,
   formatLiveDuration,
+  formatRelativeActivity,
+  LIVE_INACTIVE_AFTER_SECONDS,
   summarizeByTest,
   type LiveAttemptRow,
 } from "../../features/exams/liveMonitorUtils";
@@ -37,6 +39,7 @@ import {
   RefreshCw,
   Search,
   Users,
+  WifiOff,
 } from "lucide-react";
 
 type SortKey = "remaining" | "joined" | "progress" | "name";
@@ -75,6 +78,31 @@ function KpiCard(props: {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function activityBadgeClass(status: LiveAttemptRow["activityStatus"]) {
+  if (status === "time_over") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (status === "inactive") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-emerald-200 bg-emerald-50 text-emerald-700";
+}
+
+function ActivityStatusBadge({ row }: { row: LiveAttemptRow }) {
+  return (
+    <Badge
+      variant="outline"
+      className={cn("whitespace-nowrap text-[11px] font-medium", activityBadgeClass(row.activityStatus))}
+    >
+      <span
+        className={cn(
+          "mr-1.5 inline-block h-1.5 w-1.5 rounded-full",
+          row.activityStatus === "live" && "bg-emerald-500 animate-pulse",
+          row.activityStatus === "inactive" && "bg-amber-500",
+          row.activityStatus === "time_over" && "bg-rose-500",
+        )}
+      />
+      {row.activityLabel}
+    </Badge>
   );
 }
 
@@ -165,8 +193,18 @@ export default function LiveExamMonitor() {
       );
     }
     const sorted = [...list];
+    const statusPriority: Record<LiveAttemptRow["activityStatus"], number> = {
+      time_over: 0,
+      inactive: 1,
+      live: 2,
+    };
     sorted.sort((a, b) => {
-      if (sortKey === "remaining") return a.remainingSeconds - b.remainingSeconds;
+      if (sortKey === "remaining") {
+        return (
+          statusPriority[a.activityStatus] - statusPriority[b.activityStatus] ||
+          a.remainingSeconds - b.remainingSeconds
+        );
+      }
       if (sortKey === "joined") return new Date(a.joinedAt).getTime() - new Date(b.joinedAt).getTime();
       if (sortKey === "progress") return b.progressPercent - a.progressPercent;
       return a.participantName.localeCompare(b.participantName);
@@ -175,15 +213,18 @@ export default function LiveExamMonitor() {
   }, [rows, search, selectedTestId, sortKey]);
 
   const stats = useMemo(() => {
-    const expiring = rows.filter((r) => r.urgency !== "ok").length;
+    const activeNow = rows.filter((r) => r.activityStatus === "live").length;
+    const connectionIssues = rows.filter((r) => r.activityStatus === "inactive").length;
+    const timeOver = rows.filter((r) => r.activityStatus === "time_over").length;
     const avg =
       rows.length > 0
         ? Math.round(rows.reduce((s, r) => s + r.progressPercent, 0) / rows.length)
         : 0;
     return {
       liveTests: testSummaries.length,
-      liveStudents: rows.length,
-      expiring,
+      activeNow,
+      connectionIssues,
+      timeOver,
       avgProgress: avg,
     };
   }, [rows, testSummaries.length]);
@@ -215,8 +256,8 @@ export default function LiveExamMonitor() {
                 </Badge>
               </div>
               <p className="text-sm text-slate-300 mt-1 max-w-2xl">
-                Real-time view of students currently taking CBT exams — progress, time left, and activity
-                update every second.
+                Real-time view of CBT attempts — active students, stale heartbeats from network issues, time-over
+                attempts, progress, and last activity update every second.
               </p>
               {lastSync ? (
                 <p className="text-xs text-slate-400 mt-2">
@@ -243,19 +284,33 @@ export default function LiveExamMonitor() {
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <KpiCard
-          label="Active exams"
+          label="Monitored exams"
           value={stats.liveTests}
-          sub="Tests with candidates in progress"
+          sub="Tests with open attempts"
           icon={<Activity className="w-5 h-5" />}
         />
         <KpiCard
-          label="Live candidates"
-          value={stats.liveStudents}
-          sub="Currently in exam"
+          label="Active now"
+          value={stats.activeNow}
+          sub={`Heartbeat under ${LIVE_INACTIVE_AFTER_SECONDS}s`}
           icon={<Users className="w-5 h-5" />}
           accent="border-indigo-200 bg-indigo-50/30"
+        />
+        <KpiCard
+          label="Connection issues"
+          value={stats.connectionIssues}
+          sub="No recent heartbeat"
+          icon={<WifiOff className="w-5 h-5" />}
+          accent="border-amber-200 bg-amber-50/40"
+        />
+        <KpiCard
+          label="Time over"
+          value={stats.timeOver}
+          sub="Not submitted"
+          icon={<Clock className="w-5 h-5" />}
+          accent="border-rose-200 bg-rose-50/40"
         />
         <KpiCard
           label="Avg. progress"
@@ -263,19 +318,12 @@ export default function LiveExamMonitor() {
           sub="Answered questions"
           icon={<RefreshCw className="w-5 h-5" />}
         />
-        <KpiCard
-          label="Ending soon"
-          value={stats.expiring}
-          sub="Under 5 minutes left"
-          icon={<Clock className="w-5 h-5" />}
-          accent="border-amber-200 bg-amber-50/40"
-        />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[300px_1fr] gap-4">
         <Card className="border-slate-200 xl:max-h-[calc(100vh-280px)] xl:overflow-hidden flex flex-col">
           <CardHeader className="pb-2 border-b border-slate-100">
-            <CardTitle className="text-sm font-semibold">Exams in progress</CardTitle>
+            <CardTitle className="text-sm font-semibold">Monitored exams</CardTitle>
           </CardHeader>
           <CardContent className="p-2 flex-1 overflow-y-auto space-y-1">
             <button
@@ -303,7 +351,7 @@ export default function LiveExamMonitor() {
             </button>
             {testSummaries.length === 0 ? (
               <p className="text-sm text-slate-500 px-3 py-6 text-center">
-                {loadingTests ? "Loading…" : "No live sessions right now"}
+                {loadingTests ? "Loading…" : "No monitored attempts right now"}
               </p>
             ) : (
               testSummaries.map((t) => (
@@ -335,7 +383,7 @@ export default function LiveExamMonitor() {
                         selectedTestId === t.testId && "border-white/40 text-white",
                       )}
                     >
-                      {t.liveCount} live
+                      {t.liveCount} candidates
                     </Badge>
                     <span
                       className={cn(
@@ -346,6 +394,20 @@ export default function LiveExamMonitor() {
                       avg {t.avgProgress}%
                     </span>
                   </div>
+                  {(t.connectionIssues > 0 || t.timeOver > 0) && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {t.connectionIssues > 0 ? (
+                        <Badge variant="outline" className="text-[10px] border-amber-200 text-amber-700">
+                          {t.connectionIssues} network
+                        </Badge>
+                      ) : null}
+                      {t.timeOver > 0 ? (
+                        <Badge variant="outline" className="text-[10px] border-rose-200 text-rose-700">
+                          {t.timeOver} time over
+                        </Badge>
+                      ) : null}
+                    </div>
+                  )}
                 </button>
               ))
             )}
@@ -396,7 +458,7 @@ export default function LiveExamMonitor() {
             {filteredRows.length === 0 ? (
               <div className="py-16 text-center text-slate-500">
                 <Users className="w-10 h-10 mx-auto text-slate-300 mb-3" />
-                <p className="font-medium text-slate-700">No live candidates match</p>
+                <p className="font-medium text-slate-700">No candidates match</p>
                 <p className="text-sm mt-1">Students appear here when they start an in-app CBT exam.</p>
               </div>
             ) : (
@@ -406,6 +468,7 @@ export default function LiveExamMonitor() {
                     <TableRow>
                       <TableHead className="w-8" />
                       <TableHead>Candidate</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>ID</TableHead>
                       <TableHead>Exam</TableHead>
                       <TableHead>Joined</TableHead>
@@ -443,6 +506,14 @@ export default function LiveExamMonitor() {
                             </div>
                           </div>
                         </TableCell>
+                        <TableCell className="whitespace-nowrap">
+                          <ActivityStatusBadge row={r} />
+                          <div className="mt-1 text-[10px] text-slate-500">
+                            {r.activityStatus === "live"
+                              ? "Saving normally"
+                              : `Last heartbeat ${formatRelativeActivity(r.secondsSinceLastActive)} ago`}
+                          </div>
+                        </TableCell>
                         <TableCell className="text-sm font-mono text-slate-700">{r.studentId}</TableCell>
                         <TableCell className="min-w-[120px]">
                           <div className="text-sm font-medium text-slate-900 truncate max-w-[160px]">
@@ -460,12 +531,14 @@ export default function LiveExamMonitor() {
                           <span
                             className={cn(
                               "text-sm font-semibold tabular-nums",
+                              r.activityStatus === "time_over" && "text-rose-700",
+                              r.activityStatus === "inactive" && "text-amber-700",
                               r.urgency === "critical" && "text-rose-700",
                               r.urgency === "warning" && "text-amber-700",
                               r.urgency === "ok" && "text-slate-900",
                             )}
                           >
-                            {formatLiveDuration(r.remainingSeconds)}
+                            {r.activityStatus === "time_over" ? "Time over" : formatLiveDuration(r.remainingSeconds)}
                           </span>
                         </TableCell>
                         <TableCell className="min-w-[120px]">
@@ -490,6 +563,9 @@ export default function LiveExamMonitor() {
                         </TableCell>
                         <TableCell className="text-xs text-slate-600 whitespace-nowrap">
                           {formatClockTime(r.lastActiveAt)}
+                          <div className="text-[10px] text-slate-400">
+                            {formatRelativeActivity(r.secondsSinceLastActive)} ago
+                          </div>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" asChild>

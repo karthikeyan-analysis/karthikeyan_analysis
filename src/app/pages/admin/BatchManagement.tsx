@@ -26,30 +26,80 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
-import { Plus, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import type { Batch } from "../../context/DataContext";
+
+type BatchFormData = {
+  name: string;
+  description: string;
+  schedule: string;
+  subjects: string;
+};
+
+const emptyFormData: BatchFormData = {
+  name: "",
+  description: "",
+  schedule: "",
+  subjects: "",
+};
+
+function parseSubjects(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((subject) => subject.trim())
+        .filter(Boolean),
+    ),
+  );
+}
 
 export default function BatchManagement() {
   const { batches, addBatch, updateBatch, deleteBatch, getStudentsByBatch } =
     useData();
   const [isOpen, setIsOpen] = useState(false);
+  const [editingBatchId, setEditingBatchId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    schedule: "",
-    subjects: "",
-  });
+  const [formData, setFormData] = useState<BatchFormData>(emptyFormData);
 
-  const handleAddBatch = async () => {
+  const editingBatch = editingBatchId
+    ? batches.find((batch) => batch.id === editingBatchId)
+    : null;
+  const currentSubjects = parseSubjects(formData.subjects);
+
+  const resetForm = () => {
+    setFormData(emptyFormData);
+    setEditingBatchId(null);
+  };
+
+  const openCreateDialog = () => {
+    resetForm();
+    setIsOpen(true);
+  };
+
+  const openEditDialog = (batch: Batch) => {
+    setEditingBatchId(batch.id);
+    setFormData({
+      name: batch.name || "",
+      description: batch.description || "",
+      schedule: batch.schedule || "",
+      subjects: (batch.subjects || []).join(", "),
+    });
+    setIsOpen(true);
+  };
+
+  const removeSubjectFromForm = (subjectToRemove: string) => {
+    const nextSubjects = currentSubjects.filter((subject) => subject !== subjectToRemove);
+    setFormData((prev) => ({ ...prev, subjects: nextSubjects.join(", ") }));
+  };
+
+  const handleSaveBatch = async () => {
     if (!formData.name.trim()) {
       alert("Batch name is required");
       return;
     }
 
-    const subjects = formData.subjects
-      .split(",")
-      .map((subject) => subject.trim())
-      .filter(Boolean);
+    const subjects = parseSubjects(formData.subjects);
 
     if (subjects.length === 0) {
       alert("At least one subject is required");
@@ -57,44 +107,50 @@ export default function BatchManagement() {
     }
 
     try {
-      const batchData: any = {
+      const batchData: Partial<Batch> = {
         name: formData.name.trim(),
-        subjects: subjects, // Always include subjects (required)
+        description: formData.description.trim(),
+        schedule: formData.schedule.trim(),
+        subjects,
       };
 
-      // Only add optional fields if they have values
-      if (formData.description.trim()) {
-        batchData.description = formData.description.trim();
+      if (editingBatchId) {
+        await updateBatch(editingBatchId, batchData);
+      } else {
+        await addBatch(batchData as Omit<Batch, "id" | "createdDate" | "studentCount">);
       }
 
-      if (formData.schedule.trim()) {
-        batchData.schedule = formData.schedule.trim();
-      }
-
-      await addBatch(batchData);
-      setFormData({ name: "", description: "", schedule: "", subjects: "" });
+      resetForm();
       setIsOpen(false);
     } catch (error) {
-      console.error("Failed to create batch:", error);
-      alert("Failed to create batch. Please try again.");
+      console.error("Failed to save batch:", error);
+      alert("Failed to save batch. Please try again.");
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog
+          open={isOpen}
+          onOpenChange={(open) => {
+            setIsOpen(open);
+            if (!open) resetForm();
+          }}
+        >
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2" onClick={openCreateDialog}>
               <Plus className="w-5 h-5" />
               Create Batch
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create New Batch</DialogTitle>
+              <DialogTitle>{editingBatch ? "Edit Batch" : "Create New Batch"}</DialogTitle>
               <DialogDescription>
-                Add a new batch (batch name and subjects are required)
+                {editingBatch
+                  ? "Update batch details and add or remove subjects."
+                  : "Add a new batch (batch name and subjects are required)"}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -148,11 +204,31 @@ export default function BatchManagement() {
                   }
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Add multiple subjects separated by commas
+                  Add or remove subjects separated by commas. Example: Physics, Chemistry, Maths
                 </p>
+                {currentSubjects.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {currentSubjects.map((subject) => (
+                      <span
+                        key={subject}
+                        className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700"
+                      >
+                        {subject}
+                        <button
+                          type="button"
+                          onClick={() => removeSubjectFromForm(subject)}
+                          className="ml-1 rounded-full px-1 text-indigo-500 hover:bg-indigo-100 hover:text-indigo-800"
+                          aria-label={`Remove ${subject}`}
+                        >
+                          x
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <Button onClick={handleAddBatch} className="w-full">
-                Create Batch
+              <Button onClick={handleSaveBatch} className="w-full">
+                {editingBatch ? "Save Changes" : "Create Batch"}
               </Button>
             </div>
           </DialogContent>
@@ -176,38 +252,48 @@ export default function BatchManagement() {
                       {batch.schedule}
                     </p>
                   </div>
-                  <AlertDialog
-                    open={deleteId === batch.id}
-                    onOpenChange={(open) => !open && setDeleteId(null)}
-                  >
+                  <div className="flex items-center gap-1">
                     <button
-                      onClick={() => setDeleteId(batch.id)}
-                      className="text-red-500 hover:text-red-700 p-1"
+                      onClick={() => openEditDialog(batch)}
+                      className="text-slate-500 hover:text-indigo-700 p-1"
+                      title="Edit batch"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Pencil className="w-4 h-4" />
                     </button>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Batch</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Are you sure you want to delete this batch? Students
-                          will be unassigned but not deleted.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <div className="flex gap-3 justify-end">
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => {
-                            deleteBatch(batch.id);
-                            setDeleteId(null);
-                          }}
-                          className="bg-red-500 hover:bg-red-600"
-                        >
-                          Delete
-                        </AlertDialogAction>
-                      </div>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    <AlertDialog
+                      open={deleteId === batch.id}
+                      onOpenChange={(open) => !open && setDeleteId(null)}
+                    >
+                      <button
+                        onClick={() => setDeleteId(batch.id)}
+                        className="text-red-500 hover:text-red-700 p-1"
+                        title="Delete batch"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Batch</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this batch? Students
+                            will be unassigned but not deleted.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <div className="flex gap-3 justify-end">
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => {
+                              deleteBatch(batch.id);
+                              setDeleteId(null);
+                            }}
+                            className="bg-red-500 hover:bg-red-600"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </div>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
               </CardHeader>
               <CardContent>
