@@ -195,13 +195,6 @@ export default function TakeExam() {
     return statusById;
   }, [answers, markedForReview, questionIdOrder, visited]);
 
-  useEffect(() => {
-    if (!currentQuestion) return;
-    if (answers[currentQuestion.id] == null) return;
-    if (!markedForReview.includes(currentQuestion.id)) return;
-    setMarkedForReview((prev) => prev.filter((id) => id !== currentQuestion.id));
-  }, [answers, currentQuestion, markedForReview]);
-
   const autoSubmitTriggered = useRef(false);
 
   useEffect(() => {
@@ -1081,7 +1074,7 @@ export default function TakeExam() {
                   st === "answered"
                     ? "bg-emerald-600 text-white border-emerald-600"
                     : st === "answered_marked"
-                      ? "bg-emerald-600 text-white border-emerald-600"
+                      ? "bg-violet-600 text-white border-violet-600"
                     : st === "marked_for_review"
                       ? "bg-violet-600 text-white border-violet-600"
                       : st === "not_answered"
@@ -1106,7 +1099,7 @@ export default function TakeExam() {
                   >
                     {st === "answered_marked" ? (
                       <span
-                        className="absolute -right-1 -top-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-violet-600"
+                        className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm ring-1 ring-emerald-700/20"
                         title="Answered and marked for review"
                       />
                     ) : null}
@@ -1120,8 +1113,18 @@ export default function TakeExam() {
             <div className="mt-3 shrink-0 grid grid-cols-2 gap-2 text-xs">
               <LegendChip color="bg-emerald-600" label="Answered" />
               <LegendChip color="bg-red-600" label="Not Answered" />
-              <LegendChip color="bg-violet-600" label="Marked" />
+              <LegendChip color="bg-violet-600" label="Marked for Review" />
               <LegendChip color="bg-slate-100 border border-slate-300" label="Not Visited" />
+            </div>
+            <div className="mt-2 shrink-0">
+              <LegendChip
+                color="bg-violet-600"
+                markerColor="bg-emerald-500"
+                label="Answered & Marked for Review"
+              />
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                Answered &amp; Marked for Review will be considered for evaluation.
+              </p>
             </div>
 
             <div className="mt-3 shrink-0 border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-600">
@@ -1219,10 +1222,28 @@ function ExamMetaStat({
   );
 }
 
-function LegendChip({ color, label }: { color: string; label: string }) {
+function LegendChip({
+  color,
+  label,
+  markerColor,
+}: {
+  color: string;
+  label: string;
+  markerColor?: string;
+}) {
   return (
     <div className="flex items-center gap-2">
-      <span className={cn("inline-block w-3 h-3 rounded-sm", color)} />
+      <span className={cn("relative inline-block w-3.5 h-3.5 rounded-sm", color)}>
+        {markerColor ? (
+          <span
+            className={cn(
+              "absolute -right-1.5 -top-1.5 h-2.5 w-2.5 rounded-full border border-white shadow-sm",
+              markerColor,
+            )}
+            aria-hidden
+          />
+        ) : null}
+      </span>
       <span>{label}</span>
     </div>
   );

@@ -5,25 +5,61 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    function userDoc() {
-      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
+    function hasUserAdminRole() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/users/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+
+    function hasAdminProfile() {
+      return isSignedIn()
+        && firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/admins/$(request.auth.uid)).data.role == "admin";
     }
 
     function isAdmin() {
-      return isSignedIn() && userDoc().data.role == "admin";
+      return hasUserAdminRole() || hasAdminProfile();
     }
 
-    // Exam question images:
-    // - readable by any signed-in user (students need to see the question image)
-    // - writable only by admins
-    match /examTests/{testId}/questions/{questionId}/{fileName} {
-      allow read: if isSignedIn();
+    // Public read keeps website images, testimonial files, and shared download
+    // URLs working. Writes stay limited to signed-in admins from either app.
+    match /{allPaths=**} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Student profile photos (admin upload; students need read for UI / PDF)
-    match /studentPhotos/{studentId}/{name} {
-      allow read: if isSignedIn();
+    match /examTests/{testId}/questions/{questionId}/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /studentPhotos/{studentId}/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /products/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /categories/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /testimonials/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /content/{fileName} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /videos/{fileName} {
+      allow read: if true;
       allow write: if isAdmin();
     }
   }

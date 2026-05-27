@@ -12,6 +12,7 @@ c. Question Palette / Question Number Boxes
       - Not Answered: Not Answered (red)
       - Not Visited: Not Visited
       - Marked for Review: Marked for Review (violet)
+      - Answered & Marked for Review: violet with green dot; will be considered for evaluation
 
    2. Click any number in the palette to jump directly to that question.
 
