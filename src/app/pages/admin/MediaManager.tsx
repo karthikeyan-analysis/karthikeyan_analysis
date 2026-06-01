@@ -53,7 +53,10 @@ import {
   uploadBytes,
   uploadBytesResumable,
 } from "firebase/storage";
-import { storage } from "../../../config/firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db, storage } from "../../../config/firebase";
+
+const LARGE_VIDEO_WARNING_BYTES = 300 * 1024 * 1024;
 
 function sanitizeStorageFileName(originalName: string) {
   const trimmed = (originalName || "file").trim();
@@ -222,6 +225,27 @@ export default function MediaManager() {
     });
   };
 
+  const ensureAdminUploadAccess = async () => {
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+      throw new Error("Please log out and login again as admin before uploading.");
+    }
+
+    const [userSnap, adminSnap] = await Promise.all([
+      getDoc(doc(db, "users", uid)),
+      getDoc(doc(db, "admins", uid)),
+    ]);
+
+    const hasAdminRole =
+      userSnap.data()?.role === "admin" || adminSnap.data()?.role === "admin";
+
+    if (!hasAdminRole) {
+      throw new Error(
+        `Admin permission missing for this login. Add role: "admin" in Firestore at users/${uid} or admins/${uid}, then login again.`,
+      );
+    }
+  };
+
   const formatBytes = (bytes: number) => {
     const units = ["B", "KB", "MB", "GB", "TB"] as const;
     let v = bytes;
@@ -265,6 +289,7 @@ export default function MediaManager() {
     }
 
     try {
+      await ensureAdminUploadAccess();
       setIsUploading(true);
       setVideoUploadProgress(0);
       setVideoBytes(null);
@@ -540,9 +565,16 @@ export default function MediaManager() {
                       />
                     </label>
                     {selectedVideoFile && (
-                      <p className="text-xs text-slate-500 truncate">
-                        Selected: {selectedVideoFile.name}
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-xs text-slate-500 truncate">
+                          Selected: {selectedVideoFile.name} ({formatBytes(selectedVideoFile.size)})
+                        </p>
+                        {selectedVideoFile.size > LARGE_VIDEO_WARNING_BYTES ? (
+                          <p className="text-xs leading-relaxed text-amber-700">
+                            Large video selected. Upload time depends on your internet upload speed and can take several minutes.
+                          </p>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 </div>

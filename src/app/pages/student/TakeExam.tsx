@@ -24,6 +24,8 @@ import {
   getExamTest,
   listPrivateQuestions,
   listPublicQuestions,
+  markRejoinApprovalUsed,
+  requestRejoinApproval,
   saveAttemptProgress,
   startAttempt,
 } from "../../features/exams/examApi";
@@ -119,6 +121,8 @@ export default function TakeExam() {
   const [attemptStatus, setAttemptStatus] = useState<"in_progress" | "submitted" | null>(null);
   const [score, setScore] = useState<{ score: number; maxScore: number } | null>(null);
   const [closedForNewAttempts, setClosedForNewAttempts] = useState(false);
+  const [rejoinBlocked, setRejoinBlocked] = useState(false);
+  const [requestingRejoin, setRequestingRejoin] = useState(false);
 
   const autosaveTimer = useRef<number | null>(null);
 
@@ -130,6 +134,7 @@ export default function TakeExam() {
     user?.isGuestExamParticipant === true && user.guestExamTestId === testId;
   const pwSessionKey = useMemo(() => `exam_pw_ok:${testId}:${uid}`, [testId, uid]);
   const instructionsSessionKey = useMemo(() => `cbt_instr_ok:${testId}:${uid}`, [testId, uid]);
+  const examSessionKey = useMemo(() => `exam_session_ok:${testId}:${uid}`, [testId, uid]);
   const [instructionsOk, setInstructionsOk] = useState(false);
   const [instructionsChecked, setInstructionsChecked] = useState(false);
 
@@ -159,6 +164,29 @@ export default function TakeExam() {
   const isCurrentMarkedForReview = Boolean(
     currentQuestion && markedForReview.includes(currentQuestion.id),
   );
+
+  const requestRejoin = async () => {
+    if (!uid || !testId) return;
+    setRequestingRejoin(true);
+    try {
+      await requestRejoinApproval(testId, uid);
+      setRejoinBlocked(true);
+    } catch (e) {
+      console.error(e);
+      alert("Could not request rejoin approval. Please contact admin.");
+    } finally {
+      setRequestingRejoin(false);
+    }
+  };
+
+  const latestRejoinApprovalAvailable = (attempt: {
+    rejoinApprovedAt?: string;
+    rejoinApprovalUsedAt?: string;
+  }) => {
+    if (!attempt.rejoinApprovedAt) return false;
+    if (!attempt.rejoinApprovalUsedAt) return true;
+    return attempt.rejoinApprovedAt > attempt.rejoinApprovalUsedAt;
+  };
 
   const questionIdOrder = useMemo(() => questions.map((q) => q.id), [questions]);
 
@@ -264,6 +292,7 @@ export default function TakeExam() {
             questionIds: qs.map((q) => q.id),
             hardEndAt: hardEnd,
           });
+          sessionStorage.setItem(examSessionKey, "1");
           setAttemptStartedAtIso(new Date().toISOString());
           setAttemptStatus("in_progress");
           const freshAnswers: Record<string, number | null> = {};
@@ -272,6 +301,21 @@ export default function TakeExam() {
           setMarkedForReview([]);
           setVisited(qs.length ? { [qs[0].id]: true } : {});
         } else {
+          if (attempt.status === "in_progress") {
+            const sameBrowserSession = sessionStorage.getItem(examSessionKey) === "1";
+            const hasApprovedRejoin = latestRejoinApprovalAvailable(attempt);
+            if (!sameBrowserSession && !hasApprovedRejoin) {
+              await requestRejoinApproval(testId, uid);
+              setRejoinBlocked(true);
+              setAttemptStatus(null);
+              return;
+            }
+            if (!sameBrowserSession && hasApprovedRejoin) {
+              await markRejoinApprovalUsed(testId, uid);
+              sessionStorage.setItem(examSessionKey, "1");
+            }
+          }
+          setRejoinBlocked(false);
           setClosedForNewAttempts(false);
           setAttemptStartedAtIso(attempt.startedAt);
           setAttemptStatus(attempt.status);
@@ -314,6 +358,7 @@ export default function TakeExam() {
     user?.email,
     user?.name,
     user?.studentRecordId,
+    examSessionKey,
   ]);
 
   // Mark current question as visited whenever you navigate.
@@ -447,6 +492,7 @@ export default function TakeExam() {
       s = Math.max(0, s);
 
       await submitAttempt({ testId, uid, score: s, maxScore: max });
+      sessionStorage.removeItem(examSessionKey);
       setAttemptStatus("submitted");
       setAttemptSubmittedAtIso(new Date().toISOString());
       setScore({ score: s, maxScore: max });
@@ -538,6 +584,40 @@ export default function TakeExam() {
           .
         </AlertDescription>
       </Alert>
+    );
+  }
+
+  if (rejoinBlocked) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <Clock className="w-10 h-10 text-amber-500 mx-auto" />
+            <div>
+              <div className="text-lg font-semibold text-slate-900">Rejoin approval required</div>
+              <p className="text-sm text-slate-600 mt-2">
+                You already started this test. To continue from a new session, admin approval is required.
+                Your rejoin request has been sent.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Button
+                className="bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => void requestRejoin()}
+                disabled={requestingRejoin}
+              >
+                {requestingRejoin ? "Requesting..." : "Request Again"}
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/student/tests")}>
+                Back to schedule
+              </Button>
+            </div>
+            <p className="text-xs text-slate-500">
+              After admin approves, open this test again to continue.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 

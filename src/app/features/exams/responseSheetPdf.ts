@@ -1,6 +1,6 @@
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "./types";
 import type { ResolvedParticipant } from "./participantUtils";
-import { resolveStudentPhotoDisplayUrl } from "../students/studentPhotoUrl";
+import { getStudentPhotoDisplayCandidates } from "../students/studentPhotoUrl";
 
 function escapeHtml(input: string) {
   return (input || "")
@@ -29,6 +29,10 @@ function initialsFromName(name: string) {
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return (parts[0]![0] + parts[parts.length - 1]![0]).toUpperCase();
+}
+
+function jsonAttr(value: string[]) {
+  return escapeHtml(JSON.stringify(value));
 }
 
 export type ResponseSheetParticipant = Pick<
@@ -64,33 +68,44 @@ export function buildResponseSheetHtml({
   const percent = maxScoreValue ? Math.round((scoreValue / maxScoreValue) * 1000) / 10 : 0;
   const studentName = participant.name || participant.email || "Student";
   const studentId = participant.studentId || participant.email || participant.studentRecordId || attempt.uid;
-  const displayPhoto = resolveStudentPhotoDisplayUrl(photoURL || participant.photoURL);
-  const passportInner = displayPhoto
-    ? `<img src="${escapeHtml(displayPhoto)}" alt="" />`
+  const photoCandidates = getStudentPhotoDisplayCandidates(photoURL || participant.photoURL);
+  const passportInner = photoCandidates.length
+    ? `<img src="${escapeHtml(photoCandidates[0])}" data-fallback-srcs="${jsonAttr(photoCandidates)}" data-fallback-index="0" alt="" />`
     : `<div class="profile-fallback">${escapeHtml(initialsFromName(studentName))}</div>`;
+  const submittedLabel = attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-";
+  const generatedLabel = new Date().toLocaleString();
 
-  const rows = questions.map((q, idx) => {
+  const questionStatuses = questions.map((q) => {
     const selected = attempt.answers?.[q.id] ?? null;
     const correct = keys ? correctIndexById.get(q.id) : undefined;
     const status =
       selected == null ? "Unanswered" : correct == null ? "Answered" : selected === correct ? "Correct" : "Wrong";
+    return { selected, correct, status };
+  });
+
+  const correctCount = questionStatuses.filter((q) => q.status === "Correct").length;
+  const wrongCount = questionStatuses.filter((q) => q.status === "Wrong").length;
+  const unansweredCount = questionStatuses.filter((q) => q.status === "Unanswered").length;
+
+  const rows = questions.map((q, idx) => {
+    const { selected, correct, status } = questionStatuses[idx]!;
+    const selectedLetter =
+      selected == null || typeof selected !== "number" ? "-" : String.fromCharCode(65 + selected);
+    const correctLetter =
+      correct == null || typeof correct !== "number" ? "-" : String.fromCharCode(65 + correct);
 
     const optionsHtml = q.options
       .map((opt, oi) => {
         const isSelected = selected === oi;
         const isCorrect = correct != null && correct === oi;
-        const pill = isCorrect
-          ? `<span class="pill pill-correct">Correct</span>`
-          : isSelected && correct != null && !isCorrect
-            ? `<span class="pill pill-wrong">Your answer</span>`
-            : isSelected
-              ? `<span class="pill pill-selected">Your answer</span>`
-              : "";
-        return `<div class="opt ${isCorrect ? "opt-correct" : isSelected && correct != null && !isCorrect ? "opt-wrong" : ""}">
-          <span class="radio ${isSelected ? "radio-selected" : ""}"><span></span></span>
-          <span class="opt-letter">${String.fromCharCode(65 + oi)}.</span>
-          <span class="opt-text">${escapeHtml(opt)}</span>
-          ${pill}
+        const marker = isCorrect
+          ? `<span class="option-note correct-note">Correct</span>`
+          : isSelected
+            ? `<span class="option-note selected-note">Selected</span>`
+            : "";
+        return `<div class="option-line ${isCorrect ? "is-correct" : ""} ${isSelected && !isCorrect ? "is-selected" : ""}">
+          <span class="option-letter">${String.fromCharCode(65 + oi)}.</span>
+          <span class="option-text">${escapeHtml(opt)}</span>${marker}
         </div>`;
       })
       .join("");
@@ -99,16 +114,20 @@ export function buildResponseSheetHtml({
       ? `<div class="img-wrap"><img src="${escapeHtml(q.imageUrl)}" alt="Q${idx + 1}" /></div>`
       : "";
 
-    return `<section class="q">
+    return `<section class="question-row">
       <div class="q-head">
         <div class="q-title">Q${idx + 1}. ${escapeHtml(q.text || "")}</div>
         <div class="q-meta">
-          <span class="badge">${q.marks} mark</span>
-          <span class="badge badge-${status.toLowerCase()}">${status}</span>
+          <span>${q.marks} mark${Number(q.marks || 0) === 1 ? "" : "s"}</span>
+          <span class="status status-${status.toLowerCase()}">${status}</span>
         </div>
       </div>
       ${imgHtml}
-      <div class="opts">${optionsHtml}</div>
+      <div class="options-list">${optionsHtml}</div>
+      <div class="answer-summary">
+        <span>Your answer: <strong>${escapeHtml(selectedLetter)}</strong></span>
+        <span>Correct answer: <strong>${escapeHtml(correctLetter)}</strong></span>
+      </div>
     </section>`;
   });
 
@@ -119,82 +138,176 @@ export function buildResponseSheetHtml({
   <title>${escapeHtml(test.title)} - Response Sheet</title>
   <style>
     *{box-sizing:border-box}
-    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:20px;color:#0f172a;background:#fff}
+    @page{size:A4;margin:14mm 12mm}
+    body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;margin:0;color:#111827;background:#fff;font-size:12px;line-height:1.45}
     .watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0}
-    .watermark-text{font-size:42px;font-weight:900;color:#475569;opacity:.07;transform:rotate(-28deg);white-space:nowrap}
+    .watermark-text{font-size:42px;font-weight:900;color:#64748b;opacity:.045;transform:rotate(-28deg);white-space:nowrap}
     .content{position:relative;z-index:1}
-    .top{border:1px solid #e2e8f0;border-radius:18px;padding:12px 16px;display:flex;align-items:center;justify-content:center;margin-bottom:16px;background:#fff}
-    .top img{max-height:72px;max-width:100%;object-fit:contain}
-    .hero{border:1px solid #e2e8f0;border-radius:18px;padding:18px;background:linear-gradient(135deg,#f8fafc,#fff);display:grid;grid-template-columns:1fr auto;gap:18px;align-items:start}
-    .label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#64748b}
-    .h1{font-size:24px;font-weight:900;margin:4px 0 0}
-    .sub{font-size:12px;color:#475569;margin-top:6px}
-    .chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-    .chip{font-size:11px;border:1px solid #cbd5e1;border-radius:999px;padding:4px 10px;background:#fff;color:#334155}
-    .profile-passport{width:92px;height:118px;border:3px solid #1e293b;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;box-shadow:0 8px 18px rgba(15,23,42,.12)}
+    .sheet-header{border-bottom:3px solid #111827;padding-bottom:12px;margin-bottom:12px;display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center}
+    .brand{display:flex;align-items:center;gap:12px;min-width:0}
+    .brand img{height:58px;max-width:220px;object-fit:contain}
+    .doc-title{text-align:right}
+    .doc-title .eyebrow{font-size:10px;font-weight:900;letter-spacing:.16em;text-transform:uppercase;color:#4f46e5}
+    .doc-title h1{font-size:20px;line-height:1.1;margin:4px 0 0;color:#111827}
+    .exam-title{font-size:14px;font-weight:800;margin:0 0 3px;color:#111827}
+    .muted{color:#64748b}
+    .candidate-block{display:grid;grid-template-columns:1fr 96px;gap:14px;margin-bottom:12px}
+    .info-card{border:1px solid #d1d5db;border-radius:10px;overflow:hidden;background:#fff}
+    .section-title{background:#f3f4f6;border-bottom:1px solid #d1d5db;padding:7px 10px;font-size:10px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#374151}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr}
+    .info-item{padding:8px 10px;border-bottom:1px solid #e5e7eb;min-height:43px}
+    .info-item:nth-child(odd){border-right:1px solid #e5e7eb}
+    .info-item:nth-last-child(-n+2){border-bottom:0}
+    .info-label{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#6b7280}
+    .info-value{font-size:12px;font-weight:700;color:#111827;margin-top:2px}
+    .profile-passport{width:96px;height:122px;border:2px solid #111827;border-radius:4px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden}
     .profile-passport img{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain}
     .profile-fallback{font-size:16px;font-weight:900;color:#4338ca;text-align:center;padding:4px}
-    .kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 18px}
-    .kpi{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff}
-    .kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b;font-weight:800}
-    .kpi .v{font-size:20px;font-weight:900;margin-top:4px}
-    .q{border:1px solid #e2e8f0;border-radius:16px;padding:14px;margin-top:12px;background:#fff;break-inside:avoid}
-    .q-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
-    .q-title{font-weight:800;font-size:13px;white-space:pre-wrap;line-height:1.45}
-    .q-meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
-    .badge{border:1px solid #cbd5e1;padding:3px 8px;border-radius:999px;font-size:11px;color:#0f172a;background:#fff;white-space:nowrap}
-    .badge-correct{border-color:#86efac;background:#ecfdf5;color:#065f46}
-    .badge-wrong{border-color:#fda4af;background:#fff1f2;color:#9f1239}
-    .badge-unanswered,.badge-answered{background:#f8fafc}
-    .img-wrap{margin-top:10px;border:2px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:8px;display:flex;align-items:center;justify-content:center}
-    .img-wrap img{max-width:100%;height:auto;object-fit:contain;display:block}
-    .opts{margin-top:10px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-    .opt{border:1px solid #e2e8f0;border-radius:12px;padding:8px;font-size:12px;display:flex;gap:8px;align-items:flex-start}
-    .radio{width:14px;height:14px;border:2px solid #94a3b8;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;margin-top:1px}
-    .radio span{width:6px;height:6px;border-radius:999px;background:transparent}
-    .radio-selected{border-color:#4f46e5}
-    .radio-selected span{background:#4f46e5}
-    .opt-letter{font-weight:900;color:#334155;flex:0 0 auto}
-    .opt-text{flex:1}
-    .opt-correct{border-color:#86efac;background:#ecfdf5}
-    .opt-wrong{border-color:#fda4af;background:#fff1f2}
-    .pill{margin-left:auto;font-size:10px;padding:2px 6px;border-radius:999px;border:1px solid #cbd5e1;white-space:nowrap}
-    .pill-correct{border-color:#34d399;color:#065f46;background:#d1fae5}
-    .pill-wrong{border-color:#fb7185;color:#881337;background:#ffe4e6}
-    .pill-selected{border-color:#94a3b8;color:#334155;background:#f1f5f9}
-    .footer{margin-top:16px;font-size:10px;color:#64748b;text-align:right}
-    @media print{body{margin:12px}.opts{grid-template-columns:1fr}.top img{max-height:62px}.watermark-text{font-size:34px}}
+    .score-strip{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));border:1px solid #111827;border-radius:10px;overflow:hidden;margin:10px 0 14px}
+    .score-cell{padding:9px 8px;text-align:center;border-right:1px solid #d1d5db;background:#fff}
+    .score-cell:last-child{border-right:0}
+    .score-label{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6b7280}
+    .score-value{font-size:18px;font-weight:900;color:#111827;margin-top:2px}
+    .score-value.good{color:#047857}.score-value.bad{color:#be123c}
+    .review-title{font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#111827;border-bottom:1px solid #111827;padding-bottom:6px;margin:16px 0 6px}
+    .question-row{break-inside:avoid;border-bottom:1px solid #e5e7eb;padding:10px 0}
+    .q-head{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:start}
+    .q-title{font-weight:800;font-size:12px;white-space:pre-wrap;line-height:1.45;color:#111827}
+    .q-meta{display:flex;gap:6px;align-items:center;font-size:10px;color:#64748b;white-space:nowrap}
+    .status{border-radius:999px;padding:2px 7px;font-size:10px;font-weight:800}
+    .status-correct{background:#dcfce7;color:#166534}
+    .status-wrong{background:#ffe4e6;color:#9f1239}
+    .status-unanswered{background:#f3f4f6;color:#4b5563}
+    .status-answered{background:#e0e7ff;color:#3730a3}
+    .img-wrap{margin-top:8px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:6px;text-align:center}
+    .img-wrap img{max-width:100%;height:auto;max-height:360px;object-fit:contain}
+    .options-list{margin-top:7px;columns:2;column-gap:24px}
+    .option-line{break-inside:avoid;display:flex;gap:5px;align-items:baseline;padding:2px 0;font-size:11px;color:#374151}
+    .option-letter{font-weight:900;color:#111827;min-width:18px}
+    .option-text{flex:1}
+    .option-line.is-correct{color:#065f46;font-weight:700}
+    .option-line.is-selected:not(.is-correct){color:#9f1239;font-weight:700}
+    .option-note{font-size:9px;font-weight:900;text-transform:uppercase;margin-left:5px;white-space:nowrap}
+    .correct-note{color:#047857}.selected-note{color:#be123c}
+    .answer-summary{margin-top:7px;background:#f8fafc;border-left:3px solid #4f46e5;padding:5px 8px;font-size:11px;display:flex;gap:18px;flex-wrap:wrap}
+    .footer{margin-top:14px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:9px;color:#64748b;text-align:right}
+    @media print{.brand img{height:50px}.watermark-text{font-size:34px}.options-list{columns:2}.question-row{padding:8px 0}.img-wrap img{max-height:300px}}
   </style>
 </head>
 <body>
   <div class="watermark"><div class="watermark-text">${escapeHtml(`${studentName} • ${studentId}`)}</div></div>
   <main class="content">
-    <div class="top"><img src="${escapeHtml(bannerImage)}" alt="Karthikeyan Analysis" /></div>
-    <section class="hero">
-      <div>
-        <div class="label">Response Sheet</div>
-        <div class="h1">${escapeHtml(test.title)}</div>
-        <div class="sub">${escapeHtml(test.subject)} • Submitted: ${escapeHtml(
-          attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-",
-        )}</div>
-        <div class="chips">
-          <span class="chip">Name: ${escapeHtml(studentName)}</span>
-          <span class="chip">ID: ${escapeHtml(studentId)}</span>
-          <span class="chip">${participant.isGuest ? "Guest participant" : "Enrolled student"}</span>
+    <header class="sheet-header">
+      <div class="brand">
+        <img src="${escapeHtml(bannerImage)}" alt="Karthikeyan Analysis" />
+        <div>
+          <p class="exam-title">${escapeHtml(test.title)}</p>
+          <div class="muted">${escapeHtml(test.subject || "Exam")} • Official response sheet</div>
+        </div>
+      </div>
+      <div class="doc-title">
+        <div class="eyebrow">Result</div>
+        <h1>Exam Result Sheet</h1>
+      </div>
+    </header>
+    <section class="candidate-block">
+      <div class="info-card">
+        <div class="section-title">Candidate & Exam Details</div>
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-label">Candidate Name</div>
+            <div class="info-value">${escapeHtml(studentName)}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Student ID</div>
+            <div class="info-value">${escapeHtml(studentId)}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Participant Type</div>
+            <div class="info-value">${participant.isGuest ? "Guest participant" : "Enrolled student"}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Submitted At</div>
+            <div class="info-value">${escapeHtml(submittedLabel)}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Total Questions</div>
+            <div class="info-value">${questions.length}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Duration</div>
+            <div class="info-value">${formatResponseSheetTime((test.durationMinutes || 0) * 60)}</div>
+          </div>
         </div>
       </div>
       <div class="profile-passport">${passportInner}</div>
     </section>
-    <section class="kpis">
-      <div class="kpi"><div class="l">Score</div><div class="v">${scoreValue} / ${maxScoreValue}</div></div>
-      <div class="kpi"><div class="l">Percentage</div><div class="v">${percent}%</div></div>
-      <div class="kpi"><div class="l">Answered</div><div class="v">${answeredCount} / ${questions.length}</div></div>
-      <div class="kpi"><div class="l">Duration</div><div class="v">${formatResponseSheetTime((test.durationMinutes || 0) * 60)}</div></div>
+    <section class="score-strip">
+      <div class="score-cell"><div class="score-label">Score</div><div class="score-value">${scoreValue}/${maxScoreValue}</div></div>
+      <div class="score-cell"><div class="score-label">Percentage</div><div class="score-value">${percent}%</div></div>
+      <div class="score-cell"><div class="score-label">Answered</div><div class="score-value">${answeredCount}</div></div>
+      <div class="score-cell"><div class="score-label">Correct</div><div class="score-value good">${correctCount}</div></div>
+      <div class="score-cell"><div class="score-label">Wrong</div><div class="score-value bad">${wrongCount}</div></div>
+      <div class="score-cell"><div class="score-label">Unanswered</div><div class="score-value">${unansweredCount}</div></div>
     </section>
+    <div class="review-title">Question Wise Response Review</div>
     ${rows.join("")}
-    <div class="footer">Generated by ${generatedBy === "admin" ? "Admin Panel" : "Student Portal"} • ${escapeHtml(new Date().toLocaleString())}</div>
+    <div class="footer">Generated by ${generatedBy === "admin" ? "Admin Panel" : "Student Portal"} • ${escapeHtml(generatedLabel)}</div>
   </main>
-  <script>window.focus(); setTimeout(() => window.print(), 350);</script>
+  <script>
+    (function () {
+      function fallbackUrls(img) {
+        try { return JSON.parse(img.getAttribute("data-fallback-srcs") || "[]"); } catch (e) { return []; }
+      }
+
+      function loadImage(img) {
+        return new Promise(function (resolve) {
+          var urls = fallbackUrls(img);
+          var index = Number(img.getAttribute("data-fallback-index") || "0");
+          var done = false;
+          var timeoutId = null;
+
+          function finish() {
+            if (done) return;
+            done = true;
+            if (timeoutId) clearTimeout(timeoutId);
+            resolve();
+          }
+
+          function tryNext() {
+            index += 1;
+            if (index < urls.length) {
+              img.setAttribute("data-fallback-index", String(index));
+              img.src = urls[index];
+              timeoutId = setTimeout(tryNext, 3500);
+              return;
+            }
+            finish();
+          }
+
+          if (img.complete && img.naturalWidth > 0) {
+            finish();
+            return;
+          }
+
+          img.addEventListener("load", finish, { once: true });
+          img.addEventListener("error", tryNext);
+          timeoutId = setTimeout(tryNext, 3500);
+        });
+      }
+
+      function waitForImages() {
+        var images = Array.prototype.slice.call(document.images || []);
+        if (!images.length) return Promise.resolve();
+        return Promise.all(images.map(loadImage));
+      }
+
+      window.focus();
+      waitForImages().then(function () {
+        setTimeout(function () { window.print(); }, 250);
+      });
+    })();
+  </script>
 </body>
 </html>`;
 }

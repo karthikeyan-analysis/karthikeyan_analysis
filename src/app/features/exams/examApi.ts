@@ -13,6 +13,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db } from "../../../config/firebase";
@@ -254,6 +255,20 @@ export async function startAttempt(params: {
   const answers: Record<string, number | null> = {};
   params.questionIds.forEach((id) => (answers[id] = null));
 
+  if (params.studentRecordId) {
+    const existingForStudent = await getDocs(
+      query(
+        examAttemptsCol(params.testId),
+        where("studentRecordId", "==", params.studentRecordId),
+        limit(1),
+      ),
+    );
+    const duplicate = existingForStudent.docs.find((attemptDoc) => attemptDoc.id !== params.uid);
+    if (duplicate) {
+      throw new Error("This student ID already has an attempt for this test.");
+    }
+  }
+
   await setDoc(
     examAttemptRef(params.testId, params.uid),
     {
@@ -275,6 +290,27 @@ export async function startAttempt(params: {
     } satisfies Omit<ExamAttempt, "id"> as any,
     { merge: true },
   );
+}
+
+export async function requestRejoinApproval(testId: string, uid: string): Promise<void> {
+  await updateDoc(examAttemptRef(testId, uid), {
+    rejoinRequestedAt: new Date().toISOString(),
+    rejoinRequestedAtServer: serverTimestamp(),
+  } as any);
+}
+
+export async function approveRejoinForAdmin(testId: string, uid: string): Promise<void> {
+  await updateDoc(examAttemptRef(testId, uid), {
+    rejoinApprovedAt: new Date().toISOString(),
+    rejoinApprovedAtServer: serverTimestamp(),
+  } as any);
+}
+
+export async function markRejoinApprovalUsed(testId: string, uid: string): Promise<void> {
+  await updateDoc(examAttemptRef(testId, uid), {
+    rejoinApprovalUsedAt: new Date().toISOString(),
+    rejoinApprovalUsedAtServer: serverTimestamp(),
+  } as any);
 }
 
 export async function saveAttemptProgress(params: {
@@ -313,6 +349,22 @@ export async function submitAttempt(params: {
 export async function listAttemptsForAdmin(testId: string): Promise<ExamAttempt[]> {
   const snap = await getDocs(query(examAttemptsCol(testId), orderBy("startedAt", "desc"), limit(2000)));
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamAttempt[];
+}
+
+export async function deleteAttemptsForAdmin(testId: string): Promise<number> {
+  let deleted = 0;
+
+  while (true) {
+    const snap = await getDocs(query(examAttemptsCol(testId), limit(500)));
+    if (snap.empty) return deleted;
+
+    const batch = writeBatch(db);
+    snap.docs.forEach((attemptDoc) => {
+      batch.delete(attemptDoc.ref);
+    });
+    await batch.commit();
+    deleted += snap.size;
+  }
 }
 
 /** Loads every test and its attempts (one Firestore read per test for attempts). */

@@ -10,7 +10,15 @@ import { examIncludesBatch } from "../../features/exams/examBatchUtils";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import { useNavigate } from "react-router";
 import { listExamTestsForStudent } from "../../features/exams/examApi";
+import { canShowExamToStudentToday } from "../../features/exams/examAvailability";
 import type { ExamTest } from "../../features/exams/types";
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function StudentDashboard() {
   const { content, videos, tests, batches } = useData();
@@ -83,15 +91,18 @@ export default function StudentDashboard() {
     };
   }, [user?.batchId, user?.studentRecordId]);
 
-  const upcomingExamCount = useMemo(() => {
+  const todaysExamTests = useMemo(() => {
     const now = Date.now();
-    return examTests.filter((t) => new Date(t.startAt).getTime() > now).length;
+    return examTests
+      .filter((t) => canShowExamToStudentToday(t, now))
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
   }, [examTests]);
 
-  const upcomingItems = useMemo(() => {
-    const now = Date.now();
+  const todaysExamCount = todaysExamTests.length;
 
-    const cbt = examTests
+  const upcomingItems = useMemo(() => {
+    const today = localDateKey();
+    const cbt = todaysExamTests
       .map((t) => ({
         id: `cbt-${t.id}`,
         type: "CBT" as const,
@@ -100,10 +111,16 @@ export default function StudentDashboard() {
         when: new Date(t.startAt).getTime(),
         meta: `${new Date(t.startAt).toLocaleString()} – ${new Date(t.endAt).toLocaleString()}`,
       }))
-      .filter((x) => x.when > now);
+      .filter((x) => Number.isFinite(x.when));
 
     const internal = tests
-      .filter((t) => user?.batchId && examIncludesBatch(t, user.batchId))
+      .filter(
+        (t) =>
+          user?.batchId &&
+          examIncludesBatch(t, user.batchId) &&
+          t.status === "active" &&
+          t.testDate === today,
+      )
       .map((t) => {
         const ts = new Date(`${t.testDate}T${t.startTime || "00:00"}`).getTime();
         return {
@@ -115,10 +132,10 @@ export default function StudentDashboard() {
           meta: `${t.testDate} • ${t.startTime} - ${t.endTime}`,
         };
       })
-      .filter((x) => x.when > now);
+      .filter((x) => Number.isFinite(x.when));
 
     return [...cbt, ...internal].sort((a, b) => a.when - b.when).slice(0, 4);
-  }, [examTests, tests, user?.batchId]);
+  }, [tests, todaysExamTests, user?.batchId]);
 
   return (
     <div className="space-y-6">
@@ -147,7 +164,7 @@ export default function StudentDashboard() {
               {availableSubjects.length} subjects
             </Badge>
             <Badge variant="outline" className="bg-white">
-              {upcomingExamCount} upcoming CBT
+              {todaysExamCount} test today
             </Badge>
           </div>
         </CardContent>
@@ -184,20 +201,20 @@ export default function StudentDashboard() {
         <Card className="border-slate-200 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-600">
-              Upcoming CBT Exams
+              Today's CBT Exams
             </CardTitle>
             <FileText className="w-5 h-5 text-green-600" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-slate-900">
-              {upcomingExamCount}
+              {todaysExamCount}
             </div>
             <p className="text-xs text-slate-500 mt-1">
               <button
                 className="text-indigo-700 hover:underline"
                 onClick={() => navigate("/student/tests")}
               >
-                Open Test Schedule
+                Open Today's Tests
               </button>
             </p>
           </CardContent>
@@ -256,12 +273,12 @@ export default function StudentDashboard() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <CalendarClock className="w-5 h-5 text-emerald-600" />
-              Upcoming Tests
+              Today's Tests
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {upcomingItems.length === 0 ? (
-              <p className="text-sm text-slate-600">No upcoming tests scheduled.</p>
+              <p className="text-sm text-slate-600">No active tests scheduled for today.</p>
             ) : (
               upcomingItems.map((item) => (
                 <div

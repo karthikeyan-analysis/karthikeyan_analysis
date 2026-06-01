@@ -19,6 +19,20 @@ export function getExamWindowStatus(
   return "active";
 }
 
+export function isExamScheduledToday(
+  test: Pick<ExamTest, "startAt">,
+  nowMs = Date.now(),
+): boolean {
+  const start = new Date(test.startAt);
+  const today = new Date(nowMs);
+  if (Number.isNaN(start.getTime())) return false;
+  return (
+    start.getFullYear() === today.getFullYear() &&
+    start.getMonth() === today.getMonth() &&
+    start.getDate() === today.getDate()
+  );
+}
+
 /** New attempts only — in-progress students may continue until their timer ends. */
 export function canStartNewExamAttempt(
   test: Pick<ExamTest, "startAt" | "endAt" | "manuallyClosedAt" | "status">,
@@ -27,6 +41,13 @@ export function canStartNewExamAttempt(
   if (test.status && test.status !== "published") return false;
   if (isExamManuallyClosed(test)) return false;
   return getExamWindowStatus(test, nowMs) === "active";
+}
+
+export function canShowExamToStudentToday(
+  test: Pick<ExamTest, "startAt" | "endAt" | "manuallyClosedAt" | "status">,
+  nowMs = Date.now(),
+): boolean {
+  return isExamScheduledToday(test, nowMs) && canStartNewExamAttempt(test, nowMs);
 }
 
 export function examWindowStatusLabel(

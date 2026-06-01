@@ -5,8 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/ca
 import { Badge } from "../../components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
-import { Download, Loader2 } from "lucide-react";
-import { getExamTest, listAttemptsForAdmin, listPrivateQuestions, listPublicQuestions } from "../../features/exams/examApi";
+import { CheckCircle2, Download, Loader2, Trash2 } from "lucide-react";
+import {
+  approveRejoinForAdmin,
+  deleteAttemptsForAdmin,
+  getExamTest,
+  listAttemptsForAdmin,
+  listPrivateQuestions,
+  listPublicQuestions,
+} from "../../features/exams/examApi";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import { useData } from "../../context/DataContext";
 import * as XLSX from "xlsx";
@@ -65,6 +72,8 @@ export default function ExamResults() {
 
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const [clearingResponses, setClearingResponses] = useState(false);
+  const [approvingRejoinUid, setApprovingRejoinUid] = useState<string | null>(null);
   const [test, setTest] = useState<ExamTest | null>(null);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
 
@@ -330,6 +339,59 @@ export default function ExamResults() {
     }
   };
 
+  const clearResponses = async () => {
+    if (!test) return;
+    if (attempts.length === 0) {
+      alert("No responses to remove.");
+      return;
+    }
+
+    const ok = window.confirm(
+      `Remove all ${attempts.length} response(s) for "${test.title}"?\n\nThis deletes submitted and in-progress attempts. Students can take the test again if it is still available.`,
+    );
+    if (!ok) return;
+
+    const typed = window.prompt('Type "REMOVE" to confirm deleting all responses for this test.');
+    if (typed !== "REMOVE") return;
+
+    setClearingResponses(true);
+    try {
+      const deleted = await deleteAttemptsForAdmin(testId);
+      setAttempts([]);
+      alert(`Removed ${deleted} response(s).`);
+    } catch (e) {
+      console.error(e);
+      alert("Failed to remove responses. Check admin permissions and try again.");
+    } finally {
+      setClearingResponses(false);
+    }
+  };
+
+  const rejoinNeedsApproval = (attempt: ExamAttempt) => {
+    if (attempt.status !== "in_progress") return false;
+    if (!attempt.rejoinRequestedAt) return false;
+    if (!attempt.rejoinApprovedAt) return true;
+    return attempt.rejoinApprovedAt < attempt.rejoinRequestedAt;
+  };
+
+  const approveRejoin = async (attempt: ExamAttempt) => {
+    setApprovingRejoinUid(attempt.uid);
+    try {
+      await approveRejoinForAdmin(testId, attempt.uid);
+      const approvedAt = new Date().toISOString();
+      setAttempts((prev) =>
+        prev.map((item) =>
+          item.uid === attempt.uid ? { ...item, rejoinApprovedAt: approvedAt } : item,
+        ),
+      );
+    } catch (e) {
+      console.error(e);
+      alert("Failed to approve rejoin. Check admin permissions and try again.");
+    } finally {
+      setApprovingRejoinUid(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-sm text-slate-500 flex items-center gap-2">
@@ -361,6 +423,19 @@ export default function ExamResults() {
             <Download className="w-4 h-4 mr-2" />
             Response PDFs
           </Button>
+          <Button
+            variant="outline"
+            className="border-rose-200 text-rose-700 hover:bg-rose-50"
+            onClick={() => void clearResponses()}
+            disabled={clearingResponses || attempts.length === 0}
+          >
+            {clearingResponses ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Trash2 className="w-4 h-4" />
+            )}
+            <span className="ml-2">{clearingResponses ? "Removing..." : "Remove Responses"}</span>
+          </Button>
           <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void exportExcel()} disabled={exporting}>
             {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             <span className="ml-2">Download Excel</span>
@@ -388,6 +463,7 @@ export default function ExamResults() {
                     <TableHead>Status</TableHead>
                     <TableHead>Started</TableHead>
                     <TableHead>Submitted</TableHead>
+                    <TableHead>Rejoin</TableHead>
                     <TableHead>Marks</TableHead>
                     <TableHead>Percent</TableHead>
                   </TableRow>
@@ -420,6 +496,28 @@ export default function ExamResults() {
                         </TableCell>
                         <TableCell className="text-xs text-slate-600">
                           {a.submittedAt ? new Date(a.submittedAt).toLocaleString() : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {rejoinNeedsApproval(a) ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="border-amber-200 text-amber-800 hover:bg-amber-50"
+                              onClick={() => void approveRejoin(a)}
+                              disabled={approvingRejoinUid === a.uid}
+                            >
+                              {approvingRejoinUid === a.uid ? (
+                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                              ) : (
+                                <CheckCircle2 className="w-3 h-3 mr-1" />
+                              )}
+                              Approve
+                            </Button>
+                          ) : a.rejoinApprovedAt ? (
+                            <Badge className="bg-emerald-100 text-emerald-800">Approved</Badge>
+                          ) : (
+                            <span className="text-xs text-slate-500">-</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-sm font-semibold text-slate-900">
                           {a.score != null && maxMarks != null ? `${a.score} / ${maxMarks}` : "-"}

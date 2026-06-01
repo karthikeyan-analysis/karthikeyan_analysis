@@ -126,6 +126,12 @@ export interface ExamAttempt {
   status: AttemptStatus;
   answers: Record<string, number | null>; // questionId -> selectedIndex
   markedForReview?: string[]; // questionIds
+  /** Student tried to re-enter an in-progress attempt from a new session. */
+  rejoinRequestedAt?: string;
+  /** Admin-approved rejoin timestamp. */
+  rejoinApprovedAt?: string;
+  /** Student consumed the latest rejoin approval. */
+  rejoinApprovalUsedAt?: string;
   score?: number;
   maxScore?: number;
 }

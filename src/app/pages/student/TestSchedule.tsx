@@ -18,10 +18,13 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { Calendar, CheckCircle2, KeyRound, Zap } from "lucide-react";
+import { KeyRound, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getAttempt, getExamTest, listExamTestsForStudent } from "../../features/exams/examApi";
-import { getExamWindowStatus } from "../../features/exams/examAvailability";
+import {
+  canShowExamToStudentToday,
+  getExamWindowStatus,
+} from "../../features/exams/examAvailability";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { useNavigate } from "react-router";
 import StudentAvatar from "../../components/StudentAvatar";
@@ -119,14 +122,22 @@ export default function TestSchedule() {
 
   const now = Date.now();
   const studentExams = useMemo(() => {
-    const items = [...examTests].sort(
-      (a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime(),
-    );
-    const active = items.filter((t) => getExamWindowStatus(t, now) === "active");
-    const upcoming = items.filter((t) => getExamWindowStatus(t, now) === "upcoming");
-    const closed = items.filter((t) => getExamWindowStatus(t, now) === "closed");
-    return { active, upcoming, closed, all: items };
+    const todayActive = examTests
+      .filter((t) => canShowExamToStudentToday(t, now))
+      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+    return { todayActive };
   }, [examTests, now]);
+
+  const visibleExamTests = useMemo(
+    () => studentExams.todayActive,
+    [studentExams.todayActive],
+  );
+
+  const visibleAttemptByExamId = useMemo(() => {
+    return Object.fromEntries(
+      visibleExamTests.map((test) => [test.id, attemptByExamId[test.id] ?? null]),
+    );
+  }, [attemptByExamId, visibleExamTests]);
 
   const isGuestOnly = user?.isGuestExamParticipant && user.guestExamTestId;
 
@@ -228,8 +239,8 @@ export default function TestSchedule() {
                           : `${test.startTime} – ${test.endTime}`}
                       </TableCell>
                       <TableCell>
-                        {isExam ? (
-                          attemptByExamId[test.id]?.status === "submitted" ? (
+                      {isExam ? (
+                          visibleAttemptByExamId[test.id]?.status === "submitted" ? (
                             <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
                           ) : getExamWindowStatus(test, now) === "active" ? (
                             <Badge className="bg-green-100 text-green-800">START NOW</Badge>
@@ -244,7 +255,7 @@ export default function TestSchedule() {
                       </TableCell>
                       <TableCell className="text-right">
                         {isExam ? (
-                          attemptByExamId[test.id]?.status === "submitted" ? (
+                          visibleAttemptByExamId[test.id]?.status === "submitted" ? (
                             <Button disabled variant="outline" size="sm" className="text-xs">
                               Completed
                             </Button>
@@ -315,7 +326,7 @@ export default function TestSchedule() {
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
             <Zap className="w-5 h-5" />
-            In-app CBT Exams
+            Today's Active CBT Exams
           </h2>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
@@ -323,7 +334,7 @@ export default function TestSchedule() {
               Passcode join
             </Button>
             <Badge variant="outline" className="text-xs">
-              Secure mode
+              Only today
             </Badge>
           </div>
         </div>
@@ -334,54 +345,26 @@ export default function TestSchedule() {
               <CardTitle className="text-sm text-slate-600">Active</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-bold text-slate-900">
-              {studentExams.active.length}
-            </CardContent>
-          </Card>
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-slate-600">Upcoming</CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-bold text-slate-900">
-              {studentExams.upcoming.length}
-            </CardContent>
-          </Card>
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-slate-600">Closed</CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-bold text-slate-900">
-              {studentExams.closed.length}
+              {studentExams.todayActive.length}
             </CardContent>
           </Card>
         </div>
 
-        <TestTableSection title="Active Exams" tests={studentExams.active} icon={Zap} isExam />
-        <TestTableSection
-          title="Upcoming Exams"
-          tests={studentExams.upcoming}
-          icon={Calendar}
-          isExam
-        />
-        <TestTableSection
-          title="Previous Exams"
-          tests={studentExams.closed}
-          icon={CheckCircle2}
-          isExam
-        />
+        <TestTableSection title="Available Now" tests={studentExams.todayActive} icon={Zap} isExam />
 
-        {studentExams.all.length === 0 && !examLoading && (
+        {studentExams.todayActive.length === 0 && !examLoading && (
           <Card>
             <CardContent className="pt-8 text-center pb-8">
               <Zap className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-              <p className="text-slate-600 font-medium">No in-app CBT exams yet</p>
+              <p className="text-slate-600 font-medium">No active tests for today</p>
               <p className="text-sm text-slate-500 mt-1">
-                Your instructor will publish exams here.
+                Tests will appear here only on their scheduled day and active time.
               </p>
             </CardContent>
           </Card>
         )}
 
-        {attemptLoading && studentExams.all.length > 0 && (
+        {attemptLoading && studentExams.todayActive.length > 0 && (
           <div className="text-xs text-slate-500">Loading your attempts…</div>
         )}
       </div>

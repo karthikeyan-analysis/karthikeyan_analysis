@@ -21,44 +21,7 @@ service firebase.storage {
       return hasUserAdminRole() || hasAdminProfile();
     }
 
-    // Public read keeps website images, testimonial files, and shared download
-    // URLs working. Writes stay limited to signed-in admins from either app.
     match /{allPaths=**} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /examTests/{testId}/questions/{questionId}/{fileName} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /studentPhotos/{studentId}/{fileName} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /products/{fileName} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /categories/{fileName} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /testimonials/{fileName} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /content/{fileName} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /videos/{fileName} {
       allow read: if true;
       allow write: if isAdmin();
     }

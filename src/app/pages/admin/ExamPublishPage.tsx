@@ -4,8 +4,15 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { getExamTest, listPublicQuestions, updateExamTest } from "../../features/exams/examApi";
+import {
+  getExamTest,
+  listPrivateQuestions,
+  listPublicQuestions,
+  updateExamTest,
+} from "../../features/exams/examApi";
+import { openAdminPreviewPdf } from "../../features/exams/adminPreviewPdf";
 import type { ExamTest } from "../../features/exams/types";
+import { Download } from "lucide-react";
 
 export default function ExamPublishPage() {
   const { id } = useParams();
@@ -15,6 +22,7 @@ export default function ExamPublishPage() {
   const [questionCount, setQuestionCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [publishing, setPublishing] = useState(false);
+  const [downloadingPreview, setDownloadingPreview] = useState(false);
 
   useEffect(() => {
     if (!testId) return;
@@ -67,6 +75,23 @@ export default function ExamPublishPage() {
     }
   };
 
+  const downloadPreview = async () => {
+    if (!test) return;
+    setDownloadingPreview(true);
+    try {
+      const [questions, keys] = await Promise.all([
+        listPublicQuestions(testId),
+        listPrivateQuestions(testId),
+      ]);
+      openAdminPreviewPdf({ test, questions, keys });
+    } catch (e) {
+      console.error(e);
+      alert("Failed to prepare preview PDF. Please save questions and try again.");
+    } finally {
+      setDownloadingPreview(false);
+    }
+  };
+
   if (loading || !test) return <div className="text-sm text-slate-500">Loading publish panel...</div>;
 
   return (
@@ -90,9 +115,16 @@ export default function ExamPublishPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Ready to publish?</CardTitle>
+          <CardTitle>Verify before publishing</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <Alert className="border-indigo-200 bg-indigo-50">
+            <AlertTitle>Download preview copy</AlertTitle>
+            <AlertDescription>
+              Download a printable PDF with uploaded questions, options, screenshots, marks, and correct answers.
+              Use it to verify the question paper before publishing.
+            </AlertDescription>
+          </Alert>
           {warnings.length === 0 ? (
             <Alert className="border-emerald-200 bg-emerald-50">
               <AlertTitle>Looks good</AlertTitle>
@@ -111,6 +143,14 @@ export default function ExamPublishPage() {
             </Alert>
           )}
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void downloadPreview()}
+              disabled={downloadingPreview || questionCount === 0}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {downloadingPreview ? "Preparing Preview..." : "Download Preview PDF"}
+            </Button>
             <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void publish()} disabled={publishing}>
               {publishing ? "Publishing..." : "Publish Test"}
             </Button>

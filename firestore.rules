@@ -13,10 +13,10 @@ service cloud.firestore {
       return /databases/$(database)/documents/admins/$(uid);
     }
 
-    function hasUserRole(role) {
+    function hasUserAdminRole() {
       return isSignedIn()
         && exists(userPath(request.auth.uid))
-        && get(userPath(request.auth.uid)).data.role == role;
+        && get(userPath(request.auth.uid)).data.role == "admin";
     }
 
     function hasAdminProfile() {
@@ -26,31 +26,36 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return hasUserRole("admin") || hasAdminProfile();
-    }
-
-    function isStudent() {
-      return hasUserRole("student");
+      return hasUserAdminRole() || hasAdminProfile();
     }
 
     function isOwner(uid) {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function selfStudentProfile() {
+      return isSignedIn()
+        && request.resource.data.role == "student";
+    }
+
     match /users/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create, update: if isOwner(uid) || isAdmin();
+      allow create: if isAdmin() || (isOwner(uid) && selfStudentProfile());
+      allow update: if isAdmin()
+        || (
+          isOwner(uid)
+          && resource.data.role == "student"
+          && request.resource.data.role == "student"
+        );
       allow delete: if isAdmin();
     }
 
-    // Website admin panel and student portal admin profile records.
     match /admins/{uid} {
       allow read: if isOwner(uid) || isAdmin();
-      allow create, update: if isOwner(uid) || isAdmin();
-      allow delete: if isAdmin();
+      allow write: if isAdmin();
     }
 
-    // Public website storefront.
+    // Website public storefront.
     match /products/{id} {
       allow read: if true;
       allow write: if isAdmin();
@@ -88,20 +93,19 @@ service cloud.firestore {
     }
 
     match /orders/{id} {
-      // Public order lookup is used by order placed / track order pages.
       allow read: if true;
       allow create: if true;
       allow update, delete: if isAdmin();
     }
 
-    // Student portal shared data.
+    // Student portal data.
     match /batches/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
     match /students/{id} {
-      // The app queries students by email during Google/guest login and admins load full lists.
+      // Needed for student Google login and guest matching by email.
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
@@ -116,45 +120,40 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Legacy schedule tests used by the student portal.
     match /tests/{id} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // In-app CBT engine.
     match /examTests/{testId} {
-      allow read: if isSignedIn();
-      allow create, update, delete: if isAdmin();
+      // Public read is needed before guest sign-in for passcode exam join.
+      allow read: if true;
+      allow write: if isAdmin();
 
       match /questionsPublic/{qId} {
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
 
-      // Client-side scoring reads private keys; keep write access admin-only.
       match /questionsPrivate/{qId} {
+        // Current client scoring reads keys; admins can always manage them.
         allow read: if isSignedIn();
         allow write: if isAdmin();
       }
 
       match /guestProfiles/{uid} {
         allow read: if isAdmin() || isOwner(uid);
-        allow create: if isOwner(uid)
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.testId == testId;
-        allow update: if isAdmin() || isOwner(uid);
+        allow create, update: if isAdmin() || isOwner(uid);
         allow delete: if isAdmin();
       }
 
       match /attempts/{uid} {
         allow read: if isAdmin() || isOwner(uid);
-        allow create, update: if isOwner(uid) || isAdmin();
+        allow create, update: if isAdmin() || isOwner(uid);
         allow delete: if isAdmin();
       }
     }
 
-    // Admin safety net for future app-managed collections.
     match /{document=**} {
       allow read, write: if isAdmin();
     }
