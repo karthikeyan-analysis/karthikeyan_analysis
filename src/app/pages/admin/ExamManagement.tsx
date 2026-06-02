@@ -174,7 +174,7 @@ export default function ExamManagement() {
                     <TableHead>Title</TableHead>
                     <TableHead>Batch</TableHead>
                     <TableHead>Subject</TableHead>
-                    <TableHead>Window</TableHead>
+                    <TableHead className="min-w-[220px]">Window</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Publish</TableHead>
                     <TableHead>Questions</TableHead>
@@ -189,7 +189,7 @@ export default function ExamManagement() {
                         <TableCell className="font-medium text-slate-900">{t.title}</TableCell>
                         <TableCell className="text-sm">{batchName}</TableCell>
                         <TableCell className="text-sm">{t.subject}</TableCell>
-                        <TableCell className="text-xs text-slate-600 max-w-[200px]">
+                        <TableCell className="text-xs text-slate-600 min-w-[220px] whitespace-nowrap">
                           {new Date(t.startAt).toLocaleString()} – {new Date(t.endAt).toLocaleString()}
                         </TableCell>
                         <TableCell>{statusBadge(t)}</TableCell>
