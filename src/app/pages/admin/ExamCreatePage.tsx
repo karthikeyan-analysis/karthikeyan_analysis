@@ -103,8 +103,9 @@ export default function ExamCreatePage() {
     setCreating(true);
     try {
       const now = Date.now();
-      const start = new Date(now - 60_000).toISOString();
-      const end = new Date(now + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
+      const start = new Date(now).toISOString();
+      // Default: window closes 24 hours after creation. Admin should update in Settings.
+      const end = new Date(now + 24 * 60 * 60 * 1000).toISOString();
       const resolvedSubject =
         subjectMode === "common"
           ? subject.trim()

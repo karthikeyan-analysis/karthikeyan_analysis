@@ -25,17 +25,40 @@ import {
   normalizeExamBatchFields,
 } from "../../features/exams/examBatchUtils";
 import type { ExamAdvancedSettings, ExamTest } from "../../features/exams/types";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
+
+// ── datetime-local helpers ────────────────────────────────────────────────────
+
+function toDatetimeLocal(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function fromDatetimeLocal(value: string): string {
+  if (!value) return "";
+  return new Date(value).toISOString();
+}
+
+// ── types ─────────────────────────────────────────────────────────────────────
 
 type FormState = {
   title: string;
+  subject: string;
   batchMode: ExamBatchMode;
   batchIds: string[];
+  startAt: string;
+  endAt: string;
   durationMinutes: string;
-  negativeMarkPerWrong: string;
   defaultMarksPerQuestion: QuestionMarkOption;
+  negativeMarkPerWrong: string;
   passcode: string;
   settings: Required<ExamAdvancedSettings>;
 };
+
+// ── component ─────────────────────────────────────────────────────────────────
 
 export default function ExamSettingsPage() {
   const { id } = useParams();
@@ -45,6 +68,7 @@ export default function ExamSettingsPage() {
   const [test, setTest] = useState<ExamTest | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
   const [form, setForm] = useState<FormState | null>(null);
 
   useEffect(() => {
@@ -57,17 +81,19 @@ export default function ExamSettingsPage() {
         if (!t || cancelled) return;
         const settings = getEffectiveExamSettings(t);
         setTest(t);
-        const loadedBatchIds = getExamBatchIds(t);
         setForm({
           title: t.title || "",
-          batchMode: inferExamBatchMode(loadedBatchIds),
-          batchIds: loadedBatchIds,
+          subject: t.subject || "",
+          batchMode: inferExamBatchMode(getExamBatchIds(t)),
+          batchIds: getExamBatchIds(t),
+          startAt: toDatetimeLocal(t.startAt),
+          endAt: toDatetimeLocal(t.endAt),
           durationMinutes: String(t.durationMinutes || 60),
-          negativeMarkPerWrong: String(t.negativeMarkPerWrong || 0),
           defaultMarksPerQuestion: normalizeQuestionMarks(
             t.defaultMarksPerQuestion,
             DEFAULT_MARKS_PER_QUESTION,
           ) as QuestionMarkOption,
+          negativeMarkPerWrong: String(t.negativeMarkPerWrong || 0),
           passcode: "",
           settings,
         });
@@ -78,15 +104,13 @@ export default function ExamSettingsPage() {
       }
     };
     void load();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [testId]);
 
   const batchStudentCount = useMemo(() => {
     if (!form) return 0;
-    const batchIdSet = new Set(form.batchIds);
-    return students.filter((s) => s.batchId && batchIdSet.has(s.batchId)).length;
+    const ids = new Set(form.batchIds);
+    return students.filter((s) => s.batchId && ids.has(s.batchId)).length;
   }, [form, students]);
 
   const selectedBatchLabel = useMemo(() => {
@@ -97,12 +121,17 @@ export default function ExamSettingsPage() {
     );
   }, [form, batches]);
 
+  const patch = (partial: Partial<FormState>) =>
+    setForm((prev) => (prev ? { ...prev, ...partial } : prev));
+
+  const patchSettings = (partial: Partial<ExamAdvancedSettings>) =>
+    setForm((prev) =>
+      prev ? { ...prev, settings: { ...prev.settings, ...partial } } : prev,
+    );
+
   const save = async () => {
     if (!form || !test) return;
-    if (!form.title.trim()) {
-      alert("Test name is required.");
-      return;
-    }
+    if (!form.title.trim()) { alert("Test name is required."); return; }
 
     let batchFields: { batchId: string; batchIds: string[] };
     try {
@@ -112,234 +141,305 @@ export default function ExamSettingsPage() {
       return;
     }
 
-    // Schedule is system-managed to keep tests available without manual windows.
-    const now = Date.now();
-    const startAt = test.startAt || new Date(now - 60_000).toISOString();
-    const endAt = test.endAt || new Date(now + 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
+    if (!form.startAt) { alert("Set a start date for the exam window."); return; }
+    if (!form.endAt)   { alert("Set an end date for the exam window."); return; }
 
-    const accessMode = "both";
-    const usesPasscode = true;
+    const startAt = fromDatetimeLocal(form.startAt);
+    const endAt   = fromDatetimeLocal(form.endAt);
 
-    if (usesPasscode && !form.passcode.trim() && !test.accessPasswordHash) {
-      alert("Set a passcode for this access mode.");
+    if (new Date(endAt) <= new Date(startAt)) {
+      alert("End date must be after the start date.");
+      return;
+    }
+
+    if (form.passcode.trim() === "" && !test.accessPasswordHash) {
+      alert("Set a passcode — every test requires one.");
       return;
     }
 
     const settings: ExamAdvancedSettings = applySystemExamSettingLocks({
       ...form.settings,
-      accessMode,
+      accessMode: "both",
       allowedIdentifiers: [],
       allowedEmails: [],
     });
 
     setSaving(true);
+    setSaveStatus("idle");
     try {
       const updates: Partial<ExamTest> = {
         title: form.title.trim(),
+        subject: form.subject.trim(),
         batchId: batchFields.batchId,
         batchIds: batchFields.batchIds,
         startAt,
         endAt,
         durationMinutes: Math.max(1, parseInt(form.durationMinutes || "60", 10) || 60),
+        defaultMarksPerQuestion: form.defaultMarksPerQuestion,
         negativeMarkPerWrong: form.settings.negativeMarkingEnabled
           ? Math.max(0, parseFloat(form.negativeMarkPerWrong || "0") || 0)
           : 0,
-        defaultMarksPerQuestion: form.defaultMarksPerQuestion,
+        showAnswersAfter: test.showAnswersAfter || "after_end",
         visibility: "BATCH",
         selectedStudentRecordIds: [],
         settings,
       };
 
-      const wantsPassword = usesPasscode && form.passcode.trim().length > 0;
-      if (wantsPassword) {
+      if (form.passcode.trim()) {
         (updates as Partial<ExamTest> & { accessPasswordHash?: string }).accessPasswordHash =
           await sha256Base64(form.passcode.trim());
       }
 
       await updateExamTest(testId, updates as Partial<ExamTest> & { accessPasswordHash?: string | null });
       setTest((prev) => (prev ? { ...prev, ...updates } : prev));
-      setForm((prev) => (prev ? { ...prev, passcode: "" } : prev));
-      alert("Settings saved.");
+      patch({ passcode: "" });
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 3000);
     } catch (e) {
       console.error(e);
-      alert("Failed to save settings.");
+      setSaveStatus("error");
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading || !form || !test) return <div className="text-sm text-slate-500">Loading settings...</div>;
+  if (loading || !form || !test)
+    return <div className="text-sm text-slate-500 py-8 text-center">Loading settings…</div>;
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardContent className="pt-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold text-slate-900">Setup Test</div>
-            <div className="text-xs text-slate-600">
-              Configure access, time limit, question behavior, and notifications.
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => navigate(`/admin/tests/${testId}/questions`)}>
-              Go to Questions
-            </Button>
-            <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void save()} disabled={saving}>
-              {saving ? "Saving..." : "Save Settings"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Basic Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label>Test Name</Label>
-            <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          </div>
-          <ExamBatchAssignmentFields
-            batches={batches.map((b) => ({ id: b.id, name: b.name }))}
-            mode={form.batchMode}
-            batchIds={form.batchIds}
-            onModeChange={(batchMode) => setForm({ ...form, batchMode })}
-            onBatchIdsChange={(batchIds) =>
-              setForm({
-                ...form,
-                batchIds,
-                batchMode: inferExamBatchMode(batchIds),
-              })
-            }
-          />
-        </CardContent>
-      </Card>
+      {/* ── Sticky header bar ── */}
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">Setup Test</p>
+          <p className="text-xs text-slate-500">
+            {test.title} · {selectedBatchLabel} · {batchStudentCount} student{batchStudentCount === 1 ? "" : "s"}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {saveStatus === "saved" && (
+            <span className="flex items-center gap-1 text-xs text-emerald-600">
+              <CheckCircle2 className="w-4 h-4" /> Saved
+            </span>
+          )}
+          {saveStatus === "error" && (
+            <span className="flex items-center gap-1 text-xs text-rose-600">
+              <AlertCircle className="w-4 h-4" /> Save failed
+            </span>
+          )}
+          <Button variant="outline" size="sm" onClick={() => navigate(`/admin/tests/${testId}/questions`)}>
+            Go to Questions
+          </Button>
+          <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void save()} disabled={saving}>
+            {saving ? "Saving…" : "Save Settings"}
+          </Button>
+        </div>
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Question Settings</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <QuestionMarksSelect
-            value={form.defaultMarksPerQuestion}
-            onChange={(v) => setForm({ ...form, defaultMarksPerQuestion: v })}
-            hint="Applies when you add new questions on the Questions tab."
-          />
-          <SettingToggle
-            label="Show all test questions on one page"
-            checked={form.settings.paginationMode === "all_on_one_page"}
-            onChange={(value) =>
-              setForm({
-                ...form,
-                settings: {
-                  ...form.settings,
-                  paginationMode: value ? "all_on_one_page" : "one_per_page",
-                },
-              })
-            }
-          />
-          <SettingToggle
-            label="Randomize the order of questions"
-            checked={form.settings.randomizeQuestionOrder}
-            onChange={(value) =>
-              setForm({ ...form, settings: { ...form.settings, randomizeQuestionOrder: value } })
-            }
-          />
-          <SettingToggle
-            label="Allow students to submit blank/empty answers"
-            checked={form.settings.allowBlankAnswers}
-            onChange={(value) => setForm({ ...form, settings: { ...form.settings, allowBlankAnswers: value } })}
-          />
-          <SettingToggle
-            label="Penalize incorrect answers (negative marking)"
-            checked={form.settings.negativeMarkingEnabled}
-            onChange={(value) =>
-              setForm({ ...form, settings: { ...form.settings, negativeMarkingEnabled: value } })
-            }
-          />
-          {form.settings.negativeMarkingEnabled ? (
-            <div className="space-y-2">
-              <Label>Negative marks per wrong answer</Label>
-              <Input
-                type="number"
-                min={0}
-                step={0.25}
-                value={form.negativeMarkPerWrong}
-                onChange={(e) => setForm({ ...form, negativeMarkPerWrong: e.target.value })}
-              />
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
+      {/* ── 1. Basic Info ── */}
+      <Section title="Basic Info">
+        <Field label="Test Name" required>
+          <Input value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Eco Class Test-05" />
+        </Field>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Access Control</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 space-y-1">
-            <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
-              Mandatory passcode access
-            </div>
-            <div className="text-sm font-medium text-slate-900">
-              Selected batch(es) + passcode link users
-            </div>
-            <div className="text-xs text-slate-600">
-              {batchStudentCount} enrolled student{batchStudentCount === 1 ? "" : "s"} from {selectedBatchLabel} can see
-              this test, but everyone must enter the passcode before starting. Unenrolled students can also join with the
-              passcode link.
-            </div>
-          </div>
+        <Field label="Subject">
+          <Input value={form.subject} onChange={(e) => patch({ subject: e.target.value })} placeholder="e.g. Economics" />
+        </Field>
 
-          <div className="space-y-2">
-            <Label>Passcode</Label>
+        <ExamBatchAssignmentFields
+          batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+          mode={form.batchMode}
+          batchIds={form.batchIds}
+          onModeChange={(batchMode) => patch({ batchMode })}
+          onBatchIdsChange={(batchIds) =>
+            patch({ batchIds, batchMode: inferExamBatchMode(batchIds) })
+          }
+        />
+      </Section>
+
+      {/* ── 2. Exam Window ── */}
+      <Section
+        title="Exam Window"
+        description="When students are allowed to open and start this exam. Outside this window it shows as Upcoming or Closed."
+      >
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Start date & time" required>
             <Input
-              type="password"
-              value={form.passcode}
-              onChange={(e) => setForm({ ...form, passcode: e.target.value })}
-              placeholder={test.accessPasswordHash ? "Leave blank to keep current passcode" : "Set passcode"}
+              type="datetime-local"
+              value={form.startAt}
+              onChange={(e) => patch({ startAt: e.target.value })}
             />
-            {test.accessPasswordHash ? (
-              <p className="text-xs text-slate-500">A passcode is already set. Enter a new one only to change it.</p>
-            ) : null}
-            <p className="text-xs text-slate-600">
-              Enrolled students and unenrolled students at{" "}
-              <span className="font-mono text-slate-800">/student/join-test</span> must enter this passcode.
-            </p>
-          </div>
+          </Field>
+          <Field label="End date & time" required>
+            <Input
+              type="datetime-local"
+              value={form.endAt}
+              onChange={(e) => patch({ endAt: e.target.value })}
+            />
+          </Field>
+        </div>
 
-          <div className="space-y-2">
-            <Label>Time limit (minutes)</Label>
+        <Field label="Time limit (minutes)" hint="Duration each student gets once they press Start.">
+          <Input
+            type="number"
+            min={1}
+            value={form.durationMinutes}
+            onChange={(e) => patch({ durationMinutes: e.target.value })}
+            className="max-w-[140px]"
+          />
+        </Field>
+      </Section>
+
+      {/* ── 3. Questions ── */}
+      <Section title="Questions">
+        <QuestionMarksSelect
+          value={form.defaultMarksPerQuestion}
+          onChange={(v) => patch({ defaultMarksPerQuestion: v })}
+          hint="Default marks applied when you add a new question."
+        />
+
+        <Toggle
+          label="Show all questions on one page"
+          description="Off = one question per page (recommended for long exams)."
+          checked={form.settings.paginationMode === "all_on_one_page"}
+          onChange={(v) => patchSettings({ paginationMode: v ? "all_on_one_page" : "one_per_page" })}
+        />
+
+        <Toggle
+          label="Randomize question order"
+          description="Each student gets questions in a different order."
+          checked={form.settings.randomizeQuestionOrder}
+          onChange={(v) => patchSettings({ randomizeQuestionOrder: v })}
+        />
+
+        <Toggle
+          label="Allow blank answers"
+          description="Students can submit without answering every question."
+          checked={form.settings.allowBlankAnswers}
+          onChange={(v) => patchSettings({ allowBlankAnswers: v })}
+        />
+
+        <Toggle
+          label="Negative marking"
+          description="Deduct marks for wrong answers."
+          checked={form.settings.negativeMarkingEnabled}
+          onChange={(v) => patchSettings({ negativeMarkingEnabled: v })}
+        />
+
+        {form.settings.negativeMarkingEnabled && (
+          <Field label="Marks deducted per wrong answer">
             <Input
               type="number"
-              min={1}
-              value={form.durationMinutes}
-              onChange={(e) => setForm({ ...form, durationMinutes: e.target.value })}
+              min={0}
+              step={0.25}
+              value={form.negativeMarkPerWrong}
+              onChange={(e) => patch({ negativeMarkPerWrong: e.target.value })}
+              className="max-w-[140px]"
             />
-          </div>
+          </Field>
+        )}
+      </Section>
 
-        </CardContent>
-      </Card>
+      {/* ── 4. Access ── */}
+      <Section
+        title="Access & Passcode"
+        description="Enrolled students and unenrolled students using the join link must enter the passcode before starting."
+      >
+        <Field
+          label="Passcode"
+          hint={test.accessPasswordHash ? "A passcode is set. Enter a new one only to change it." : undefined}
+        >
+          <Input
+            type="password"
+            value={form.passcode}
+            onChange={(e) => patch({ passcode: e.target.value })}
+            placeholder={test.accessPasswordHash ? "Leave blank to keep current passcode" : "Set passcode"}
+            className="max-w-xs"
+          />
+        </Field>
+      </Section>
 
-      <div className="flex justify-end gap-2">
+      {/* ── Footer save ── */}
+      <div className="flex justify-end gap-2 pb-8">
         <Button variant="outline" onClick={() => navigate(`/admin/tests/${testId}/questions`)}>
           Next: Questions
         </Button>
         <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void save()} disabled={saving}>
-          {saving ? "Saving..." : "Save Settings"}
+          {saving ? "Saving…" : "Save Settings"}
         </Button>
       </div>
     </div>
   );
 }
 
-function SettingToggle(props: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
+// ── Small helper components ────────────────────────────────────────────────────
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <label className="flex items-center gap-3 text-sm">
-      <Checkbox checked={props.checked} onCheckedChange={(v) => props.onChange(Boolean(v))} />
-      <span>{props.label}</span>
-    </label>
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{title}</CardTitle>
+        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+      </CardHeader>
+      <CardContent className="space-y-4">{children}</CardContent>
+    </Card>
   );
 }
 
+function Field({
+  label,
+  hint,
+  required,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label>
+        {label}
+        {required && <span className="text-rose-500 ml-0.5">*</span>}
+      </Label>
+      {children}
+      {hint && <p className="text-xs text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+function Toggle({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer">
+      <Checkbox
+        checked={checked}
+        onCheckedChange={(v) => onChange(Boolean(v))}
+        className="mt-0.5"
+      />
+      <div>
+        <p className="text-sm font-medium text-slate-800">{label}</p>
+        {description && <p className="text-xs text-slate-500">{description}</p>}
+      </div>
+    </label>
+  );
+}
