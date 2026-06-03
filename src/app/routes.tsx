@@ -16,6 +16,7 @@ import StudentTestReports from "./pages/admin/StudentTestReports";
 import ExamStudioLayout from "./pages/admin/ExamStudioLayout";
 import ExamResults from "./pages/admin/ExamResults";
 import ExamResponseSheets from "./pages/admin/ExamResponseSheets";
+import TestAttendanceAnalytics from "./pages/admin/TestAttendanceAnalytics";
 import ExamCreatePage from "./pages/admin/ExamCreatePage";
 import ExamDashboardPage from "./pages/admin/ExamDashboardPage";
 import ExamSettingsPage from "./pages/admin/ExamSettingsPage";
@@ -101,6 +102,7 @@ export const router = createBrowserRouter([
       { path: "tests", element: <ExamManagement /> },
       { path: "tests/live-monitor", element: <LiveExamMonitor /> },
       { path: "tests/analytics", element: <AllTestsAnalytics /> },
+      { path: "tests/attendance", element: <TestAttendanceAnalytics /> },
       { path: "reports/student-tests", element: <StudentTestReports /> },
       { path: "tests/new", element: <ExamCreatePage /> },
       {

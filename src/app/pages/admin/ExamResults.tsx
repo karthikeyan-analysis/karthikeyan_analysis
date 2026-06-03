@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../components/ui/table";
 import { CheckCircle2, Download, Loader2, Trash2 } from "lucide-react";
 import {
   approveRejoinForAdmin,
@@ -14,10 +26,18 @@ import {
   listPrivateQuestions,
   listPublicQuestions,
 } from "../../features/exams/examApi";
-import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
+import type {
+  ExamAttempt,
+  ExamQuestionPrivate,
+  ExamQuestionPublic,
+  ExamTest,
+} from "../../features/exams/types";
 import { useData } from "../../context/DataContext";
 import * as XLSX from "xlsx";
-import { displayNameForAttempt, resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
+import {
+  displayNameForAttempt,
+  resolveAttemptParticipant,
+} from "../../features/exams/adminTestReportUtils";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 
 function safeFileName(name: string) {
@@ -46,7 +66,10 @@ function percentFromAttempt(a: ExamAttempt, maxMarks: number) {
 }
 
 /** Submitted first, highest marks first; ties break by student name. In-progress / not submitted after, by name. */
-function sortAttemptsForRankExport(attempts: ExamAttempt[], students: { id: string; name?: string }[]) {
+function sortAttemptsForRankExport(
+  attempts: ExamAttempt[],
+  students: { id: string; name?: string }[],
+) {
   const nameOf = (a: ExamAttempt) =>
     displayNameForAttempt(a, students).trim().toLowerCase() || a.uid;
 
@@ -73,7 +96,9 @@ export default function ExamResults() {
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
   const [clearingResponses, setClearingResponses] = useState(false);
-  const [approvingRejoinUid, setApprovingRejoinUid] = useState<string | null>(null);
+  const [approvingRejoinUid, setApprovingRejoinUid] = useState<string | null>(
+    null,
+  );
   const [test, setTest] = useState<ExamTest | null>(null);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
 
@@ -83,7 +108,10 @@ export default function ExamResults() {
     const load = async () => {
       setLoading(true);
       try {
-        const [t, a] = await Promise.all([getExamTest(testId), listAttemptsForAdmin(testId)]);
+        const [t, a] = await Promise.all([
+          getExamTest(testId),
+          listAttemptsForAdmin(testId),
+        ]);
         if (cancelled) return;
         setTest(t);
         setAttempts(a);
@@ -113,11 +141,22 @@ export default function ExamResults() {
 
   const attemptsWithRank = useMemo(() => {
     let r = 0;
+    let lastScore: number | undefined = undefined;
     return sortedAttemptsForDisplay.map((a) => {
-      if (a.status === "submitted") r++;
+      if (a.status === "submitted") {
+        // Dense ranking: same score = same rank
+        if (lastScore !== a.score) {
+          r++;
+          lastScore = a.score;
+        }
+        return {
+          attempt: a,
+          rank: r,
+        };
+      }
       return {
         attempt: a,
-        rank: a.status === "submitted" ? r : null,
+        rank: null,
       };
     });
   }, [sortedAttemptsForDisplay]);
@@ -128,7 +167,9 @@ export default function ExamResults() {
     try {
       const [qs, keys] = await Promise.all([
         listPublicQuestions(testId).catch(() => [] as ExamQuestionPublic[]),
-        listPrivateQuestions(testId).catch(() => null as ExamQuestionPrivate[] | null),
+        listPrivateQuestions(testId).catch(
+          () => null as ExamQuestionPrivate[] | null,
+        ),
       ]);
 
       const questions = [...qs];
@@ -150,16 +191,24 @@ export default function ExamResults() {
           : questions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
       const avgMarksPerQuestion =
-        totalQuestions > 0 ? Math.round((totalMarks / totalQuestions) * 1000) / 1000 : "";
+        totalQuestions > 0
+          ? Math.round((totalMarks / totalQuestions) * 1000) / 1000
+          : "";
 
-      const { ranked, unranked } = sortAttemptsForRankExport(attempts, students);
+      const { ranked, unranked } = sortAttemptsForRankExport(
+        attempts,
+        students,
+      );
       const exportAttemptOrder = [...ranked, ...unranked];
 
       let rankCounter = 0;
+      let lastScoreForRank: number | undefined = undefined;
       const summaryRows = exportAttemptOrder.map((a) => {
         const participant = resolveAttemptParticipant(a, students);
         const answers = a.answers || {};
-        const answeredCount = Object.values(answers).filter((v) => v != null).length;
+        const answeredCount = Object.values(answers).filter(
+          (v) => v != null,
+        ).length;
         let correctCount: number | "" = "";
         let wrongCount: number | "" = "";
         let unansweredCount: number | "" = "";
@@ -184,16 +233,27 @@ export default function ExamResults() {
         }
 
         const startedMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
-        const submittedMs = a.submittedAt ? new Date(a.submittedAt).getTime() : null;
+        const submittedMs = a.submittedAt
+          ? new Date(a.submittedAt).getTime()
+          : null;
         const timeTakenSeconds =
-          startedMs != null && submittedMs != null && Number.isFinite(startedMs) && Number.isFinite(submittedMs)
+          startedMs != null &&
+          submittedMs != null &&
+          Number.isFinite(startedMs) &&
+          Number.isFinite(submittedMs)
             ? Math.max(0, Math.round((submittedMs - startedMs) / 1000))
             : "";
 
         const maxForStudent = a.maxScore ?? totalMarks;
         const pct = percentFromAttempt(a, totalMarks);
 
-        if (a.status === "submitted") rankCounter++;
+        if (a.status === "submitted") {
+          // Dense ranking: same score = same rank
+          if (lastScoreForRank !== a.score) {
+            rankCounter++;
+            lastScoreForRank = a.score;
+          }
+        }
 
         return {
           rank: a.status === "submitted" ? rankCounter : "",
@@ -231,9 +291,12 @@ export default function ExamResults() {
         return questions.map((q) => {
           const selected = answers[q.id] ?? null;
           const correct = keys ? correctIndexById.get(q.id) : undefined;
-          const selectedText = selected != null ? q.options?.[selected] ?? "" : "";
-          const correctText = correct != null ? q.options?.[correct] ?? "" : "";
-          const isCorrect = correct != null && selected != null ? selected === correct : "";
+          const selectedText =
+            selected != null ? (q.options?.[selected] ?? "") : "";
+          const correctText =
+            correct != null ? (q.options?.[correct] ?? "") : "";
+          const isCorrect =
+            correct != null && selected != null ? selected === correct : "";
           return {
             examId: test.id,
             examTitle: test.title,
@@ -263,11 +326,18 @@ export default function ExamResults() {
       });
 
       let wideRank = 0;
+      let lastScoreForWideRank: number | undefined = undefined;
       const wideRows = exportAttemptOrder.map((a) => {
         const participant = resolveAttemptParticipant(a, students);
         const maxForStudent = a.maxScore ?? totalMarks;
         const pct = percentFromAttempt(a, totalMarks);
-        if (a.status === "submitted") wideRank++;
+        if (a.status === "submitted") {
+          // Dense ranking: same score = same rank
+          if (lastScoreForWideRank !== a.score) {
+            wideRank++;
+            lastScoreForWideRank = a.score;
+          }
+        }
         const base: Record<string, any> = {
           rank: a.status === "submitted" ? wideRank : "",
           studentName: participant.name,
@@ -289,7 +359,9 @@ export default function ExamResults() {
           const selected = answers[q.id] ?? null;
           const correct = keys ? correctIndexById.get(q.id) : undefined;
           const letter =
-            selected == null || typeof selected !== "number" ? "" : String.fromCharCode(65 + Math.max(0, selected));
+            selected == null || typeof selected !== "number"
+              ? ""
+              : String.fromCharCode(65 + Math.max(0, selected));
           const correctness =
             correct == null || selected == null || typeof selected !== "number"
               ? ""
@@ -351,7 +423,9 @@ export default function ExamResults() {
     );
     if (!ok) return;
 
-    const typed = window.prompt('Type "REMOVE" to confirm deleting all responses for this test.');
+    const typed = window.prompt(
+      'Type "REMOVE" to confirm deleting all responses for this test.',
+    );
     if (typed !== "REMOVE") return;
 
     setClearingResponses(true);
@@ -361,7 +435,9 @@ export default function ExamResults() {
       alert(`Removed ${deleted} response(s).`);
     } catch (e) {
       console.error(e);
-      alert("Failed to remove responses. Check admin permissions and try again.");
+      alert(
+        "Failed to remove responses. Check admin permissions and try again.",
+      );
     } finally {
       setClearingResponses(false);
     }
@@ -381,7 +457,9 @@ export default function ExamResults() {
       const approvedAt = new Date().toISOString();
       setAttempts((prev) =>
         prev.map((item) =>
-          item.uid === attempt.uid ? { ...item, rejoinApprovedAt: approvedAt } : item,
+          item.uid === attempt.uid
+            ? { ...item, rejoinApprovedAt: approvedAt }
+            : item,
         ),
       );
     } catch (e) {
@@ -419,7 +497,10 @@ export default function ExamResults() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 justify-end">
-          <Button variant="outline" onClick={() => navigate(`/admin/tests/${testId}/response-sheets`)}>
+          <Button
+            variant="outline"
+            onClick={() => navigate(`/admin/tests/${testId}/response-sheets`)}
+          >
             <Download className="w-4 h-4 mr-2" />
             Response PDFs
           </Button>
@@ -434,10 +515,20 @@ export default function ExamResults() {
             ) : (
               <Trash2 className="w-4 h-4" />
             )}
-            <span className="ml-2">{clearingResponses ? "Removing..." : "Remove Responses"}</span>
+            <span className="ml-2">
+              {clearingResponses ? "Removing..." : "Remove Responses"}
+            </span>
           </Button>
-          <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void exportExcel()} disabled={exporting}>
-            {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+          <Button
+            className="bg-emerald-600 hover:bg-emerald-700"
+            onClick={() => void exportExcel()}
+            disabled={exporting}
+          >
+            {exporting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4" />
+            )}
             <span className="ml-2">Download Excel</span>
           </Button>
         </div>
@@ -472,30 +563,46 @@ export default function ExamResults() {
                   {attemptsWithRank.map(({ attempt: a, rank }) => {
                     const p = resolveAttemptParticipant(a, students);
                     const rankLabel = rank != null ? String(rank) : "—";
-                    const maxMarks = test ? a.maxScore ?? test.totalMarks : null;
+                    const maxMarks = test
+                      ? (a.maxScore ?? test.totalMarks)
+                      : null;
                     const percent =
                       a.score != null && maxMarks != null && maxMarks > 0
                         ? Math.round((a.score / maxMarks) * 1000) / 10
                         : null;
                     return (
                       <TableRow key={a.id} className="hover:bg-slate-50">
-                        <TableCell className="text-sm font-semibold text-slate-800 tabular-nums">{rankLabel}</TableCell>
+                        <TableCell className="text-sm font-semibold text-slate-800 tabular-nums">
+                          {rankLabel}
+                        </TableCell>
                         <TableCell className="min-w-[260px]">
-                          <div className="font-medium text-slate-900">{p.name || "Unknown"}</div>
-                          <div className="text-xs text-slate-600">{p.email || a.uid}</div>
+                          <div className="font-medium text-slate-900">
+                            {p.name || "Unknown"}
+                          </div>
+                          <div className="text-xs text-slate-600">
+                            {p.email || a.uid}
+                          </div>
                         </TableCell>
                         <TableCell>
                           {a.status === "submitted" ? (
-                            <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
+                            <Badge className="bg-emerald-100 text-emerald-800">
+                              Submitted
+                            </Badge>
                           ) : (
-                            <Badge className="bg-indigo-100 text-indigo-800">In progress</Badge>
+                            <Badge className="bg-indigo-100 text-indigo-800">
+                              In progress
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell className="text-xs text-slate-600">
-                          {a.startedAt ? new Date(a.startedAt).toLocaleString() : "-"}
+                          {a.startedAt
+                            ? new Date(a.startedAt).toLocaleString()
+                            : "-"}
                         </TableCell>
                         <TableCell className="text-xs text-slate-600">
-                          {a.submittedAt ? new Date(a.submittedAt).toLocaleString() : "-"}
+                          {a.submittedAt
+                            ? new Date(a.submittedAt).toLocaleString()
+                            : "-"}
                         </TableCell>
                         <TableCell>
                           {rejoinNeedsApproval(a) ? (
@@ -514,13 +621,17 @@ export default function ExamResults() {
                               Approve
                             </Button>
                           ) : a.rejoinApprovedAt ? (
-                            <Badge className="bg-emerald-100 text-emerald-800">Approved</Badge>
+                            <Badge className="bg-emerald-100 text-emerald-800">
+                              Approved
+                            </Badge>
                           ) : (
                             <span className="text-xs text-slate-500">-</span>
                           )}
                         </TableCell>
                         <TableCell className="text-sm font-semibold text-slate-900">
-                          {a.score != null && maxMarks != null ? `${a.score} / ${maxMarks}` : "-"}
+                          {a.score != null && maxMarks != null
+                            ? `${a.score} / ${maxMarks}`
+                            : "-"}
                         </TableCell>
                         <TableCell className="text-sm text-slate-700">
                           {percent != null ? `${percent}%` : "-"}
@@ -537,4 +648,3 @@ export default function ExamResults() {
     </div>
   );
 }
-
