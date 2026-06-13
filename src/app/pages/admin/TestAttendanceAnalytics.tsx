@@ -28,14 +28,14 @@ import { Alert, AlertDescription } from "../../components/ui/alert";
 import { ArrowLeft, Download, Loader2, Users } from "lucide-react";
 import { useData } from "../../context/DataContext";
 import type { Student } from "../../context/DataContext";
-import { listAllTestsWithAttemptsForAdmin, getExamTest } from "./examApi";
-import type { ExamAttempt, ExamTest } from "./types";
-import { calculateAttendanceStats, segmentByAttendance } from "./rankingUtils";
-import { formatExamBatchLabel, getExamBatchIds } from "./examBatchUtils";
+import { listAllTestsWithAttemptsForAdmin, getExamTest } from "../../features/exams/examApi";
+import type { ExamAttempt, ExamTest } from "../../features/exams/types";
+import { calculateAttendanceStats, segmentByAttendance } from "../../features/exams/rankingUtils";
+import { formatExamBatchLabel, getExamBatchIds } from "../../features/exams/examBatchUtils";
 import {
   displayNameForAttempt,
   resolveAttemptParticipant,
-} from "./adminTestReportUtils";
+} from "../../features/exams/adminTestReportUtils";
 import * as XLSX from "xlsx";
 
 interface AttendanceRow {
