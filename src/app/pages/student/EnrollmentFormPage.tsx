@@ -29,6 +29,7 @@ import {
   getShareableLinkByToken,
   createEnrollmentForm,
   recordShareableLinkClick,
+  getBatchById,
 } from "../../features/enrollment/enrollment-utils";
 
 export default function PublicEnrollmentForm() {
@@ -37,6 +38,7 @@ export default function PublicEnrollmentForm() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<"link" | "form" | null>(null);
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [batchId, setBatchId] = useState<string>("");
@@ -94,6 +96,7 @@ export default function PublicEnrollmentForm() {
       try {
         if (!token) {
           setError("Invalid enrollment link");
+          setErrorType("link");
           setLoading(false);
           return;
         }
@@ -101,6 +104,7 @@ export default function PublicEnrollmentForm() {
         const link = await getShareableLinkByToken(token);
         if (!link) {
           setError("Enrollment link is invalid or has expired");
+          setErrorType("link");
           setLoading(false);
           return;
         }
@@ -108,12 +112,23 @@ export default function PublicEnrollmentForm() {
         // Record the click
         await recordShareableLinkClick(link.id);
 
+        // Fetch batch information
+        const batch = await getBatchById(link.batchId);
+        if (batch) {
+          setBatchDetails((prev) => ({
+            ...prev,
+            batchName: batch.name,
+          }));
+        }
+
         // Set the batch ID for form submission
         setBatchId(link.batchId);
         setError(null);
+        setErrorType(null);
       } catch (err) {
         console.error("Link validation error:", err);
         setError("Failed to validate enrollment link");
+        setErrorType("link");
       } finally {
         setLoading(false);
       }
@@ -161,6 +176,7 @@ export default function PublicEnrollmentForm() {
 
     if (errors.length > 0) {
       setError(errors.join("\n"));
+      setErrorType("form");
       window.scrollTo(0, 0);
       return;
     }
@@ -211,8 +227,10 @@ export default function PublicEnrollmentForm() {
             <div className="flex gap-3 text-red-700">
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
-                <p className="font-semibold">Enrollment Link Invalid</p>
-                <p className="text-sm mt-1">{error}</p>
+                <p className="font-semibold">
+                  {errorType === "link" ? "Enrollment Link Invalid" : "Form Validation Error"}
+                </p>
+                <p className="text-sm mt-1 whitespace-pre-line">{error}</p>
                 <Button
                   onClick={() => navigate("/")}
                   className="mt-4 w-full"

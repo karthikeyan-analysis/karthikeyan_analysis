@@ -215,8 +215,10 @@ export async function getShareableLinkByToken(
  */
 export async function recordShareableLinkClick(linkId: string): Promise<void> {
   const docRef = doc(db, SHAREABLE_LINKS_COLLECTION, linkId);
+  const currentDoc = await getDoc(docRef);
+  const currentClickCount = currentDoc.data()?.clickCount || 0;
   await updateDoc(docRef, {
-    clickCount: (await getDoc(docRef)).data()?.clickCount || 0 + 1,
+    clickCount: currentClickCount + 1,
     lastClickedAt: Timestamp.now(),
   });
 }
@@ -248,6 +250,22 @@ export async function revokeShareableLink(linkId: string): Promise<void> {
   await updateDoc(doc(db, SHAREABLE_LINKS_COLLECTION, linkId), {
     status: "revoked",
   });
+}
+
+/**
+ * Get batch information by ID
+ */
+export async function getBatchById(
+  batchId: string,
+): Promise<{ id: string; name: string } | null> {
+  const docRef = doc(db, "batches", batchId);
+  const snapshot = await getDoc(docRef);
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  return {
+    id: snapshot.id,
+    name: data.name || "",
+  };
 }
 
 /**
