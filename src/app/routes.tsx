@@ -30,6 +30,9 @@ import ExamResult from "./pages/student/ExamResult";
 import GuestExamJoin from "./pages/student/GuestExamJoin";
 import VideoPlayer from "./pages/student/VideoPlayer";
 import PdfViewer from "./pages/student/PdfViewer";
+import EnrollmentManagement from "./pages/admin/EnrollmentManagement";
+import EnrollmentFormPage from "./pages/student/EnrollmentFormPage";
+import EnrollmentSuccessPage from "./pages/student/EnrollmentSuccessPage";
 
 function StudentOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -80,6 +83,14 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/enrollment-form/:token",
+    element: <EnrollmentFormPage />,
+  },
+  {
+    path: "/enrollment-success",
+    element: <EnrollmentSuccessPage />,
+  },
+  {
     path: "/admin/login",
     element: <Login role="admin" />,
   },
@@ -98,6 +109,7 @@ export const router = createBrowserRouter([
       { index: true, element: <AdminDashboard /> },
       { path: "batches", element: <BatchManagement /> },
       { path: "students", element: <StudentManagement /> },
+      { path: "enrollments", element: <EnrollmentManagement /> },
       { path: "media", element: <MediaManager /> },
       { path: "tests", element: <ExamManagement /> },
       { path: "tests/live-monitor", element: <LiveExamMonitor /> },
