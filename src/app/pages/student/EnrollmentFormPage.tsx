@@ -228,7 +228,9 @@ export default function PublicEnrollmentForm() {
               <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
               <div>
                 <p className="font-semibold">
-                  {errorType === "link" ? "Enrollment Link Invalid" : "Form Validation Error"}
+                  {errorType === "link"
+                    ? "Enrollment Link Invalid"
+                    : "Form Validation Error"}
                 </p>
                 <p className="text-sm mt-1 whitespace-pre-line">{error}</p>
                 <Button
