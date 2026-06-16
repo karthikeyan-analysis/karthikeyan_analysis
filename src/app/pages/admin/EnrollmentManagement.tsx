@@ -57,11 +57,11 @@ import {
   getShareableLinksByBatch,
   revokeShareableLink,
   generateShareableUrl,
-} from "./enrollment-utils";
+} from "../../features/enrollment/enrollment-utils";
 import {
   exportEnrollmentFormsToExcel,
   exportBatchEnrollmentForms,
-} from "./enrollment-export";
+} from "../../features/enrollment/enrollment-export";
 import { Timestamp } from "firebase/firestore";
 
 export default function EnrollmentManagement() {

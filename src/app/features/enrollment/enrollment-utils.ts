@@ -11,7 +11,7 @@ import {
   writeBatch,
   getDoc,
 } from "firebase/firestore";
-import { db } from "../../config/firebase";
+import { db } from "../../../config/firebase";
 import type {
   EnrollmentForm,
   EnrollmentFormDTO,
