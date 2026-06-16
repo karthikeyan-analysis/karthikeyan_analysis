@@ -290,6 +290,7 @@ export function EducationalDetailsForm({
           III. Educational Details
         </h2>
         <Button
+          type="button"
           onClick={addRecord}
           variant="outline"
           size="sm"
