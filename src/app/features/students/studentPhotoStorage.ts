@@ -1,15 +1,25 @@
-import { deleteObject, getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import {
+  deleteObject,
+  getDownloadURL,
+  ref,
+  uploadBytes,
+} from "firebase/storage";
 import { storage } from "../../../config/firebase";
 
-const profilePath = (studentRecordId: string) => `studentPhotos/${studentRecordId}/profile`;
+const profilePath = (studentRecordId: string) =>
+  `studentPhotos/${studentRecordId}/profile`;
 
 export function studentProfileRef(studentRecordId: string) {
   return ref(storage, profilePath(studentRecordId));
 }
 
-export async function uploadStudentProfileImage(studentRecordId: string, file: File): Promise<string> {
+export async function uploadStudentProfileImage(
+  studentRecordId: string,
+  file: File,
+): Promise<string> {
   const r = studentProfileRef(studentRecordId);
-  const contentType = file.type && file.type.startsWith("image/") ? file.type : "image/jpeg";
+  const contentType =
+    file.type && file.type.startsWith("image/") ? file.type : "image/jpeg";
   await uploadBytes(r, file, {
     contentType,
     cacheControl: "public,max-age=3600",
@@ -17,10 +27,12 @@ export async function uploadStudentProfileImage(studentRecordId: string, file: F
   return getDownloadURL(r);
 }
 
-export async function deleteStudentProfileImage(studentRecordId: string): Promise<void> {
+export async function deleteStudentProfileImage(
+  studentRecordId: string,
+): Promise<void> {
   try {
     await deleteObject(studentProfileRef(studentRecordId));
   } catch {
-    // Object may not exist
+    // Object may not exists
   }
 }
