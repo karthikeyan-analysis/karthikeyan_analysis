@@ -4,6 +4,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Progress } from "../../components/ui/progress";
+import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,8 @@ import {
   Layers3,
   CalendarClock,
   Search,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import {
   getDownloadURL,
@@ -110,6 +113,9 @@ export default function MediaManager() {
     title: string;
     kind: "video" | "doc";
   } | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [resultPopup, setResultPopup] = useState<{
     open: boolean;
     title: string;
@@ -413,6 +419,65 @@ export default function MediaManager() {
     setSelectedSubject("");
     setSubjectFilter("all");
     setSearchTerm("");
+    setSelectedItemIds(new Set());
+  };
+
+  const handleToggleItem = (id: string) => {
+    setSelectedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleSelectAll = () => {
+    setSelectedItemIds(new Set(filteredBatchContent.map((i) => i.id)));
+  };
+
+  const handleSelectVideosOnly = () => {
+    setSelectedItemIds(
+      new Set(filteredBatchContent.filter((i) => "videoUrl" in i).map((i) => i.id)),
+    );
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedItemIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedItemIds);
+    const count = ids.length;
+    const errors: string[] = [];
+    for (const id of ids) {
+      const item = filteredBatchContent.find((i) => i.id === id);
+      if (!item) continue;
+      try {
+        if ("videoUrl" in item) await deleteVideo(id);
+        else await deleteContent(id);
+      } catch (e: any) {
+        errors.push(item.title);
+      }
+    }
+    setIsBulkDeleting(false);
+    setBulkDeleteOpen(false);
+    setSelectedItemIds(new Set());
+    if (errors.length > 0) {
+      setResultPopup({
+        open: true,
+        title: "Some deletions failed",
+        message: `Could not delete: ${errors.join(", ")}`,
+        tone: "error",
+      });
+    } else {
+      setResultPopup({
+        open: true,
+        title: "Deleted",
+        message: `${count} item(s) deleted successfully.`,
+        tone: "success",
+      });
+    }
   };
 
   return (
@@ -783,6 +848,71 @@ export default function MediaManager() {
         </div>
       )}
 
+      {/* Bulk Selection Toolbar */}
+      {filteredBatchContent.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+          <span className="text-sm text-slate-600 mr-1">
+            {selectedItemIds.size > 0
+              ? `${selectedItemIds.size} of ${filteredBatchContent.length} selected`
+              : `${filteredBatchContent.length} item(s)`}
+          </span>
+          <div className="flex flex-wrap gap-2 flex-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSelectAll}
+              disabled={selectedItemIds.size === filteredBatchContent.length}
+            >
+              <CheckSquare className="w-3.5 h-3.5 mr-1" />
+              Select All
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleSelectVideosOnly}
+              disabled={filteredBatchContent.every((i) => "videoUrl" in i && selectedItemIds.has(i.id))}
+            >
+              <FileVideo className="w-3.5 h-3.5 mr-1" />
+              Videos Only
+            </Button>
+            {selectedItemIds.size > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDeselectAll}
+              >
+                <Square className="w-3.5 h-3.5 mr-1" />
+                Deselect All
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            {selectedItemIds.size > 0 && (
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Delete Selected ({selectedItemIds.size})
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+              onClick={() => {
+                handleSelectAll();
+                setBulkDeleteOpen(true);
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" />
+              Delete All
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Media List By Subject */}
       <div className="space-y-5">
         {groupedMediaBySubject.map(([subjectName, subjectItems]) => (
@@ -811,24 +941,32 @@ export default function MediaManager() {
                 <div className="divide-y divide-slate-100">
                   {subjectItems.map((item) => {
                     const isVideo = "videoUrl" in item;
+                    const isSelected = selectedItemIds.has(item.id);
                     return (
                       <div
                         key={item.id}
-                        className="p-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between hover:bg-slate-50/60 transition-colors"
+                        className={`p-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between transition-colors ${isSelected ? "bg-indigo-50/60" : "hover:bg-slate-50/60"}`}
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-slate-900">
-                              {item.title}
+                        <div className="flex items-start gap-3 min-w-0 flex-1">
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => handleToggleItem(item.id)}
+                            className="mt-1 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-medium text-slate-900">
+                                {item.title}
+                              </p>
+                              <Badge variant={isVideo ? "default" : "secondary"}>
+                                {isVideo ? "Video" : "PDF"}
+                              </Badge>
+                              <Badge variant="outline">{item.uploadDate}</Badge>
+                            </div>
+                            <p className="text-sm text-slate-600 mt-1 line-clamp-2">
+                              {item.description || "No description provided."}
                             </p>
-                            <Badge variant={isVideo ? "default" : "secondary"}>
-                              {isVideo ? "Video" : "PDF"}
-                            </Badge>
-                            <Badge variant="outline">{item.uploadDate}</Badge>
                           </div>
-                          <p className="text-sm text-slate-600 mt-1 line-clamp-2">
-                            {item.description || "No description provided."}
-                          </p>
                         </div>
 
                         <div className="flex items-center gap-2 md:pl-4 md:shrink-0">
@@ -889,6 +1027,30 @@ export default function MediaManager() {
           </Card>
         )}
       </div>
+
+      {/* Bulk delete confirmation */}
+      <AlertDialog open={bulkDeleteOpen} onOpenChange={(open) => { if (!open && !isBulkDeleting) setBulkDeleteOpen(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedItemIds.size} item(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete all {selectedItemIds.size} selected item(s). This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex gap-3 justify-end">
+            <AlertDialogCancel disabled={isBulkDeleting} onClick={() => setBulkDeleteOpen(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              disabled={isBulkDeleting}
+              onClick={handleBulkDelete}
+            >
+              {isBulkDeleting ? "Deleting..." : `Delete ${selectedItemIds.size} item(s)`}
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation */}
       <AlertDialog
