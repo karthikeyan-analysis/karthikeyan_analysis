@@ -48,6 +48,7 @@ import {
   Plus,
   Eye,
   EyeOff,
+  FileDown,
 } from "lucide-react";
 import type { EnrollmentForm, ShareableFormLink } from "./enrollment-types";
 import {
@@ -62,6 +63,7 @@ import {
   exportEnrollmentFormsToExcel,
   exportBatchEnrollmentForms,
 } from "../../features/enrollment/enrollment-export";
+import { downloadEnrollmentPDF } from "../../features/enrollment/enrollment-pdf";
 import { Timestamp } from "firebase/firestore";
 
 export default function EnrollmentManagement() {
@@ -283,21 +285,43 @@ export default function EnrollmentManagement() {
                           </TableCell>
                           <TableCell>{formatDate(form.createdAt)}</TableCell>
                           <TableCell>
-                            <Dialog>
-                              <DialogTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  View
-                                </Button>
-                              </DialogTrigger>
-                              <DialogContent className="max-w-2xl max-h-96 overflow-y-auto">
-                                <DialogHeader>
-                                  <DialogTitle>
-                                    {form.personalDetails.studentName}
-                                  </DialogTitle>
-                                </DialogHeader>
-                                <EnrollmentFormPreview form={form} />
-                              </DialogContent>
-                            </Dialog>
+                            <div className="flex items-center gap-1">
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    View
+                                  </Button>
+                                </DialogTrigger>
+                                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                  <DialogHeader>
+                                    <DialogTitle>
+                                      {form.personalDetails.studentName}
+                                    </DialogTitle>
+                                  </DialogHeader>
+                                  <EnrollmentFormPreview form={form} />
+                                  <div className="pt-2 border-t border-slate-200 mt-2">
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="gap-2"
+                                      onClick={() => downloadEnrollmentPDF(form)}
+                                    >
+                                      <FileDown className="w-4 h-4" />
+                                      Download PDF
+                                    </Button>
+                                  </div>
+                                </DialogContent>
+                              </Dialog>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                title="Download PDF"
+                                className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                                onClick={() => downloadEnrollmentPDF(form)}
+                              >
+                                <FileDown className="w-4 h-4" />
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}

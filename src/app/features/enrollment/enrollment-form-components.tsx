@@ -1,13 +1,5 @@
-import React, { useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
+import { Card } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,9 +7,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import { Checkbox } from "../../components/ui/checkbox";
-import { Textarea } from "../../components/ui/textarea";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Camera, PenLine, X } from "lucide-react";
 import type {
   PersonalDetails,
   AddressDetails,
@@ -85,21 +75,56 @@ export function PersonalDetailsForm({
         </div>
         <div>
           <label className={LABEL_CLS}>Photo Upload</label>
-          <input
-            type="file"
-            accept="image/*"
-            className={INPUT_CLS}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  set("photoURL", event.target?.result as string);
-                };
-                reader.readAsDataURL(file);
-              }
-            }}
-          />
+          <div className="flex items-start gap-3">
+            {data.photoURL ? (
+              <div className="relative shrink-0">
+                <img
+                  src={data.photoURL}
+                  alt="Student photo"
+                  className="w-24 h-28 object-cover rounded border border-slate-300"
+                />
+                <button
+                  type="button"
+                  onClick={() => set("photoURL", "")}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-600"
+                  title="Remove photo"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <label
+                htmlFor="photo-upload"
+                className="flex flex-col items-center justify-center w-24 h-28 border-2 border-dashed border-slate-300 rounded cursor-pointer hover:bg-slate-50 text-center"
+              >
+                <Camera className="w-6 h-6 text-slate-400 mb-1" />
+                <span className="text-[10px] text-slate-500">Affix Photo</span>
+              </label>
+            )}
+            <div className="flex flex-col justify-end gap-1 pt-16">
+              <label
+                htmlFor="photo-upload"
+                className="text-xs text-indigo-600 hover:underline cursor-pointer"
+              >
+                {data.photoURL ? "Change photo" : "Upload photo"}
+              </label>
+              <span className="text-[10px] text-slate-400">JPG / PNG, passport size</span>
+            </div>
+            <input
+              id="photo-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (ev) => set("photoURL", ev.target?.result as string);
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
+          </div>
         </div>
         <div>
           <label className={LABEL_CLS}>Gender *</label>
@@ -608,6 +633,95 @@ export function TermsAndConditionsForm({
             </span>
           </label>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// VII. SIGNATURE SECTION
+// ─────────────────────────────────────────────────────────────
+interface SignatureSectionProps {
+  signatureURL?: string;
+  onChange: (signatureURL: string) => void;
+}
+
+export function SignatureSection({ signatureURL, onChange }: SignatureSectionProps) {
+  return (
+    <Card className="p-6">
+      <h2 className="text-xl font-bold text-slate-800 mb-4">
+        VII. Signature
+      </h2>
+      <p className="text-sm text-slate-500 mb-4">
+        Upload a scanned/photographed copy of your signature. This will appear on the printed enrollment form.
+      </p>
+      <div className="flex items-start gap-4">
+        {signatureURL ? (
+          <div className="relative">
+            <div className="border-2 border-slate-300 rounded-lg p-2 bg-white">
+              <img
+                src={signatureURL}
+                alt="Signature"
+                className="h-16 max-w-xs object-contain"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center hover:bg-red-600"
+              title="Remove signature"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <label
+            htmlFor="signature-upload"
+            className="flex flex-col items-center justify-center w-48 h-20 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer hover:bg-slate-50"
+          >
+            <PenLine className="w-6 h-6 text-slate-400 mb-1" />
+            <span className="text-xs text-slate-500">Upload Signature</span>
+          </label>
+        )}
+        <div className="flex flex-col gap-1 pt-1">
+          <label
+            htmlFor="signature-upload"
+            className="text-xs text-indigo-600 hover:underline cursor-pointer"
+          >
+            {signatureURL ? "Change signature" : "Upload signature image"}
+          </label>
+          <span className="text-[10px] text-slate-400">PNG / JPG of your handwritten signature</span>
+        </div>
+        <input
+          id="signature-upload"
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = (ev) => onChange(ev.target?.result as string);
+              reader.readAsDataURL(file);
+            }
+          }}
+        />
+      </div>
+      <div className="mt-6 pt-4 border-t border-slate-200">
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="w-52 border-b-2 border-slate-400 mb-1" />
+            <p className="text-xs text-slate-500">Student Signature</p>
+          </div>
+          <div>
+            <div className="w-36 border-b-2 border-slate-400 mb-1" />
+            <p className="text-xs text-slate-500">Date</p>
+          </div>
+          <div>
+            <div className="w-40 border-b-2 border-slate-400 mb-1" />
+            <p className="text-xs text-slate-500">For Office Use Only</p>
+          </div>
+        </div>
       </div>
     </Card>
   );

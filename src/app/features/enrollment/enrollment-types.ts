@@ -13,7 +13,8 @@ export interface PersonalDetails {
   whatsappNo: string;
   telegramNo?: string;
   email: string;
-  photoURL?: string; // File upload URL
+  photoURL?: string; // Base64 data URL or external URL
+  signatureURL?: string; // Base64 data URL of student's signature
 }
 
 // ─────────────────────────────────────────────────────────────

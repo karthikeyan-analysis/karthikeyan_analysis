@@ -429,7 +429,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
 
       await deleteDoc(doc(db, "content", id));
-      setContent(content.filter((c) => c.id !== id));
+      setContent((prev) => prev.filter((c) => c.id !== id));
     } catch (error) {
       console.error("Error deleting content:", error);
       throw error;
@@ -471,7 +471,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
 
       await deleteDoc(doc(db, "videos", id));
-      setVideos(videos.filter((v) => v.id !== id));
+      setVideos((prev) => prev.filter((v) => v.id !== id));
     } catch (error) {
       console.error("Error deleting video:", error);
       throw error;

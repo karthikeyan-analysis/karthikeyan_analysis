@@ -96,7 +96,10 @@ export default function MediaManager() {
     description: "",
   });
   const [selectedPdfFile, setSelectedPdfFile] = useState<File | null>(null);
-  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
+  const [selectedVideoFiles, setSelectedVideoFiles] = useState<File[]>([]);
+  // multi-batch video publish: batchId → chosen subject
+  const [videoBatchTargets, setVideoBatchTargets] = useState<Record<string, string>>({});
+  const [currentUploadFileIdx, setCurrentUploadFileIdx] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
   const [videoBytes, setVideoBytes] = useState<{ transferred: number; total: number } | null>(null);
@@ -279,19 +282,31 @@ export default function MediaManager() {
     e.preventDefault();
     setError("");
 
-    if (!selectedBatch) {
-      setError("Please select a batch.");
-      return;
-    }
+    const hasPdf = !!selectedPdfFile;
+    const hasVideos = selectedVideoFiles.length > 0;
 
-    if (!selectedSubject) {
-      setError("Please select a subject.");
-      return;
-    }
-
-    if (!selectedPdfFile && !selectedVideoFile) {
+    if (!hasPdf && !hasVideos) {
       setError("Please select at least one file (PDF or Video).");
       return;
+    }
+
+    if (hasPdf) {
+      if (!selectedBatch) { setError("Please select a batch for the PDF."); return; }
+      if (!selectedSubject) { setError("Please select a subject for the PDF."); return; }
+    }
+
+    if (hasVideos) {
+      const targets = Object.entries(videoBatchTargets);
+      if (targets.length === 0) {
+        setError("Please select at least one batch to publish the video(s) to.");
+        return;
+      }
+      const missing = targets.find(([, subject]) => !subject);
+      if (missing) {
+        const batchName = batches.find((b) => b.id === missing[0])?.name || "a batch";
+        setError(`Please select a subject for batch "${batchName}".`);
+        return;
+      }
     }
 
     try {
@@ -302,19 +317,17 @@ export default function MediaManager() {
       setVideoSpeedBps(null);
       setVideoEtaSeconds(null);
       setVideoUploadState("idle");
-      const hasBothFiles = !!selectedPdfFile && !!selectedVideoFile;
 
-      if (selectedPdfFile) {
-        const fileUrl = await uploadFileToStorage("content", selectedPdfFile);
-        const type = selectedPdfFile.name.toLowerCase().endsWith(".pdf")
-          ? "pdf"
-          : "doc";
+      // ── PDF upload ──────────────────────────────────────────
+      if (hasPdf) {
+        const fileUrl = await uploadFileToStorage("content", selectedPdfFile!);
+        const type = selectedPdfFile!.name.toLowerCase().endsWith(".pdf") ? "pdf" : "doc";
         const title =
-          formData.title.trim() && !hasBothFiles
+          formData.title.trim() && !hasVideos
             ? formData.title.trim()
             : formData.title.trim()
               ? `${formData.title.trim()} (PDF)`
-              : getFileBaseName(selectedPdfFile);
+              : getFileBaseName(selectedPdfFile!);
         await addContent({
           title,
           description: formData.description,
@@ -326,31 +339,44 @@ export default function MediaManager() {
         });
       }
 
-      if (selectedVideoFile) {
-        const videoUrl = await uploadVideoToStorage(selectedVideoFile);
-        const title =
-          formData.title.trim() && !hasBothFiles
-            ? formData.title.trim()
-            : formData.title.trim()
-              ? `${formData.title.trim()} (Video)`
-              : getFileBaseName(selectedVideoFile);
+      // ── Video uploads (one storage upload per file, one Firestore doc per batch) ──
+      const targets = Object.entries(videoBatchTargets);
+      for (let idx = 0; idx < selectedVideoFiles.length; idx++) {
+        setCurrentUploadFileIdx(idx);
+        setVideoUploadProgress(0);
+        setVideoBytes(null);
+        setVideoSpeedBps(null);
+        setVideoEtaSeconds(null);
 
-        await addVideo({
-          title,
-          description: formData.description,
-          duration: "00:00",
-          thumbnail: `https://placehold.co/640x360/0f172a/ffffff?text=${encodeURIComponent(title || "Video")}`,
-          visibilityType: "BATCH",
-          batchId: selectedBatch,
-          subject: selectedSubject,
-          videoUrl,
-        });
+        const videoFile = selectedVideoFiles[idx];
+        const videoUrl = await uploadVideoToStorage(videoFile);
+
+        const baseTitle = formData.title.trim()
+          ? selectedVideoFiles.length > 1
+            ? `${formData.title.trim()} (${idx + 1})`
+            : formData.title.trim()
+          : getFileBaseName(videoFile);
+
+        for (const [batchId, subject] of targets) {
+          await addVideo({
+            title: baseTitle,
+            description: formData.description,
+            duration: "00:00",
+            thumbnail: `https://placehold.co/640x360/0f172a/ffffff?text=${encodeURIComponent(baseTitle || "Video")}`,
+            visibilityType: "BATCH",
+            batchId,
+            subject,
+            videoUrl,
+          });
+        }
       }
 
       setFormData({ title: "", description: "" });
       setSelectedPdfFile(null);
-      setSelectedVideoFile(null);
+      setSelectedVideoFiles([]);
+      setVideoBatchTargets({});
       setSelectedSubject("");
+      setCurrentUploadFileIdx(0);
       setVideoUploadProgress(0);
       setIsUploadDialogOpen(false);
     } catch (uploadError: any) {
@@ -422,6 +448,23 @@ export default function MediaManager() {
     setSelectedItemIds(new Set());
   };
 
+  const toggleVideoBatch = (batchId: string) => {
+    setVideoBatchTargets((prev) => {
+      const next = { ...prev };
+      if (batchId in next) {
+        delete next[batchId];
+      } else {
+        const batch = batches.find((b) => b.id === batchId);
+        next[batchId] = (batch?.subjects || []).filter(Boolean)[0] || "";
+      }
+      return next;
+    });
+  };
+
+  const setVideoBatchSubjectForBatch = (batchId: string, subject: string) => {
+    setVideoBatchTargets((prev) => ({ ...prev, [batchId]: subject }));
+  };
+
   const handleToggleItem = (id: string) => {
     setSelectedItemIds((prev) => {
       const next = new Set(prev);
@@ -447,17 +490,19 @@ export default function MediaManager() {
 
   const handleBulkDelete = async () => {
     setIsBulkDeleting(true);
-    const ids = Array.from(selectedItemIds);
-    const count = ids.length;
+    // Capture a stable snapshot of both IDs and their kind BEFORE any async work
+    // so React re-renders during the loop can't invalidate our look-ups.
+    const snapshot = filteredBatchContent
+      .filter((i) => selectedItemIds.has(i.id))
+      .map((i) => ({ id: i.id, title: i.title, isVideo: "videoUrl" in i }));
+    const count = snapshot.length;
     const errors: string[] = [];
-    for (const id of ids) {
-      const item = filteredBatchContent.find((i) => i.id === id);
-      if (!item) continue;
+    for (const { id, title, isVideo } of snapshot) {
       try {
-        if ("videoUrl" in item) await deleteVideo(id);
+        if (isVideo) await deleteVideo(id);
         else await deleteContent(id);
-      } catch (e: any) {
-        errors.push(item.title);
+      } catch {
+        errors.push(title);
       }
     }
     setIsBulkDeleting(false);
@@ -607,49 +652,124 @@ export default function MediaManager() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="video-file">Video File</Label>
+                    <Label htmlFor="video-file">Video Files <span className="text-slate-400 text-xs">(multiple allowed)</span></Label>
                     <label
                       htmlFor="video-file"
                       className="block border-2 border-dashed border-slate-300 rounded-xl p-5 text-center hover:bg-slate-50 cursor-pointer transition"
                     >
                       <FileVideo className="w-8 h-8 mx-auto text-indigo-500 mb-2" />
                       <p className="text-sm text-slate-700 font-medium">
-                        Select video file
+                        Select video files
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        MP4, MOV, WebM, etc.
+                        MP4, MOV, WebM — select multiple at once
                       </p>
                       <input
                         id="video-file"
                         type="file"
                         className="hidden"
                         accept="video/*"
+                        multiple
                         onChange={(e) =>
-                          setSelectedVideoFile(e.target.files?.[0] || null)
+                          setSelectedVideoFiles(Array.from(e.target.files || []))
                         }
                       />
                     </label>
-                    {selectedVideoFile && (
+                    {selectedVideoFiles.length > 0 && (
                       <div className="space-y-1">
-                        <p className="text-xs text-slate-500 truncate">
-                          Selected: {selectedVideoFile.name} ({formatBytes(selectedVideoFile.size)})
-                        </p>
-                        {selectedVideoFile.size > LARGE_VIDEO_WARNING_BYTES ? (
-                          <p className="text-xs leading-relaxed text-amber-700">
-                            Large video selected. Upload time depends on your internet upload speed and can take several minutes.
+                        {selectedVideoFiles.map((f, i) => (
+                          <p key={i} className="text-xs text-slate-600 truncate flex items-center gap-1">
+                            <FileVideo className="w-3 h-3 shrink-0 text-indigo-400" />
+                            {f.name} <span className="text-slate-400">({formatBytes(f.size)})</span>
+                            {f.size > LARGE_VIDEO_WARNING_BYTES && (
+                              <span className="text-amber-600 ml-1">⚠ large</span>
+                            )}
                           </p>
-                        ) : null}
+                        ))}
+                        <button
+                          type="button"
+                          className="text-xs text-red-500 hover:underline"
+                          onClick={() => setSelectedVideoFiles([])}
+                        >
+                          Clear all
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
 
-                {isUploading && selectedVideoFile && (
+                {/* ── Multi-batch publish targets (video only) ── */}
+                {selectedVideoFiles.length > 0 && (
+                  <div className="space-y-2">
+                    <Label>Publish Video(s) to Batches & Subjects</Label>
+                    <div className="border border-slate-200 rounded-lg divide-y max-h-52 overflow-y-auto">
+                      {batches.length === 0 && (
+                        <p className="p-3 text-xs text-slate-500">No batches found.</p>
+                      )}
+                      {batches.map((batch) => {
+                        const isSelected = batch.id in videoBatchTargets;
+                        const batchSubjects = (batch.subjects || []).map((s) => s.trim()).filter(Boolean);
+                        return (
+                          <div key={batch.id} className={`p-3 transition-colors ${isSelected ? "bg-indigo-50" : "hover:bg-slate-50"}`}>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => toggleVideoBatch(batch.id)}
+                              />
+                              <span className="text-sm font-medium text-slate-800">{batch.name}</span>
+                              <span className="text-xs text-slate-400">({batch.studentCount} students)</span>
+                            </label>
+                            {isSelected && (
+                              <div className="mt-2 pl-6">
+                                {batchSubjects.length === 0 ? (
+                                  <p className="text-xs text-amber-600">No subjects in this batch — add them in Batch Management first.</p>
+                                ) : (
+                                  <Select
+                                    value={videoBatchTargets[batch.id]}
+                                    onValueChange={(v) => setVideoBatchSubjectForBatch(batch.id, v)}
+                                  >
+                                    <SelectTrigger className="h-8 text-xs">
+                                      <SelectValue placeholder="Select subject" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {batchSubjects.map((s) => (
+                                        <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {Object.keys(videoBatchTargets).length > 0 && (
+                      <p className="text-xs text-indigo-700">
+                        Publishing to {Object.keys(videoBatchTargets).length} batch(es) — each video creates one record per batch.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {isUploading && selectedVideoFiles.length > 0 && (
                   <div className="space-y-2 rounded-lg border border-indigo-100 bg-indigo-50/60 p-3">
                     <div className="flex items-center justify-between text-xs font-medium text-indigo-800">
-                      <span>Video upload progress</span>
+                      <span>
+                        Uploading file {Math.min(currentUploadFileIdx + 1, selectedVideoFiles.length)} of {selectedVideoFiles.length}
+                        {selectedVideoFiles[currentUploadFileIdx] && ` — ${selectedVideoFiles[currentUploadFileIdx].name}`}
+                      </span>
                       <span>{videoUploadProgress}%</span>
                     </div>
+                    {selectedVideoFiles.length > 1 && (
+                      <div className="space-y-0.5">
+                        {selectedVideoFiles.map((f, i) => (
+                          <p key={i} className={`text-[11px] ${i < currentUploadFileIdx ? "text-green-600" : i === currentUploadFileIdx ? "text-indigo-700 font-medium" : "text-slate-400"}`}>
+                            {i < currentUploadFileIdx ? "✓" : i === currentUploadFileIdx ? "→" : "○"} {f.name}
+                          </p>
+                        ))}
+                      </div>
+                    )}
                     <Progress value={videoUploadProgress} className="h-2" />
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-indigo-900">
                       <div className="flex flex-wrap items-center gap-3">
@@ -713,8 +833,10 @@ export default function MediaManager() {
                   onClick={() => {
                     setIsUploadDialogOpen(false);
                     setSelectedPdfFile(null);
-                    setSelectedVideoFile(null);
+                    setSelectedVideoFiles([]);
+                    setVideoBatchTargets({});
                     setSelectedSubject("");
+                    setCurrentUploadFileIdx(0);
                     setVideoUploadProgress(0);
                     setError("");
                   }}
