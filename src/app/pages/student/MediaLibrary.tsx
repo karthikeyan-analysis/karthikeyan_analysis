@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
 import { useNavigate } from "react-router";
@@ -18,9 +18,15 @@ export default function MediaLibrary() {
   const { content, videos, batches } = useData();
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
+  const [selectedSubject, setSelectedSubject] = useState<string>("All");
 
   // Get current batch name
   const currentBatch = batches.find((b) => b.id === user?.batchId);
+
+  // Reset subject filter whenever the student's batch changes
+  useEffect(() => {
+    setSelectedSubject("All");
+  }, [user?.batchId]);
 
   const canAccessItem = (item: {
     visibilityType: "ALL" | "SELECTIVE" | "BATCH";
@@ -70,6 +76,19 @@ export default function MediaLibrary() {
 
     return availableSubjects.map((s) => [s, groups.get(s) || []] as const);
   }, [allMedia, availableSubjects]);
+
+  // Item counts per subject tab (used to render the badge on each pill)
+  const subjectCounts = useMemo(() => {
+    const map: Record<string, number> = { All: allMedia.length };
+    for (const [s, items] of groupedMediaBySubject) map[s] = items.length;
+    return map;
+  }, [groupedMediaBySubject, allMedia.length]);
+
+  // Only the group(s) that match the active subject tab
+  const visibleGroups = useMemo(() => {
+    if (selectedSubject === "All") return groupedMediaBySubject;
+    return groupedMediaBySubject.filter(([s]) => s === selectedSubject);
+  }, [groupedMediaBySubject, selectedSubject]);
 
   // Disable right-click, copying, and keyboard shortcuts for security
   useEffect(() => {
@@ -138,9 +157,39 @@ export default function MediaLibrary() {
         </AlertDescription>
       </Alert>
 
+      {/* Subject filter tabs — only shown when there are multiple subjects */}
+      {availableSubjects.filter((s) => s !== "Uncategorized" || allMedia.some((i) => !(i as any).subject?.trim())).length > 1 && (
+        <div className="flex flex-wrap gap-2">
+          {["All", ...availableSubjects].map((subject) => {
+            const count = subjectCounts[subject] ?? 0;
+            const isActive = selectedSubject === subject;
+            return (
+              <button
+                key={subject}
+                onClick={() => setSelectedSubject(subject)}
+                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                  isActive
+                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                }`}
+              >
+                {subject}
+                <span
+                  className={`text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center font-semibold ${
+                    isActive ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {allMedia.length > 0 ? (
         <div className="space-y-5">
-          {groupedMediaBySubject.map(([subjectName, items]) => (
+          {visibleGroups.map(([subjectName, items]) => (
             <Card key={subjectName} className="border-slate-200">
               <CardHeader className="border-b border-slate-100 bg-slate-50/60 py-4">
                 <div className="flex items-center justify-between gap-3">
