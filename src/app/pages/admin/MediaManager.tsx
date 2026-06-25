@@ -309,8 +309,22 @@ export default function MediaManager() {
       }
     }
 
+    // Prevent the OS from sleeping during upload — a sleep event kills the TCP
+    // connection and drops the upload regardless of resumable-upload support.
+    let wakeLock: WakeLockSentinel | null = null;
+
     try {
       await ensureAdminUploadAccess();
+
+      if ("wakeLock" in navigator) {
+        try {
+          wakeLock = await (navigator as any).wakeLock.request("screen");
+        } catch {
+          // Wake Lock denied (e.g. low-power mode) — upload still proceeds,
+          // user just won't be protected from sleep-induced drops.
+        }
+      }
+
       setIsUploading(true);
       setVideoUploadProgress(0);
       setVideoBytes(null);
@@ -391,6 +405,7 @@ export default function MediaManager() {
     } finally {
       setIsUploading(false);
       videoUploadTaskRef.current = null;
+      wakeLock?.release().catch(() => {});
     }
   };
 

@@ -463,10 +463,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     try {
       const existingVideo = videos.find((v) => v.id === id);
       if (existingVideo?.videoUrl) {
-        try {
-          await deleteObject(storageRef(storage, existingVideo.videoUrl));
-        } catch (storageError) {
-          console.warn("Could not delete video from storage:", storageError);
+        // When a video is published to multiple batches (cross-publish), all copies
+        // share the same Storage file via the same videoUrl. Only delete the Storage
+        // object when this is the last Firestore document referencing that URL —
+        // otherwise the remaining copies get a 404 on playback.
+        const isShared = videos.some(
+          (v) => v.id !== id && v.videoUrl === existingVideo.videoUrl,
+        );
+        if (!isShared) {
+          try {
+            await deleteObject(storageRef(storage, existingVideo.videoUrl));
+          } catch (storageError) {
+            console.warn("Could not delete video from storage:", storageError);
+          }
         }
       }
 
