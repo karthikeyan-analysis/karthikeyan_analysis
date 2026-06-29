@@ -65,6 +65,26 @@ function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+/** Fisher-Yates in-place shuffle — each call produces an independent random permutation. */
+function shuffleArray<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
+
+/** Races a promise against a wall-clock timeout so a hanging Firestore write can't freeze the UI. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timed out. Check your connection.")), ms),
+    ),
+  ]);
+}
+
 function formatTimeLeft(totalSeconds: number) {
   const s = clamp(Math.floor(totalSeconds), 0, Number.MAX_SAFE_INTEGER);
   const h = Math.floor(s / 3600);
@@ -265,9 +285,8 @@ export default function TakeExam() {
     const loadQuestionsAndAttempt = async () => {
       setLoading(true);
       try {
-        const qs = await listPublicQuestions(testId);
+        const rawQs = await listPublicQuestions(testId);
         if (cancelled) return;
-        setQuestions(qs);
 
         const attempt = await getAttempt(testId, uid);
         if (cancelled) return;
@@ -275,10 +294,15 @@ export default function TakeExam() {
         if (!attempt) {
           if (!canStartNewExamAttempt(test)) {
             setClosedForNewAttempts(true);
-            setQuestions(qs);
+            setQuestions(rawQs);
             return;
           }
           setClosedForNewAttempts(false);
+
+          // Apply per-student shuffle for new attempts when the flag is set.
+          const shouldShuffle = test.settings?.randomizeQuestionOrder === true;
+          const qs = shouldShuffle ? shuffleArray(rawQs) : rawQs;
+
           const startMs = Date.now();
           const hardEnd = new Date(startMs + (test.durationMinutes || 0) * 60 * 1000).toISOString();
           await startAttempt({
@@ -295,6 +319,7 @@ export default function TakeExam() {
           sessionStorage.setItem(examSessionKey, "1");
           setAttemptStartedAtIso(new Date().toISOString());
           setAttemptStatus("in_progress");
+          setQuestions(qs);
           const freshAnswers: Record<string, number | null> = {};
           qs.forEach((q) => (freshAnswers[q.id] = null));
           setAnswers(freshAnswers);
@@ -322,8 +347,20 @@ export default function TakeExam() {
           setAttemptSubmittedAtIso(attempt.submittedAt || null);
           setAnswers(attempt.answers || {});
           setMarkedForReview(attempt.markedForReview || []);
+
+          // Restore the exact question order the student saw when they first started.
+          // If the attempt has a persisted questionIds array, sort by that order;
+          // otherwise fall back to the default upload order (rawQs).
+          let qs = rawQs;
+          if (attempt.questionIds?.length) {
+            const posMap = new Map(attempt.questionIds.map((qid, i) => [qid, i]));
+            qs = [...rawQs].sort(
+              (a, b) => (posMap.get(a.id) ?? rawQs.length) - (posMap.get(b.id) ?? rawQs.length),
+            );
+          }
+          setQuestions(qs);
+
           const v: Record<string, true> = {};
-          // Consider answered/marked as visited; also mark first question visited.
           qs.forEach((q) => {
             if (attempt.answers?.[q.id] != null) v[q.id] = true;
           });
@@ -377,13 +414,12 @@ export default function TakeExam() {
     autosaveTimer.current = window.setInterval(async () => {
       try {
         setSaving(true);
-        await saveAttemptProgress({ testId, uid, answers, markedForReview });
+        await withTimeout(
+          saveAttemptProgress({ testId, uid, answers, markedForReview }),
+          8_000,
+        );
       } catch (e) {
         console.error("Autosave failed", e);
-        // Keep UI simple: show only when user is actively taking the exam.
-        // This avoids silent failure when Firestore rules/network blocks writes.
-        // eslint-disable-next-line no-alert
-        alert("Autosave failed. Please click Save manually once.");
       } finally {
         setSaving(false);
       }
@@ -454,10 +490,15 @@ export default function TakeExam() {
     if (!uid || !testId) return;
     try {
       setSaving(true);
-      await saveAttemptProgress({ testId, uid, answers, markedForReview });
+      // 8-second wall-clock timeout: if Firestore hangs on a bad connection, the
+      // UI isn't frozen forever — the spinner clears and the student can still navigate.
+      await withTimeout(
+        saveAttemptProgress({ testId, uid, answers, markedForReview }),
+        8_000,
+      );
     } catch (e) {
       console.error("Manual save failed", e);
-      alert("Save failed. Please check your internet and try again.");
+      alert("Save failed. Your answer is recorded locally — you can continue. Check connection.");
     } finally {
       setSaving(false);
     }
@@ -1076,7 +1117,7 @@ export default function TakeExam() {
                 <Button
                   size="sm"
                   className="bg-blue-600 hover:bg-blue-700"
-                  onClick={() => void handleManualSave().then(goNext)}
+                  onClick={() => void handleManualSave().finally(goNext)}
                   disabled={!isAttemptActive || saving || submitting || currentIndex === questions.length - 1}
                 >
                   {saving ? (

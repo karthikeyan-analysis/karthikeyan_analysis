@@ -126,6 +126,8 @@ export interface ExamAttempt {
   status: AttemptStatus;
   answers: Record<string, number | null>; // questionId -> selectedIndex
   markedForReview?: string[]; // questionIds
+  /** Persisted question order for this attempt (may be shuffled). Used to restore the same order on rejoin. */
+  questionIds?: string[];
   /** Student tried to re-enter an in-progress attempt from a new session. */
   rejoinRequestedAt?: string;
   /** Admin-approved rejoin timestamp. */

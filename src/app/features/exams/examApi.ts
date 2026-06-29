@@ -284,6 +284,9 @@ export async function startAttempt(params: {
       lastSavedAt: now,
       status: "in_progress",
       answers,
+      // Persist the question order so a rejoin restores the exact same sequence
+      // (critical when randomizeQuestionOrder is enabled).
+      questionIds: params.questionIds,
       markedForReview: [],
       startedAtServer: serverTimestamp(),
       lastSavedAtServer: serverTimestamp(),

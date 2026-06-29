@@ -50,13 +50,18 @@ export default function Login({ role = "student" }: LoginProps) {
   const handleStudentGoogleLogin = async () => {
     setError("");
     setLoading(true);
-    const result = await loginStudentWithGoogle();
-    if (result.success) {
-      navigate("/student");
-    } else {
-      setError(result.error || "Google sign-in failed.");
+    try {
+      const result = await loginStudentWithGoogle();
+      if (result.success) {
+        navigate("/student");
+      } else {
+        setError(result.error || "Google sign-in failed.");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Google sign-in failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -13,6 +13,8 @@ import {
   updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signInAnonymously,
   User as FirebaseUser,
 } from "firebase/auth";
@@ -179,6 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    // Handle the result of a redirect-based Google sign-in (cross-browser fallback).
+    // getRedirectResult resolves immediately with null if no redirect was pending.
+    getRedirectResult(auth).catch(() => {});
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         const userData = await fetchUserData(firebaseUser);
@@ -217,9 +223,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     success: boolean;
     error?: string;
   }> => {
+    const provider = new GoogleAuthProvider();
+    // Force account-picker even when the user already has a session.
+    provider.setCustomParameters({ prompt: "select_account" });
+
+    let result;
     try {
-      const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
+      result = await signInWithPopup(auth, provider);
+    } catch (popupError: any) {
+      // popup-blocked: Firefox/Safari/iOS silently block popups not opened
+      // synchronously. Fall back to redirect flow — the page reloads and
+      // onAuthStateChanged picks up the signed-in user on return.
+      if (
+        popupError?.code === "auth/popup-blocked" ||
+        popupError?.code === "auth/cancelled-popup-request"
+      ) {
+        await signInWithRedirect(auth, provider);
+        // signInWithRedirect navigates away; this return is never reached in practice.
+        return { success: true };
+      }
+      if (popupError?.code === "auth/popup-closed-by-user") {
+        return { success: false, error: "Sign-in was cancelled. Please try again." };
+      }
+      throw popupError; // re-throw other errors (network, config, etc.)
+    }
+
+    try {
       const signedInEmail = (result.user.email || "").toLowerCase();
 
       if (!signedInEmail) {
@@ -276,12 +305,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: true };
     } catch (error: any) {
       console.error("Student Google login error:", error);
-      if (error?.code === "auth/popup-closed-by-user") {
-        return { success: false, error: "Google sign-in popup was closed." };
-      }
       return {
         success: false,
-        error: "Could not sign in with Google. Please try again.",
+        error: error?.message || "Could not sign in with Google. Please try again.",
       };
     }
   };
