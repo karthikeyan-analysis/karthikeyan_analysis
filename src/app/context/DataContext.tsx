@@ -43,6 +43,10 @@ export interface Student {
   batchId?: string; // Batch enrollment
   /** Profile image URL (Firebase Storage download link or external link e.g. Google Drive). */
   photoURL?: string;
+  /** Browser + OS string of the currently registered device, e.g. "Chrome on Windows". */
+  activeDevice?: string;
+  /** ISO timestamp of when the device session was created. */
+  activeDeviceLoginAt?: string;
 }
 
 export type VisibilityType = "ALL" | "SELECTIVE" | "BATCH";
@@ -99,6 +103,7 @@ interface DataContextType {
   addStudent: (student: Omit<Student, "id">) => Promise<string>;
   updateStudent: (id: string, student: Partial<Student>) => Promise<void>;
   clearStudentPhoto: (id: string) => Promise<void>;
+  clearStudentDevice: (id: string) => Promise<void>;
   deleteStudent: (id: string) => Promise<void>;
   getStudentsByBatch: (batchId: string) => Student[];
 
@@ -334,6 +339,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const clearStudentDevice = async (id: string) => {
+    try {
+      await updateDoc(doc(db, "students", id), {
+        activeSessionToken: deleteField(),
+        activeDevice: deleteField(),
+        activeDeviceLoginAt: deleteField(),
+      } as any);
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? { ...s, activeDevice: undefined, activeDeviceLoginAt: undefined }
+            : s,
+        ),
+      );
+    } catch (error) {
+      console.error("Error clearing student device:", error);
+      throw error;
+    }
+  };
+
   const updateStudent = async (id: string, updates: Partial<Student>) => {
     try {
       const oldStudent = students.find((s) => s.id === id);
@@ -547,6 +572,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         addStudent,
         updateStudent,
         clearStudentPhoto,
+        clearStudentDevice,
         deleteStudent,
         getStudentsByBatch,
         content,

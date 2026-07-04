@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Radio,
   FileText,
+  Globe,
 } from "lucide-react";
 import { cn } from "../ui/utils";
 
@@ -63,6 +64,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       to: "/admin/reports/student-tests",
       icon: FileSpreadsheet,
       label: "Student test reports",
+      end: true,
+    },
+    {
+      to: "/admin/public-registrations",
+      icon: Globe,
+      label: "Public Registrations",
       end: true,
     },
   ];

@@ -34,7 +34,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet, X } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet, X, Monitor, RotateCcw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -134,8 +134,25 @@ function StudentPhotoFields({
 }
 
 export default function StudentManagement() {
-  const { students, batches, addStudent, updateStudent, deleteStudent, clearStudentPhoto } =
+  const { students, batches, addStudent, updateStudent, deleteStudent, clearStudentPhoto, clearStudentDevice } =
     useData();
+  const [resettingDeviceIds, setResettingDeviceIds] = useState<Set<string>>(new Set());
+
+  const handleResetDevice = async (studentId: string) => {
+    if (!confirm("Reset this student's device? They will be able to log in from any device again.")) return;
+    setResettingDeviceIds((prev) => new Set(prev).add(studentId));
+    try {
+      await clearStudentDevice(studentId);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setResettingDeviceIds((prev) => {
+        const next = new Set(prev);
+        next.delete(studentId);
+        return next;
+      });
+    }
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBatch, setSelectedBatch] = useState<string>("all");
   const [studentSortKey, setStudentSortKey] = useState<StudentSortKey>("name");
@@ -1096,6 +1113,7 @@ export default function StudentManagement() {
                     <TableHead>Batch</TableHead>
                     <TableHead>Enrolled Date</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Active Device</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1128,11 +1146,13 @@ export default function StudentManagement() {
                             ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
                             : false
                         }
+                        onResetDevice={() => handleResetDevice(student.id)}
+                        isResettingDevice={resettingDeviceIds.has(student.id)}
                       />
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={9} className="text-center py-8">
                         <p className="text-slate-500">No students found</p>
                       </TableCell>
                     </TableRow>
@@ -1155,6 +1175,7 @@ export default function StudentManagement() {
                       <TableHead>Email</TableHead>
                       <TableHead>Enrolled Date</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Active Device</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1188,11 +1209,13 @@ export default function StudentManagement() {
                               ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
                               : false
                           }
+                          onResetDevice={() => handleResetDevice(student.id)}
+                          isResettingDevice={resettingDeviceIds.has(student.id)}
                         />
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-slate-500">
                             No students in this batch
                           </p>
@@ -1218,6 +1241,7 @@ export default function StudentManagement() {
                       <TableHead>Email</TableHead>
                       <TableHead>Enrolled Date</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Active Device</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1251,11 +1275,13 @@ export default function StudentManagement() {
                               ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
                               : false
                           }
+                          onResetDevice={() => handleResetDevice(student.id)}
+                          isResettingDevice={resettingDeviceIds.has(student.id)}
                         />
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-slate-500">
                             No unassigned students
                           </p>
@@ -1292,6 +1318,8 @@ interface StudentRowProps {
   onPhotoPick: (file: File | null) => void;
   onPhotoRemove: () => void | Promise<void>;
   canRemovePhoto: boolean;
+  onResetDevice: () => Promise<void>;
+  isResettingDevice: boolean;
 }
 
 function StudentRow({
@@ -1312,7 +1340,23 @@ function StudentRow({
   onPhotoPick,
   onPhotoRemove,
   canRemovePhoto,
+  onResetDevice,
+  isResettingDevice,
 }: StudentRowProps) {
+  const formatLoginTime = (iso?: string) => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  };
+
   return (
     <TableRow key={student.id}>
       <TableCell>
@@ -1339,8 +1383,29 @@ function StudentRow({
           {student.status}
         </Badge>
       </TableCell>
+      {/* Active Device column */}
+      <TableCell>
+        {student.activeDevice ? (
+          <div className="flex items-start gap-2 min-w-[180px]">
+            <div className="mt-0.5 w-2 h-2 rounded-full bg-green-500 shrink-0 ring-2 ring-green-100" />
+            <div>
+              <p className="text-xs font-medium text-slate-800 leading-tight flex items-center gap-1">
+                <Monitor className="w-3 h-3" />
+                {student.activeDevice}
+              </p>
+              {student.activeDeviceLoginAt && (
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {formatLoginTime(student.activeDeviceLoginAt)}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <span className="text-xs text-slate-400">No active session</span>
+        )}
+      </TableCell>
       <TableCell className="text-right">
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-1">
           <Dialog
             open={editingStudent?.id === student.id}
             onOpenChange={(open) => !open && onReset()}
@@ -1470,6 +1535,20 @@ function StudentRow({
               </form>
             </DialogContent>
           </Dialog>
+          {student.activeDevice && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void onResetDevice()}
+              disabled={isResettingDevice}
+              title="Reset device — allows student to log in from any device"
+              className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+            >
+              {isResettingDevice
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <RotateCcw className="w-4 h-4" />}
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

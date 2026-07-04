@@ -22,15 +22,67 @@ import { auth, db } from "../../config/firebase";
 import { saveGuestProfile } from "../features/exams/examApi";
 import {
   collection,
+  deleteField,
   doc,
   getDoc,
   getDocs,
   query,
   setDoc,
+  updateDoc,
   where,
 } from "firebase/firestore";
 
 export type UserRole = "admin" | "student";
+
+// ── Single-device session ─────────────────────────────────────────────────────
+const STUDENT_SESSION_KEY = "ka_student_session";
+
+function generateSessionToken(): string {
+  const arr = new Uint8Array(18);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function getDeviceInfo(): string {
+  const ua = navigator.userAgent;
+  let browser = "Browser";
+  if (ua.includes("Firefox")) browser = "Firefox";
+  else if (ua.includes("Edg")) browser = "Edge";
+  else if (ua.includes("Chrome")) browser = "Chrome";
+  else if (ua.includes("Safari")) browser = "Safari";
+
+  let os = "Unknown OS";
+  if (ua.includes("Windows")) os = "Windows";
+  else if (ua.includes("Mac")) os = "macOS";
+  else if (ua.includes("Android")) os = "Android";
+  else if (ua.includes("iPhone") || ua.includes("iPad")) os = "iOS";
+  else if (ua.includes("Linux")) os = "Linux";
+
+  return `${browser} on ${os}`;
+}
+
+async function writeStudentSession(studentRecordId: string): Promise<void> {
+  const sessionToken = generateSessionToken();
+  await updateDoc(doc(db, "students", studentRecordId), {
+    activeSessionToken: sessionToken,
+    activeDevice: getDeviceInfo(),
+    activeDeviceLoginAt: new Date().toISOString(),
+  });
+  localStorage.setItem(
+    STUDENT_SESSION_KEY,
+    JSON.stringify({ studentRecordId, sessionToken }),
+  );
+}
+
+/** Admin utility: clears the active device lock so the student can log in fresh. */
+export async function resetStudentDevice(studentDocId: string): Promise<void> {
+  await updateDoc(doc(db, "students", studentDocId), {
+    activeSessionToken: deleteField(),
+    activeDevice: deleteField(),
+    activeDeviceLoginAt: deleteField(),
+  } as any);
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface User {
   id: string;
@@ -151,6 +203,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (studentData.studentId) studentId = studentData.studentId;
             if (studentData.batchId) batchId = studentData.batchId;
           }
+
+          // ── Single-device enforcement (skip for anonymous/guest users) ──
+          if (studentRecordId && !firebaseUser.isAnonymous) {
+            const localRaw = localStorage.getItem(STUDENT_SESSION_KEY);
+            if (localRaw) {
+              try {
+                const { studentRecordId: localId, sessionToken: localToken } = JSON.parse(localRaw) as {
+                  studentRecordId: string;
+                  sessionToken: string;
+                };
+                if (localId === studentRecordId) {
+                  const firestoreToken = (studentData as any)?.activeSessionToken as string | undefined;
+                  if (firestoreToken && localToken !== firestoreToken) {
+                    // Another device wrote a new token — kick this session out
+                    localStorage.removeItem(STUDENT_SESSION_KEY);
+                    sessionStorage.setItem("ka_kicked_reason", "other_device");
+                    await signOut(auth);
+                    return null;
+                  }
+                }
+              } catch { /* malformed localStorage — ignore */ }
+            }
+          }
+          // ────────────────────────────────────────────────────────────────
         } else if (role === "admin" && typeof userData.name === "string" && userData.name.trim()) {
           name = userData.name.trim();
         }
@@ -207,6 +283,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const result = await signInWithEmailAndPassword(auth, email, password);
       const userData = await fetchUserData(result.user);
       if (userData && userData.role === role) {
+        // Register this device as the active session for students
+        if (role === "student" && userData.studentRecordId) {
+          await writeStudentSession(userData.studentRecordId);
+        }
         setUser(userData);
         return true;
       }
@@ -299,6 +379,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         { merge: true },
       );
+
+      // Register this device as the active session (invalidates any other device)
+      await writeStudentSession(studentRecordId);
 
       const studentUser = await fetchUserData(result.user);
       setUser(studentUser);
@@ -428,6 +511,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
+      // Clear student device session from Firestore + localStorage
+      const localRaw = localStorage.getItem(STUDENT_SESSION_KEY);
+      if (localRaw) {
+        try {
+          const { studentRecordId } = JSON.parse(localRaw) as { studentRecordId: string };
+          if (studentRecordId) {
+            await updateDoc(doc(db, "students", studentRecordId), {
+              activeSessionToken: deleteField(),
+              activeDevice: deleteField(),
+              activeDeviceLoginAt: deleteField(),
+            } as any);
+          }
+        } catch { /* ignore Firestore errors on logout */ }
+        localStorage.removeItem(STUDENT_SESSION_KEY);
+      }
       await signOut(auth);
       setUser(null);
     } catch (error) {

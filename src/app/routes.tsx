@@ -2,6 +2,7 @@ import React from "react";
 import { createBrowserRouter, Navigate } from "react-router";
 import type { ReactElement } from "react";
 import { useAuth } from "./context/AuthContext";
+import { usePublicAuth } from "./context/PublicAuthContext";
 import DashboardLayout from "./components/layout/DashboardLayout";
 import Login from "./pages/Login";
 import AdminSignup from "./pages/AdminSignup";
@@ -33,6 +34,11 @@ import PdfViewer from "./pages/student/PdfViewer";
 import EnrollmentManagement from "./pages/admin/EnrollmentManagement";
 import EnrollmentFormPage from "./pages/student/EnrollmentFormPage";
 import EnrollmentSuccessPage from "./pages/student/EnrollmentSuccessPage";
+import PublicRegistration from "./pages/public/PublicRegistration";
+import PublicLogin from "./pages/public/PublicLogin";
+import PublicDashboard from "./pages/public/PublicDashboard";
+import PublicHallTicket from "./pages/public/PublicHallTicket";
+import PublicRegistrationsPage from "./pages/admin/PublicRegistrationsPage";
 
 function StudentOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -48,6 +54,13 @@ function GuestJoinRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (user?.role === "admin") return <Navigate to="/admin" replace />;
+  return children;
+}
+
+function PublicProtectedRoute({ children }: { children: ReactElement }) {
+  const { publicStudent, loading } = usePublicAuth();
+  if (loading) return null;
+  if (!publicStudent) return <Navigate to="/public/login" replace />;
   return children;
 }
 
@@ -90,6 +103,25 @@ export const router = createBrowserRouter([
     path: "/enrollment-success",
     element: <EnrollmentSuccessPage />,
   },
+  // ── Public CBT Portal ──────────────────────────────────────────────────────
+  { path: "/public/register", element: <PublicRegistration /> },
+  { path: "/public/login", element: <PublicLogin /> },
+  {
+    path: "/public/dashboard",
+    element: (
+      <PublicProtectedRoute>
+        <PublicDashboard />
+      </PublicProtectedRoute>
+    ),
+  },
+  {
+    path: "/public/hall-ticket",
+    element: (
+      <PublicProtectedRoute>
+        <PublicHallTicket />
+      </PublicProtectedRoute>
+    ),
+  },
   {
     path: "/admin/login",
     element: <Login role="admin" />,
@@ -116,6 +148,7 @@ export const router = createBrowserRouter([
       { path: "tests/analytics", element: <AllTestsAnalytics /> },
       { path: "tests/attendance", element: <TestAttendanceAnalytics /> },
       { path: "reports/student-tests", element: <StudentTestReports /> },
+      { path: "public-registrations", element: <PublicRegistrationsPage /> },
       { path: "tests/new", element: <ExamCreatePage /> },
       {
         path: "tests/:id",

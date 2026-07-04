@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import bannerImage from "../../banner.jpeg";
 import { useAuth } from "../context/AuthContext";
@@ -11,7 +11,7 @@ import {
   CardDescription,
   CardHeader,
 } from "../components/ui/card";
-import { AlertCircle, KeyRound } from "lucide-react";
+import { AlertCircle, KeyRound, Smartphone } from "lucide-react";
 import type { UserRole } from "../context/AuthContext";
 
 interface LoginProps {
@@ -23,8 +23,16 @@ export default function Login({ role = "student" }: LoginProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [kickedNotice, setKickedNotice] = useState(false);
   const { login, loginStudentWithGoogle } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (sessionStorage.getItem("ka_kicked_reason") === "other_device") {
+      setKickedNotice(true);
+      sessionStorage.removeItem("ka_kicked_reason");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,6 +122,15 @@ export default function Login({ role = "student" }: LoginProps) {
                   />
                 </div>
               </>
+            )}
+
+            {kickedNotice && (
+              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                <Smartphone className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800">
+                  You were signed out because your account was logged in on another device. Contact your admin if this wasn't you.
+                </p>
+              </div>
             )}
 
             {error && (

@@ -5,12 +5,10 @@ import { useNavigate } from "react-router";
 import {
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { FileText, Film, Lock, Eye } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Film, Folder, FolderOpen, Lock, Eye } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 
 export default function MediaLibrary() {
@@ -18,15 +16,23 @@ export default function MediaLibrary() {
   const { content, videos, batches } = useData();
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedSubject, setSelectedSubject] = useState<string>("All");
+  const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
 
   // Get current batch name
   const currentBatch = batches.find((b) => b.id === user?.batchId);
 
-  // Reset subject filter whenever the student's batch changes
+  // Collapse all folders when the student's batch changes
   useEffect(() => {
-    setSelectedSubject("All");
+    setOpenSubjects(new Set());
   }, [user?.batchId]);
+
+  const toggleSubject = (subject: string) => {
+    setOpenSubjects((prev) => {
+      const next = new Set(prev);
+      next.has(subject) ? next.delete(subject) : next.add(subject);
+      return next;
+    });
+  };
 
   const canAccessItem = (item: {
     visibilityType: "ALL" | "SELECTIVE" | "BATCH";
@@ -77,18 +83,6 @@ export default function MediaLibrary() {
     return availableSubjects.map((s) => [s, groups.get(s) || []] as const);
   }, [allMedia, availableSubjects]);
 
-  // Item counts per subject tab (used to render the badge on each pill)
-  const subjectCounts = useMemo(() => {
-    const map: Record<string, number> = { All: allMedia.length };
-    for (const [s, items] of groupedMediaBySubject) map[s] = items.length;
-    return map;
-  }, [groupedMediaBySubject, allMedia.length]);
-
-  // Only the group(s) that match the active subject tab
-  const visibleGroups = useMemo(() => {
-    if (selectedSubject === "All") return groupedMediaBySubject;
-    return groupedMediaBySubject.filter(([s]) => s === selectedSubject);
-  }, [groupedMediaBySubject, selectedSubject]);
 
   // Disable right-click, copying, and keyboard shortcuts for security
   useEffect(() => {
@@ -157,130 +151,117 @@ export default function MediaLibrary() {
         </AlertDescription>
       </Alert>
 
-      {/* Subject filter tabs — only shown when there are multiple subjects */}
-      {availableSubjects.filter((s) => s !== "Uncategorized" || allMedia.some((i) => !(i as any).subject?.trim())).length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {["All", ...availableSubjects].map((subject) => {
-            const count = subjectCounts[subject] ?? 0;
-            const isActive = selectedSubject === subject;
-            return (
-              <button
-                key={subject}
-                onClick={() => setSelectedSubject(subject)}
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
-                  isActive
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
-                }`}
-              >
-                {subject}
-                <span
-                  className={`text-xs rounded-full px-1.5 py-0.5 min-w-[20px] text-center font-semibold ${
-                    isActive ? "bg-indigo-500 text-white" : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {allMedia.length > 0 ? (
-        <div className="space-y-5">
-          {visibleGroups.map(([subjectName, items]) => (
-            <Card key={subjectName} className="border-slate-200">
-              <CardHeader className="border-b border-slate-100 bg-slate-50/60 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-base text-slate-900">
+        <div className="space-y-3">
+          {groupedMediaBySubject.map(([subjectName, items]) => {
+            const isOpen = openSubjects.has(subjectName);
+            return (
+              <Card key={subjectName} className="border-slate-200 overflow-hidden">
+                {/* Folder header — click to open/close */}
+                <button
+                  type="button"
+                  className="w-full flex items-center gap-3 px-5 py-4 hover:bg-slate-50 transition text-left select-none"
+                  onClick={() => toggleSubject(subjectName)}
+                >
+                  <span className="text-indigo-500">
+                    {isOpen
+                      ? <FolderOpen className="w-5 h-5" />
+                      : <Folder className="w-5 h-5" />}
+                  </span>
+                  <span className="flex-1 font-semibold text-slate-800">
                     {subjectName}
-                  </CardTitle>
-                  <Badge variant="outline" className="bg-white">
-                    {items.length} item{items.length === 1 ? "" : "s"}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="p-0">
-                {items.length === 0 ? (
-                  <div className="p-6 text-center text-sm text-slate-600">
-                    No materials in this subject yet.
-                  </div>
-                ) : (
-                  <div className="divide-y divide-slate-100">
-                    {items.map((item) => {
-                      const isVideo = "videoUrl" in item;
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 hover:bg-slate-50/60 transition-colors"
-                        >
-                          {/* Icon */}
-                          <div className="flex-shrink-0">
+                  </span>
+                  <span className="text-xs bg-indigo-100 text-indigo-700 font-semibold px-2.5 py-1 rounded-full">
+                    {items.length} item{items.length !== 1 ? "s" : ""}
+                  </span>
+                  <span className="text-slate-400 ml-1">
+                    {isOpen
+                      ? <ChevronDown className="w-5 h-5" />
+                      : <ChevronRight className="w-5 h-5" />}
+                  </span>
+                </button>
+
+                {/* Items — only rendered when folder is open */}
+                {isOpen && (
+                  <div className="border-t border-slate-100">
+                    {items.length === 0 ? (
+                      <p className="p-6 text-center text-sm text-slate-500">
+                        No materials in this subject yet.
+                      </p>
+                    ) : (
+                      <div className="divide-y divide-slate-100">
+                        {items.map((item) => {
+                          const isVideo = "videoUrl" in item;
+                          return (
                             <div
-                              className="w-16 h-16 rounded-lg bg-gradient-to-br flex items-center justify-center"
-                              style={{
-                                backgroundImage: isVideo
-                                  ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-                                  : "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
-                              }}
+                              key={item.id}
+                              className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 hover:bg-slate-50/60 transition-colors"
                             >
-                              {isVideo ? (
-                                <Film className="w-8 h-8 text-white" />
-                              ) : (
-                                <FileText className="w-8 h-8 text-white" />
-                              )}
-                            </div>
-                          </div>
+                              {/* Icon */}
+                              <div className="flex-shrink-0">
+                                <div
+                                  className="w-14 h-14 rounded-lg flex items-center justify-center"
+                                  style={{
+                                    backgroundImage: isVideo
+                                      ? "linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+                                      : "linear-gradient(135deg, #f093fb 0%, #f5576c 100%)",
+                                  }}
+                                >
+                                  {isVideo
+                                    ? <Film className="w-7 h-7 text-white" />
+                                    : <FileText className="w-7 h-7 text-white" />}
+                                </div>
+                              </div>
 
-                          {/* Content */}
-                          <div className="flex-grow min-w-0">
-                            <div className="flex items-center gap-2 mb-1 flex-wrap">
-                              <h3 className="font-semibold text-slate-900">
-                                {item.title}
-                              </h3>
-                              <Badge variant={isVideo ? "default" : "secondary"}>
-                                {isVideo ? "Video" : "PDF"}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-slate-600 mb-2">
-                              {item.description}
-                            </p>
-                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
-                              <span>Uploaded: {item.uploadDate}</span>
-                              {isVideo && "duration" in item && (
-                                <span>Duration: {item.duration}</span>
-                              )}
-                            </div>
-                          </div>
+                              {/* Content */}
+                              <div className="flex-grow min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  <h3 className="font-semibold text-slate-900">
+                                    {item.title}
+                                  </h3>
+                                  <Badge variant={isVideo ? "default" : "secondary"}>
+                                    {isVideo ? "Video" : "PDF"}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-slate-600 mb-1">
+                                  {item.description}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                                  <span>Uploaded: {item.uploadDate}</span>
+                                  {isVideo && "duration" in item && (
+                                    <span>Duration: {item.duration}</span>
+                                  )}
+                                </div>
+                              </div>
 
-                          {/* Action Button */}
-                          <div className="flex-shrink-0 sm:self-auto self-stretch">
-                            <Button
-                              onClick={() => {
-                                if (isVideo) {
-                                  navigate(`/student/video/${item.id}`);
-                                  return;
-                                }
-
-                                if ("fileUrl" in item && item.fileUrl) {
-                                  navigate(`/student/pdf/${item.id}`);
-                                }
-                              }}
-                              className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto"
-                            >
-                              <Eye className="w-4 h-4 mr-2" />
-                              View
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                              {/* Action Button */}
+                              <div className="flex-shrink-0 sm:self-auto self-stretch">
+                                <Button
+                                  onClick={() => {
+                                    if (isVideo) {
+                                      navigate(`/student/video/${item.id}`);
+                                      return;
+                                    }
+                                    if ("fileUrl" in item && item.fileUrl) {
+                                      navigate(`/student/pdf/${item.id}`);
+                                    }
+                                  }}
+                                  className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto"
+                                >
+                                  <Eye className="w-4 h-4 mr-2" />
+                                  View
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <Card>
