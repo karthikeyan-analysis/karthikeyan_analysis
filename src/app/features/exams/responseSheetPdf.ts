@@ -191,10 +191,18 @@ export function buildResponseSheetHtml({
     .correct-note{color:#047857}.selected-note{color:#be123c}
     .answer-summary{margin-top:7px;background:#f8fafc;border-left:3px solid #4f46e5;padding:5px 8px;font-size:11px;display:flex;gap:18px;flex-wrap:wrap}
     .footer{margin-top:14px;padding-top:8px;border-top:1px solid #e5e7eb;font-size:9px;color:#64748b;text-align:right}
-    @media print{.brand img{height:50px}.watermark-text{font-size:34px}.options-list{columns:2}.question-row{padding:8px 0}.img-wrap img{max-height:300px}}
+    .save-bar{position:sticky;top:0;z-index:100;background:#4f46e5;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:2px solid #3730a3}
+    .save-btn{background:#fff;color:#4f46e5;border:none;border-radius:6px;padding:7px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:.02em}
+    .save-btn:hover{background:#e0e7ff}
+    .save-hint{font-size:12px;opacity:.85}
+    @media print{.save-bar{display:none!important}.brand img{height:50px}.watermark-text{font-size:34px}.options-list{columns:2}.question-row{padding:8px 0}.img-wrap img{max-height:300px}}
   </style>
 </head>
 <body>
+  <div class="save-bar">
+    <button class="save-btn" onclick="window.print()">⬇ Save as PDF</button>
+    <span class="save-hint">Click → choose "Save as PDF" in the print dialog</span>
+  </div>
   <div class="watermark"><div class="watermark-text">${escapeHtml(`${studentName} • ${studentId}`)}</div></div>
   <main class="content">
     <header class="sheet-header">
@@ -303,9 +311,7 @@ export function buildResponseSheetHtml({
       }
 
       window.focus();
-      waitForImages().then(function () {
-        setTimeout(function () { window.print(); }, 250);
-      });
+      waitForImages();
     })();
   </script>
 </body>

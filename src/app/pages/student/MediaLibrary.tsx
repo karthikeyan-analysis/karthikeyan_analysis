@@ -60,24 +60,29 @@ export default function MediaLibrary() {
   }, [batchContent, batchVideos]);
 
   const availableSubjects = useMemo(() => {
-    const raw = currentBatch?.subjects || [];
-    const list = raw.map((s) => s.trim()).filter(Boolean);
-    if (!list.includes("Uncategorized")) list.push("Uncategorized");
-    return list;
-  }, [currentBatch?.subjects]);
+    const batchSubjects = (currentBatch?.subjects || []).map((s) => s.trim()).filter(Boolean);
+    // Also collect subjects actually present in media so folders exist even when
+    // the batch's subjects list is empty or missing.
+    const mediaSubjects = [
+      ...new Set(allMedia.map((item) => (item as any).subject?.trim()).filter(Boolean)),
+    ] as string[];
+    const combined = [...new Set([...batchSubjects, ...mediaSubjects])];
+    if (!combined.includes("Uncategorized")) combined.push("Uncategorized");
+    return combined;
+  }, [currentBatch?.subjects, allMedia]);
 
   const groupedMediaBySubject = useMemo(() => {
-    const toKey = (v?: string) => v?.trim() || "Uncategorized";
+    // Case-insensitive lookup so "Maths" and "maths" map to the same folder.
+    const normalise = (v?: string) => v?.trim().toLowerCase() || "";
+    const subjectByNorm = new Map(availableSubjects.map((s) => [normalise(s), s]));
+
     const groups = new Map<string, typeof allMedia>();
     for (const s of availableSubjects) groups.set(s, []);
 
     for (const item of allMedia) {
-      const key = toKey((item as any).subject);
-      if (groups.has(key)) {
-        groups.get(key)!.push(item);
-      } else {
-        groups.get("Uncategorized")!.push(item);
-      }
+      const norm = normalise((item as any).subject);
+      const canonicalKey = norm ? (subjectByNorm.get(norm) ?? "Uncategorized") : "Uncategorized";
+      groups.get(canonicalKey)!.push(item);
     }
 
     return availableSubjects.map((s) => [s, groups.get(s) || []] as const);

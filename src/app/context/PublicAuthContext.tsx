@@ -29,7 +29,7 @@ export interface PublicStudent {
   phone: string;
   nativeDistrict: string;
   gender: "Male" | "Female";
-  educationalQualification: "UG" | "PG";
+  educationalQualification: "UG" | "PG" | "Both";
   subjects: string[];
   isKarthikeyanStudent: boolean;
   karthikeyanYear?: string;

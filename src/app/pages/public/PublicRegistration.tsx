@@ -2,12 +2,12 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../../../config/firebase";
-import { registerPublicStudent } from "../../context/PublicAuthContext";
+import { registerPublicStudent, usePublicAuth } from "../../context/PublicAuthContext";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
-import { Camera, CheckCircle2, Copy } from "lucide-react";
+import { Camera } from "lucide-react";
 
 const UG_SUBJECTS = ["Maths", "Statistics", "Economics"];
 const PG_SUBJECTS = ["Maths", "Statistics", "Economics", "Others"];
@@ -23,14 +23,9 @@ const DECLARATIONS = [
   "I will use this free test properly & will improve my potential.",
 ];
 
-interface Credentials {
-  username: string;
-  passcode: string;
-  id: string;
-}
-
 export default function PublicRegistration() {
   const navigate = useNavigate();
+  const { login } = usePublicAuth();
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
@@ -40,7 +35,7 @@ export default function PublicRegistration() {
     phone: "",
     nativeDistrict: "",
     gender: "" as "Male" | "Female" | "",
-    educationalQualification: "" as "UG" | "PG" | "",
+    educationalQualifications: [] as ("UG" | "PG")[],
     subjects: [] as string[],
     isKarthikeyanStudent: "" as "Yes" | "No" | "",
     karthikeyanYear: "",
@@ -52,15 +47,29 @@ export default function PublicRegistration() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
-  const [copied, setCopied] = useState(false);
 
-  const subjects =
-    form.educationalQualification === "UG"
-      ? UG_SUBJECTS
-      : form.educationalQualification === "PG"
-        ? PG_SUBJECTS
-        : [];
+  const availableSubjects = [
+    ...(form.educationalQualifications.includes("UG") ? UG_SUBJECTS : []),
+    ...(form.educationalQualifications.includes("PG") ? PG_SUBJECTS : []),
+  ].filter((s, i, arr) => arr.indexOf(s) === i);
+
+  const toggleQualification = (q: "UG" | "PG") => {
+    setForm((prev) => {
+      const has = prev.educationalQualifications.includes(q);
+      const newQuals = has
+        ? prev.educationalQualifications.filter((x) => x !== q)
+        : [...prev.educationalQualifications, q];
+      const newAvailable = [
+        ...(newQuals.includes("UG") ? UG_SUBJECTS : []),
+        ...(newQuals.includes("PG") ? PG_SUBJECTS : []),
+      ].filter((s, i, arr) => arr.indexOf(s) === i);
+      return {
+        ...prev,
+        educationalQualifications: newQuals,
+        subjects: prev.subjects.filter((s) => newAvailable.includes(s)),
+      };
+    });
+  };
 
   const toggleSubject = (s: string) => {
     setForm((prev) => ({
@@ -85,6 +94,7 @@ export default function PublicRegistration() {
   };
 
   const validate = (): string => {
+    if (!photoFile) return "Please upload your photo.";
     if (!form.name.trim()) return "Student name is required.";
     if (!form.fatherName.trim()) return "Father's name is required.";
     if (!form.dob) return "Date of birth is required.";
@@ -92,7 +102,7 @@ export default function PublicRegistration() {
       return "Enter a valid 10-digit phone number.";
     if (!form.nativeDistrict.trim()) return "Native district is required.";
     if (!form.gender) return "Please select gender.";
-    if (!form.educationalQualification) return "Please select qualification (UG/PG).";
+    if (form.educationalQualifications.length === 0) return "Please select qualification (UG / PG).";
     if (form.subjects.length === 0) return "Please select at least one subject.";
     if (!form.isKarthikeyanStudent) return "Please answer the Karthikeyan Analysis question.";
     if (form.isKarthikeyanStudent === "Yes" && !form.karthikeyanYear)
@@ -117,6 +127,11 @@ export default function PublicRegistration() {
         photoUrl = await getDownloadURL(fileRef);
       }
 
+      const qual: "UG" | "PG" | "Both" =
+        form.educationalQualifications.includes("UG") && form.educationalQualifications.includes("PG")
+          ? "Both"
+          : form.educationalQualifications[0]!;
+
       const result = await registerPublicStudent({
         name: form.name.trim(),
         fatherName: form.fatherName.trim(),
@@ -124,7 +139,7 @@ export default function PublicRegistration() {
         phone: form.phone.trim(),
         nativeDistrict: form.nativeDistrict.trim(),
         gender: form.gender as "Male" | "Female",
-        educationalQualification: form.educationalQualification as "UG" | "PG",
+        educationalQualification: qual,
         subjects: form.subjects,
         isKarthikeyanStudent: form.isKarthikeyanStudent === "Yes",
         karthikeyanYear:
@@ -132,72 +147,14 @@ export default function PublicRegistration() {
         photoUrl: photoUrl || undefined,
       });
 
-      setCredentials(result);
+      await login(result.username, result.passcode);
+      navigate("/public/hall-ticket", { replace: true });
     } catch (e: any) {
       setError(e?.message || "Registration failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
-
-  const copyCredentials = () => {
-    if (!credentials) return;
-    navigator.clipboard.writeText(
-      `Username: ${credentials.username}\nPasscode: ${credentials.passcode}`,
-    );
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  // ── Success screen ────────────────────────────────────────────────────────
-  if (credentials) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-slate-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8 text-center space-y-6">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
-            <CheckCircle2 className="w-9 h-9 text-green-600" />
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">Registration Successful!</h2>
-            <p className="text-slate-500 mt-1 text-sm">Save your credentials — you'll need them to login.</p>
-          </div>
-
-          <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-6 space-y-3 text-left">
-            <div>
-              <p className="text-xs text-indigo-500 uppercase font-semibold">Username</p>
-              <p className="text-2xl font-bold text-indigo-900 tracking-widest">{credentials.username}</p>
-            </div>
-            <div>
-              <p className="text-xs text-indigo-500 uppercase font-semibold">Passcode</p>
-              <p className="text-2xl font-bold text-indigo-900 tracking-widest">{credentials.passcode}</p>
-            </div>
-          </div>
-
-          <button
-            onClick={copyCredentials}
-            className="w-full flex items-center justify-center gap-2 border-2 border-indigo-200 text-indigo-700 font-semibold py-2.5 rounded-lg hover:bg-indigo-50 transition"
-          >
-            <Copy className="w-4 h-4" />
-            {copied ? "Copied!" : "Copy Credentials"}
-          </button>
-
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800 text-left">
-            <p className="font-semibold mb-1">📢 Important</p>
-            <p>Join our Telegram channel to receive test links and updates. Your login credentials will be sent there too.</p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <Button onClick={() => navigate("/public/hall-ticket", { state: { studentId: credentials.id } })} className="bg-indigo-600 hover:bg-indigo-700 w-full">
-              Download Hall Ticket
-            </Button>
-            <Button variant="outline" onClick={() => navigate("/public/login")} className="w-full">
-              Go to Login
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   // ── Registration form ─────────────────────────────────────────────────────
   return (
@@ -221,7 +178,7 @@ export default function PublicRegistration() {
             {/* Photo */}
             <div className="flex flex-col items-center gap-2 shrink-0">
               <div
-                className="w-28 h-32 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center overflow-hidden cursor-pointer hover:border-indigo-400 transition bg-slate-50"
+                className={`w-28 h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center overflow-hidden cursor-pointer hover:border-indigo-400 transition bg-slate-50 ${photoPreview ? "border-indigo-400" : "border-red-300"}`}
                 onClick={() => photoInputRef.current?.click()}
               >
                 {photoPreview ? (
@@ -229,7 +186,7 @@ export default function PublicRegistration() {
                 ) : (
                   <>
                     <Camera className="w-7 h-7 text-slate-400 mb-1" />
-                    <span className="text-xs text-slate-400 text-center px-1">Photo (optional)</span>
+                    <span className="text-xs text-red-500 font-medium text-center px-1">Photo *<br/>(Required)</span>
                   </>
                 )}
               </div>
@@ -283,21 +240,17 @@ export default function PublicRegistration() {
 
           {/* Educational qualification */}
           <div>
-            <Label>Educational Qualification *</Label>
+            <Label>Educational Qualification * <span className="text-xs font-normal text-slate-500">(select one or both)</span></Label>
             <div className="mt-2 border border-slate-200 rounded-xl overflow-hidden">
               {(["UG", "PG"] as const).map((q) => {
                 const qSubjects = q === "UG" ? UG_SUBJECTS : PG_SUBJECTS;
-                const isSelected = form.educationalQualification === q;
+                const isSelected = form.educationalQualifications.includes(q);
                 return (
                   <div key={q} className={`border-b last:border-b-0 ${isSelected ? "bg-indigo-50" : ""}`}>
                     <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="qualification"
-                        value={q}
+                      <Checkbox
                         checked={isSelected}
-                        onChange={() => setForm({ ...form, educationalQualification: q, subjects: [] })}
-                        className="text-indigo-600"
+                        onCheckedChange={() => toggleQualification(q)}
                       />
                       <span className="font-semibold text-slate-800 w-8">{q}</span>
                       <span className="text-sm text-slate-500">{qSubjects.join(" / ")}</span>
@@ -369,7 +322,7 @@ export default function PublicRegistration() {
           )}
 
           <Button type="submit" disabled={submitting} className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 text-base">
-            {submitting ? "Registering..." : "Register & Get Credentials"}
+            {submitting ? "Registering…" : "Register & Get Hall Ticket"}
           </Button>
 
           <p className="text-center text-sm text-slate-500">

@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { usePublicAuth } from "../../context/PublicAuthContext";
 import { Button } from "../../components/ui/button";
-import { Printer, ArrowLeft, Send } from "lucide-react";
+import { Download, ArrowLeft, Send, Loader2 } from "lucide-react";
 
 const SCHEDULE = [
   { sno: 1, subject: "Maths Full Test", questions: 100, marks: 100, time: "10:00 AM – 12:00 PM", discussion: "12:30 PM – 01:30 PM" },
@@ -22,8 +22,45 @@ export default function PublicHallTicket() {
     }
   }, [loading, publicStudent, navigate]);
 
-  const handlePrint = () => {
-    window.print();
+  const [downloading, setDownloading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!printRef.current || !publicStudent) return;
+    setDownloading(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const { jsPDF } = await import("jspdf");
+
+      const canvas = await html2canvas(printRef.current, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: false,
+        backgroundColor: "#ffffff",
+      });
+
+      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pageW) / canvas.width;
+      const imgData = canvas.toDataURL("image/jpeg", 0.95);
+
+      if (imgH <= pageH) {
+        pdf.addImage(imgData, "JPEG", 0, 0, pageW, imgH);
+      } else {
+        let y = 0;
+        while (y < imgH) {
+          if (y > 0) pdf.addPage();
+          pdf.addImage(imgData, "JPEG", 0, -y, pageW, imgH);
+          y += pageH;
+        }
+      }
+
+      pdf.save(`hall-ticket-${publicStudent.username}.pdf`);
+    } catch {
+      window.print();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   if (loading) {
@@ -47,9 +84,13 @@ export default function PublicHallTicket() {
           <ArrowLeft className="w-4 h-4" />
           Back to Dashboard
         </button>
-        <Button onClick={handlePrint} className="bg-indigo-600 hover:bg-indigo-700">
-          <Printer className="w-4 h-4 mr-2" />
-          Print Hall Ticket
+        <Button onClick={handleDownloadPDF} disabled={downloading} className="bg-indigo-600 hover:bg-indigo-700">
+          {downloading ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4 mr-2" />
+          )}
+          {downloading ? "Generating…" : "Download Hall Ticket"}
         </Button>
       </div>
 
@@ -92,7 +133,7 @@ export default function PublicHallTicket() {
                 <InfoRow label="Gender" value={publicStudent.gender} />
                 <InfoRow
                   label="Qualification"
-                  value={`${publicStudent.educationalQualification} – ${publicStudent.subjects.join(", ")}`}
+                  value={`${publicStudent.educationalQualification === "Both" ? "UG & PG" : publicStudent.educationalQualification} – ${publicStudent.subjects.join(", ")}`}
                 />
                 <InfoRow
                   label="KA Student"
