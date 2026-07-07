@@ -381,6 +381,33 @@ export default function ExamResults() {
         correctCount: row.correctCount,
       }));
 
+      // Sheet 4: results in order of who submitted first.
+      const submissionOrderRows = [...exportAttemptOrder]
+        .filter((a) => a.status === "submitted" && a.submittedAt)
+        .sort(
+          (a, b) =>
+            new Date(a.submittedAt!).getTime() - new Date(b.submittedAt!).getTime(),
+        )
+        .map((a, idx) => {
+          const participant = resolveAttemptParticipant(a, students);
+          const startedMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
+          const subMs = a.submittedAt ? new Date(a.submittedAt).getTime() : null;
+          const timeTakenSeconds =
+            startedMs != null && subMs != null
+              ? Math.max(0, Math.round((subMs - startedMs) / 1000))
+              : "";
+          return {
+            submissionRank: idx + 1,
+            studentName: participant.name,
+            studentId: participant.studentId,
+            marksObtained: a.score ?? "",
+            maxMarks: a.maxScore ?? totalMarks,
+            percentage: percentFromAttempt(a, totalMarks) ?? "",
+            submittedAt: toIsoOrEmpty(a.submittedAt),
+            timeTakenSeconds,
+          };
+        });
+
       const ws = XLSX.utils.json_to_sheet(rankedResultRows);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Ranked results");
@@ -390,6 +417,9 @@ export default function ExamResults() {
 
       const ws3 = XLSX.utils.json_to_sheet(wideRows);
       XLSX.utils.book_append_sheet(wb, ws3, "Wide");
+
+      const ws4 = XLSX.utils.json_to_sheet(submissionOrderRows);
+      XLSX.utils.book_append_sheet(wb, ws4, "Submission order");
 
       const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const blob = new Blob([buf], {

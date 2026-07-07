@@ -16,7 +16,7 @@ import {
 } from "../../components/ui/table";
 import { cn } from "../../components/ui/utils";
 import StudentAvatar from "../../components/StudentAvatar";
-import { listExamTestsForAdmin } from "../../features/exams/examApi";
+import { forceSubmitAttemptForAdmin, listExamTestsForAdmin } from "../../features/exams/examApi";
 import { subscribeInProgressAttempts } from "../../features/exams/liveMonitorApi";
 import type { ExamTest } from "../../features/exams/types";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
@@ -38,6 +38,7 @@ import {
   Radio,
   RefreshCw,
   Search,
+  Send,
   Users,
   WifiOff,
 } from "lucide-react";
@@ -118,6 +119,7 @@ export default function LiveExamMonitor() {
   const [search, setSearch] = useState("");
   const [selectedTestId, setSelectedTestId] = useState<string | "all">("all");
   const [sortKey, setSortKey] = useState<SortKey>("remaining");
+  const [forcingSubmit, setForcingSubmit] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -228,6 +230,30 @@ export default function LiveExamMonitor() {
       avgProgress: avg,
     };
   }, [rows, testSummaries.length]);
+
+  const handleForceSubmit = async (row: LiveAttemptRow) => {
+    const uid = row.attempt.uid;
+    const key = `${row.testId}:${uid}`;
+    if (!window.confirm(`Force submit ${row.participantName}'s exam? Their current saved answers will be scored and submitted immediately.`)) return;
+    setForcingSubmit((prev) => new Set(prev).add(key));
+    try {
+      const test = testsById.get(row.testId);
+      const { score, maxScore } = await forceSubmitAttemptForAdmin({
+        testId: row.testId,
+        uid,
+        negativeMarkPerWrong: test?.negativeMarkPerWrong ?? 0,
+      });
+      alert(`Submitted! Score: ${score} / ${maxScore}`);
+    } catch (e: any) {
+      alert(`Force submit failed: ${e?.message ?? String(e)}`);
+    } finally {
+      setForcingSubmit((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-[1600px]">
@@ -568,11 +594,27 @@ export default function LiveExamMonitor() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link to={`/admin/tests/${r.testId}/results`} title="Open results">
-                              <ExternalLink className="w-4 h-4" />
-                            </Link>
-                          </Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Force submit this student's exam"
+                              className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                              disabled={forcingSubmit.has(`${r.testId}:${r.attempt.uid}`)}
+                              onClick={() => void handleForceSubmit(r)}
+                            >
+                              {forcingSubmit.has(`${r.testId}:${r.attempt.uid}`) ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Send className="w-4 h-4" />
+                              )}
+                            </Button>
+                            <Button variant="ghost" size="sm" asChild>
+                              <Link to={`/admin/tests/${r.testId}/results`} title="Open results">
+                                <ExternalLink className="w-4 h-4" />
+                              </Link>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

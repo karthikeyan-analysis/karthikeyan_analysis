@@ -370,6 +370,42 @@ export async function deleteAttemptsForAdmin(testId: string): Promise<number> {
   }
 }
 
+/**
+ * Admin-triggered force submit: reads the student's current saved answers, calculates the score
+ * against private keys, then marks the attempt as submitted. Safe to call on any in-progress attempt.
+ */
+export async function forceSubmitAttemptForAdmin(params: {
+  testId: string;
+  uid: string;
+  negativeMarkPerWrong?: number;
+}): Promise<{ score: number; maxScore: number }> {
+  const [attempt, questions, keys] = await Promise.all([
+    getAttempt(params.testId, params.uid),
+    listPublicQuestions(params.testId),
+    listPrivateQuestions(params.testId),
+  ]);
+  if (!attempt) throw new Error("No attempt found for this student");
+  if (attempt.status === "submitted") throw new Error("Attempt is already submitted");
+
+  const keyById = new Map(keys.map((k) => [k.id, k.correctIndex]));
+  const neg = params.negativeMarkPerWrong ?? 0;
+  let s = 0;
+  let max = 0;
+  questions.forEach((q) => {
+    max += q.marks;
+    const selected = (attempt.answers ?? {})[q.id];
+    if (selected == null) return;
+    const correct = keyById.get(q.id);
+    if (correct == null) return;
+    if (selected === correct) s += q.marks;
+    else s -= neg;
+  });
+  s = Math.max(0, s);
+
+  await submitAttempt({ testId: params.testId, uid: params.uid, score: s, maxScore: max });
+  return { score: s, maxScore: max };
+}
+
 /** Loads every test and its attempts (one Firestore read per test for attempts). */
 export async function listAllTestsWithAttemptsForAdmin(): Promise<
   { test: ExamTest; attempts: ExamAttempt[] }[]

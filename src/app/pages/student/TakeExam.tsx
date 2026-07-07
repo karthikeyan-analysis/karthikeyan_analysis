@@ -56,10 +56,7 @@ import { submitAttempt } from "../../features/exams/examApi";
 import { sha256Base64 } from "../../features/exams/password";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
-import {
-  allowsPasscodeGuestAccess,
-  enrolledStudentsCanAccessTest,
-} from "../../features/exams/settings";
+import { enrolledStudentsCanAccessTest } from "../../features/exams/settings";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -160,7 +157,7 @@ export default function TakeExam() {
 
   useEffect(() => {
     if (!uid || !testId) return;
-    setInstructionsOk(sessionStorage.getItem(instructionsSessionKey) === "1");
+    setInstructionsOk(localStorage.getItem(instructionsSessionKey) === "1");
   }, [instructionsSessionKey, testId, uid]);
 
   const endAtMs = test ? new Date(test.endAt).getTime() : 0;
@@ -258,10 +255,11 @@ export default function TakeExam() {
 
         setTest(t);
 
-        const guestOk = isGuestParticipant && allowsPasscodeGuestAccess(t);
-        const alreadyOk = sessionStorage.getItem(pwSessionKey) === "1";
+        // Guest participants already verified the passcode at join time — always let them through.
+        const guestOk = isGuestParticipant;
+        const alreadyOk = localStorage.getItem(pwSessionKey) === "1";
         setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk);
-        if (guestOk) sessionStorage.setItem(pwSessionKey, "1");
+        if (guestOk) localStorage.setItem(pwSessionKey, "1");
       } catch (e) {
         console.error(e);
       } finally {
@@ -316,7 +314,7 @@ export default function TakeExam() {
             questionIds: qs.map((q) => q.id),
             hardEndAt: hardEnd,
           });
-          sessionStorage.setItem(examSessionKey, "1");
+          localStorage.setItem(examSessionKey, "1");
           setAttemptStartedAtIso(new Date().toISOString());
           setAttemptStatus("in_progress");
           setQuestions(qs);
@@ -327,7 +325,7 @@ export default function TakeExam() {
           setVisited(qs.length ? { [qs[0].id]: true } : {});
         } else {
           if (attempt.status === "in_progress") {
-            const sameBrowserSession = sessionStorage.getItem(examSessionKey) === "1";
+            const sameBrowserSession = localStorage.getItem(examSessionKey) === "1";
             const hasApprovedRejoin = latestRejoinApprovalAvailable(attempt);
             if (!sameBrowserSession && !hasApprovedRejoin) {
               await requestRejoinApproval(testId, uid);
@@ -337,7 +335,7 @@ export default function TakeExam() {
             }
             if (!sameBrowserSession && hasApprovedRejoin) {
               await markRejoinApprovalUsed(testId, uid);
-              sessionStorage.setItem(examSessionKey, "1");
+              localStorage.setItem(examSessionKey, "1");
             }
           }
           setRejoinBlocked(false);
@@ -461,6 +459,31 @@ export default function TakeExam() {
     };
   }, [isAttemptActive]);
 
+  // Prevent screen from sleeping during an active exam.
+  // Re-acquires the lock on visibilitychange because the browser releases it when the page is hidden.
+  useEffect(() => {
+    if (!isAttemptActive) return;
+    let wakeLock: WakeLockSentinel | null = null;
+    const acquire = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await (navigator as any).wakeLock.request("screen");
+        }
+      } catch {
+        // Not supported or permission denied — silent fail.
+      }
+    };
+    void acquire();
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      wakeLock?.release().catch(() => {});
+    };
+  }, [isAttemptActive]);
+
   const handleSelect = (optionIndex: number) => {
     if (!currentQuestion) return;
     if (!isAttemptActive) return;
@@ -533,7 +556,7 @@ export default function TakeExam() {
       s = Math.max(0, s);
 
       await submitAttempt({ testId, uid, score: s, maxScore: max });
-      sessionStorage.removeItem(examSessionKey);
+      localStorage.removeItem(examSessionKey);
       setAttemptStatus("submitted");
       setAttemptSubmittedAtIso(new Date().toISOString());
       setScore({ score: s, maxScore: max });
@@ -603,8 +626,8 @@ export default function TakeExam() {
     );
   }
 
-  const canAccessAsGuest =
-    isGuestParticipant && allowsPasscodeGuestAccess(test) && user.guestExamTestId === testId;
+  // Guests already verified the passcode at join time; isGuestParticipant already checks guestExamTestId.
+  const canAccessAsGuest = isGuestParticipant;
 
   const canAccessAsEnrolled =
     !isGuestParticipant &&
@@ -726,7 +749,7 @@ export default function TakeExam() {
                       setPwError("Wrong password. Try again.");
                       return;
                     }
-                    sessionStorage.setItem(pwSessionKey, "1");
+                    localStorage.setItem(pwSessionKey, "1");
                     setPwVerified(true);
                   } catch (e) {
                     console.error(e);
@@ -861,7 +884,7 @@ export default function TakeExam() {
                     className="bg-indigo-600 hover:bg-indigo-700"
                     disabled={!instructionsChecked}
                     onClick={() => {
-                      sessionStorage.setItem(instructionsSessionKey, "1");
+                      localStorage.setItem(instructionsSessionKey, "1");
                       setInstructionsOk(true);
                     }}
                   >
