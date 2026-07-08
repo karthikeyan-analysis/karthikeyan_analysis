@@ -147,7 +147,13 @@ export default function PublicRegistration() {
         photoUrl: photoUrl || undefined,
       });
 
-      await login(result.username, result.passcode);
+      const loginResult = await login(result.username, result.passcode);
+      if (!loginResult.success) {
+        throw new Error(
+          loginResult.error ||
+            "Registration succeeded but auto-login failed. Please go to Login and use your hall ticket credentials.",
+        );
+      }
       navigate("/public/hall-ticket", { replace: true });
     } catch (e: any) {
       setError(e?.message || "Registration failed. Please try again.");

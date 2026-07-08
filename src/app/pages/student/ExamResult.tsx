@@ -11,7 +11,7 @@ import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } fr
 import StudentPhotoImage from "../../components/StudentPhotoImage";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
-import { openResponseSheetPdf, formatResponseSheetTime } from "../../features/exams/responseSheetPdf";
+import { downloadResponseSheetPdf, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 
 function initialsFromName(name: string) {
@@ -33,6 +33,7 @@ export default function ExamResult() {
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
   const [questions, setQuestions] = useState<ExamQuestionPublic[]>([]);
   const [keys, setKeys] = useState<ExamQuestionPrivate[] | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -74,6 +75,7 @@ export default function ExamResult() {
 
   useEffect(() => {
     if (!attempt || attempt.status !== "submitted") return;
+    if (!canShowAnswers) return;
     if (keys) return;
     let cancelled = false;
     const load = async () => {
@@ -88,7 +90,7 @@ export default function ExamResult() {
     return () => {
       cancelled = true;
     };
-  }, [attempt, keys, testId]);
+  }, [attempt, canShowAnswers, keys, testId]);
 
   // No Cloud Functions: attempt.score is written by client at auto-submit.
 
@@ -153,24 +155,33 @@ export default function ExamResult() {
     ? user.email?.trim() || "Guest"
     : user.studentId?.trim() || user.studentRecordId?.trim() || "-";
 
-  const downloadPdf = () => {
-    openResponseSheetPdf({
-      test,
-      attempt,
-      questions,
-      keys,
-      bannerImage,
-      photoURL: studentPhotoSrc || photoURL,
-      participant: {
-        name: studentName,
-        email: user.email || attempt.participantEmail || "",
-        studentId: studentIdValue,
-        studentRecordId: user.studentRecordId || attempt.studentRecordId || "",
-        isGuest: user.isGuestExamParticipant === true || attempt.isGuest === true,
-        photoURL: studentPhotoSrc || photoURL,
-      },
-      generatedBy: "student",
-    });
+  const downloadPdf = async () => {
+    if (downloadingPdf) return;
+    setDownloadingPdf(true);
+    try {
+      await downloadResponseSheetPdf(
+        {
+          test,
+          attempt,
+          questions,
+          keys,
+          bannerImage,
+          photoURL: studentPhotoSrc || photoURL,
+          participant: {
+            name: studentName,
+            email: user.email || attempt.participantEmail || "",
+            studentId: studentIdValue,
+            studentRecordId: user.studentRecordId || attempt.studentRecordId || "",
+            isGuest: user.isGuestExamParticipant === true || attempt.isGuest === true,
+            photoURL: studentPhotoSrc || photoURL,
+          },
+          generatedBy: "student",
+        },
+        `${safeResponseSheetFileName(studentName)}-response-sheet.pdf`,
+      );
+    } finally {
+      setDownloadingPdf(false);
+    }
   };
 
   return (
@@ -251,8 +262,16 @@ export default function ExamResult() {
               <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Response sheet</div>
                 <div className="mt-2">
-                  <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={downloadPdf}>
-                    <Download className="w-4 h-4 mr-2" /> Download PDF
+                  <Button
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    onClick={() => void downloadPdf()}
+                    disabled={downloadingPdf}
+                  >
+                    {downloadingPdf ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
+                    ) : (
+                      <><Download className="w-4 h-4 mr-2" /> Download PDF</>
+                    )}
                   </Button>
                 </div>
                 <p className="text-[11px] text-indigo-800/80 mt-2">

@@ -61,13 +61,19 @@ export default function MediaLibrary() {
 
   const availableSubjects = useMemo(() => {
     const batchSubjects = (currentBatch?.subjects || []).map((s) => s.trim()).filter(Boolean);
-    // Also collect subjects actually present in media so folders exist even when
-    // the batch's subjects list is empty or missing.
-    const mediaSubjects = [
-      ...new Set(allMedia.map((item) => (item as any).subject?.trim()).filter(Boolean)),
-    ] as string[];
-    const combined = [...new Set([...batchSubjects, ...mediaSubjects])];
-    if (!combined.includes("Uncategorized")) combined.push("Uncategorized");
+    // Deduplicate by lowercase so batch "Maths" and media "maths" map to one folder.
+    // Batch subjects take priority for the canonical display name.
+    const seenNorm = new Set(batchSubjects.map((s) => s.toLowerCase()));
+    const extraSubjects: string[] = [];
+    for (const item of allMedia) {
+      const s: string | undefined = (item as any).subject?.trim();
+      if (s && !seenNorm.has(s.toLowerCase())) {
+        seenNorm.add(s.toLowerCase());
+        extraSubjects.push(s);
+      }
+    }
+    const combined = [...batchSubjects, ...extraSubjects];
+    if (!combined.some((s) => s.toLowerCase() === "uncategorized")) combined.push("Uncategorized");
     return combined;
   }, [currentBatch?.subjects, allMedia]);
 

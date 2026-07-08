@@ -170,7 +170,14 @@ export default function GuestExamJoin() {
 
   if (user?.role === "admin") return null;
 
-  if (user?.isGuestExamParticipant && user.guestExamTestId) {
+  // Only show "continue your test" if the guest session is for the SAME test as the URL.
+  // If the URL contains a DIFFERENT testId (a new test link was shared), fall through to
+  // the join form so the student can join the new test instead of being stuck on the old one.
+  if (
+    user?.isGuestExamParticipant &&
+    user.guestExamTestId &&
+    (!routeTestId || user.guestExamTestId === routeTestId)
+  ) {
     return (
       <PageShell>
         <Card className="w-full max-w-md">
@@ -257,10 +264,21 @@ export default function GuestExamJoin() {
               </AlertDescription>
             </Alert>
           ) : test && !guestAllowed ? (
-            <Alert variant="destructive">
-              <AlertTitle>Not available</AlertTitle>
-              <AlertDescription>This test is not configured for passcode guest access.</AlertDescription>
-            </Alert>
+            <div className="space-y-3">
+              <Alert variant="destructive">
+                <AlertTitle>Not available for guest access</AlertTitle>
+                <AlertDescription>This test is not configured for passcode guest access.</AlertDescription>
+              </Alert>
+              {user?.isGuestExamParticipant && user.guestExamTestId && user.guestExamTestId !== routeTestId && (
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => navigate(`/student/tests/${user.guestExamTestId}`)}
+                >
+                  Go to my current test
+                </Button>
+              )}
+            </div>
           ) : null}
 
           {error && !dialogOpen ? <p className="text-sm text-rose-600">{error}</p> : null}

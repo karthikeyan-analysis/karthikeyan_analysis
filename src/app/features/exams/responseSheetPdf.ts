@@ -328,3 +328,117 @@ export function openResponseSheetPdf(params: ResponseSheetPdfParams) {
   w.document.write(buildResponseSheetHtml(params));
   w.document.close();
 }
+
+/**
+ * Auto-downloads the response sheet as a PDF without opening a print dialog.
+ * Renders the full HTML in a hidden same-origin iframe, captures with html2canvas,
+ * then saves via jsPDF. Falls back to the print-window approach if capture fails.
+ */
+export async function downloadResponseSheetPdf(
+  params: ResponseSheetPdfParams,
+  filename = "response-sheet.pdf",
+): Promise<void> {
+  let html2canvas: ((el: HTMLElement, opts?: any) => Promise<HTMLCanvasElement>) | null = null;
+  let jsPDF: any = null;
+  try {
+    [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import("html2canvas"),
+      import("jspdf"),
+    ]);
+  } catch {
+    openResponseSheetPdf(params);
+    return;
+  }
+
+  const htmlContent = buildResponseSheetHtml(params);
+  const blob = new Blob([htmlContent], { type: "text/html" });
+  const blobUrl = URL.createObjectURL(blob);
+
+  const iframe = document.createElement("iframe");
+  Object.assign(iframe.style, {
+    position: "fixed",
+    top: "0",
+    left: "-9999px",
+    width: "794px",
+    height: "1px",
+    border: "none",
+    visibility: "hidden",
+  });
+  document.body.appendChild(iframe);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error("iframe load timeout")), 15_000);
+
+      iframe.onload = async () => {
+        clearTimeout(timeout);
+        try {
+          const iframeDoc = iframe.contentDocument;
+          if (!iframeDoc) { reject(new Error("iframe contentDocument unavailable")); return; }
+
+          // Hide the "Save as PDF" bar — not needed in the downloaded PDF
+          const saveBar = iframeDoc.querySelector(".save-bar") as HTMLElement | null;
+          if (saveBar) saveBar.style.display = "none";
+
+          // Wait for all images in the iframe to finish loading
+          const images = Array.from(iframeDoc.querySelectorAll("img"));
+          await Promise.allSettled(
+            images.map(
+              (img) =>
+                new Promise<void>((res) => {
+                  if (img.complete && img.naturalWidth > 0) { res(); return; }
+                  img.addEventListener("load", () => res(), { once: true });
+                  img.addEventListener("error", () => res(), { once: true });
+                  setTimeout(res, 6_000);
+                }),
+            ),
+          );
+
+          // Size the iframe to its full content height so html2canvas captures everything
+          const scrollH = iframeDoc.documentElement.scrollHeight;
+          iframe.style.height = `${scrollH}px`;
+
+          const canvas = await html2canvas!(iframeDoc.body, {
+            scale: 1.2,
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: "#ffffff",
+            windowWidth: 794,
+            windowHeight: scrollH,
+          });
+
+          const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          const pageW = pdf.internal.pageSize.getWidth();
+          const pageH = pdf.internal.pageSize.getHeight();
+          const imgH = (canvas.height * pageW) / canvas.width;
+          const imgData = canvas.toDataURL("image/jpeg", 0.88);
+
+          let y = 0;
+          while (y < imgH) {
+            if (y > 0) pdf.addPage();
+            pdf.addImage(imgData, "JPEG", 0, -y, pageW, imgH);
+            y += pageH;
+          }
+
+          pdf.save(filename);
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      };
+
+      iframe.onerror = () => {
+        clearTimeout(timeout);
+        reject(new Error("iframe failed to load"));
+      };
+
+      iframe.src = blobUrl;
+    });
+  } catch {
+    // Fallback: open in a new window so the student can at least print to PDF
+    openResponseSheetPdf(params);
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+    if (iframe.parentNode) document.body.removeChild(iframe);
+  }
+}

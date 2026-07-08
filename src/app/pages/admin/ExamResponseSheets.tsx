@@ -13,7 +13,7 @@ import {
 } from "../../features/exams/examApi";
 import { resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
-import { openResponseSheetPdf, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
+import { downloadResponseSheetPdf, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import bannerImage from "../../../banner.jpeg";
 import { Download, FileText, Loader2 } from "lucide-react";
@@ -69,19 +69,29 @@ export default function ExamResponseSheets() {
 
   const batchLabel = useMemo(() => (test ? formatExamBatchLabel(test, batches) : ""), [batches, test]);
 
-  const downloadAttempt = (attempt: ExamAttempt) => {
-    if (!test) return;
+  const [downloadingUid, setDownloadingUid] = useState<string | null>(null);
+
+  const downloadAttempt = async (attempt: ExamAttempt) => {
+    if (!test || downloadingUid === attempt.uid) return;
     const participant = resolveAttemptParticipant(attempt, students);
-    openResponseSheetPdf({
-      test,
-      attempt,
-      questions,
-      keys,
-      participant,
-      bannerImage,
-      photoURL: participant.photoURL,
-      generatedBy: "admin",
-    });
+    setDownloadingUid(attempt.uid);
+    try {
+      await downloadResponseSheetPdf(
+        {
+          test,
+          attempt,
+          questions,
+          keys,
+          participant,
+          bannerImage,
+          photoURL: participant.photoURL,
+          generatedBy: "admin",
+        },
+        `${safeResponseSheetFileName(participant.name || participant.email || attempt.uid)}-response-sheet.pdf`,
+      );
+    } finally {
+      setDownloadingUid(null);
+    }
   };
 
   if (loading) {
@@ -164,10 +174,14 @@ export default function ExamResponseSheets() {
                             variant="outline"
                             size="sm"
                             title={`${fileName}.pdf`}
-                            onClick={() => downloadAttempt(attempt)}
+                            disabled={downloadingUid === attempt.uid}
+                            onClick={() => void downloadAttempt(attempt)}
                           >
-                            <Download className="w-4 h-4 mr-2" />
-                            Download PDF
+                            {downloadingUid === attempt.uid ? (
+                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</>
+                            ) : (
+                              <><Download className="w-4 h-4 mr-2" />Download PDF</>
+                            )}
                           </Button>
                         </TableCell>
                       </TableRow>
