@@ -4,25 +4,41 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
-import { getExamTest, listAttemptsForAdmin, listPublicQuestions } from "../../features/exams/examApi";
+import {
+  getExamTest,
+  listAttemptsForAdmin,
+  listPublicQuestions,
+  pauseStudent,
+  subscribeToInProgressAttempts,
+  subscribeToTest,
+  unpauseStudent,
+} from "../../features/exams/examApi";
 import { examWindowStatusLabel } from "../../features/exams/examAvailability";
 import {
   allowsPasscodeGuestAccess,
   guestJoinUrl,
   isPasscodeGuestTestConfigured,
 } from "../../features/exams/settings";
+import { resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
 import { ExamCloseToggleButton } from "../../components/exams/ExamCloseToggleButton";
+import { useData } from "../../context/DataContext";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
-import { Link2 } from "lucide-react";
+import { Link2, Loader2, Pause, Play, Radio } from "lucide-react";
 import { CopyGuestLinkButton } from "../../components/exams/CopyGuestLinkButton";
 
 export default function ExamDashboardPage() {
   const { id } = useParams();
   const testId = id || "";
+  const { students } = useData();
   const [test, setTest] = useState<ExamTest | null>(null);
   const [questions, setQuestions] = useState(0);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Live monitor state
+  const [liveAttempts, setLiveAttempts] = useState<ExamAttempt[]>([]);
+  const [pausedUids, setPausedUids] = useState<string[]>([]);
+  const [pausingUid, setPausingUid] = useState<string | null>(null);
 
   const patchTest = (updated: ExamTest) => setTest(updated);
 
@@ -52,6 +68,32 @@ export default function ExamDashboardPage() {
       cancelled = true;
     };
   }, [testId]);
+
+  // Subscribe to in-progress attempts and test's pausedUids in real time
+  useEffect(() => {
+    if (!testId) return;
+    const unsubAttempts = subscribeToInProgressAttempts(testId, setLiveAttempts);
+    const unsubTest = subscribeToTest(testId, (data) => {
+      setPausedUids(Array.isArray(data.pausedUids) ? data.pausedUids : []);
+    });
+    return () => { unsubAttempts(); unsubTest(); };
+  }, [testId]);
+
+  const togglePause = async (uid: string) => {
+    if (pausingUid) return;
+    setPausingUid(uid);
+    try {
+      if (pausedUids.includes(uid)) {
+        await unpauseStudent(testId, uid);
+      } else {
+        await pauseStudent(testId, uid);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPausingUid(null);
+    }
+  };
 
   const submitted = useMemo(() => attempts.filter((a) => a.status === "submitted").length, [attempts]);
 
@@ -92,6 +134,66 @@ export default function ExamDashboardPage() {
           </div>
         </CardContent>
       </Card>
+
+      {liveAttempts.length > 0 && (
+        <Card className="border-green-200">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Radio className="w-4 h-4 text-green-600 animate-pulse" />
+              Live Monitor
+              <Badge className="bg-green-100 text-green-800 ml-1">{liveAttempts.length} active</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-slate-500 mb-3">
+              Pause a student to temporarily block their exam screen. Their answers are saved and the timer keeps running.
+            </p>
+            <div className="space-y-2">
+              {liveAttempts.map((attempt) => {
+                const p = resolveAttemptParticipant(attempt, students);
+                const paused = pausedUids.includes(attempt.uid);
+                const isLoading = pausingUid === attempt.uid;
+                return (
+                  <div
+                    key={attempt.uid}
+                    className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 ${paused ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-slate-900 truncate">
+                        {p.name || "Unknown"}
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {p.email || p.studentId || attempt.uid}
+                        {attempt.isGuest && <span className="ml-1 text-violet-600">(guest)</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {paused && <Badge className="bg-amber-100 text-amber-800 border-amber-200">Paused</Badge>}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={isLoading || pausingUid !== null}
+                        className={paused
+                          ? "text-green-700 border-green-300 hover:bg-green-50"
+                          : "text-amber-700 border-amber-300 hover:bg-amber-50"
+                        }
+                        onClick={() => void togglePause(attempt.uid)}
+                      >
+                        {isLoading
+                          ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          : paused
+                          ? <><Play className="w-3.5 h-3.5 mr-1" />Resume</>
+                          : <><Pause className="w-3.5 h-3.5 mr-1" />Pause</>
+                        }
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {showGuestLink ? (
         <GuestLinkCard test={test} isLive={guestLinkLive} />

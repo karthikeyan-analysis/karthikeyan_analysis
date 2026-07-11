@@ -28,6 +28,7 @@ import {
   requestRejoinApproval,
   saveAttemptProgress,
   startAttempt,
+  subscribeToTest,
 } from "../../features/exams/examApi";
 import StudentPhotoImage from "../../components/StudentPhotoImage";
 import { examIncludesBatch, formatExamBatchLabel } from "../../features/exams/examBatchUtils";
@@ -47,6 +48,7 @@ import {
   Flag,
   Layers,
   Loader2,
+  Pause,
   Save,
   Timer,
   XCircle,
@@ -140,6 +142,7 @@ export default function TakeExam() {
   const [closedForNewAttempts, setClosedForNewAttempts] = useState(false);
   const [rejoinBlocked, setRejoinBlocked] = useState(false);
   const [requestingRejoin, setRequestingRejoin] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const autosaveTimer = useRef<number | null>(null);
 
@@ -483,6 +486,16 @@ export default function TakeExam() {
       wakeLock?.release().catch(() => {});
     };
   }, [isAttemptActive]);
+
+  // Real-time listener: detect if admin has paused this student's attempt.
+  useEffect(() => {
+    if (!uid || !testId || !isAttemptActive) return;
+    const unsub = subscribeToTest(testId, (data) => {
+      const paused = Array.isArray(data.pausedUids) && data.pausedUids.includes(uid);
+      setIsPaused(paused);
+    });
+    return unsub;
+  }, [uid, testId, isAttemptActive]);
 
   const handleSelect = (optionIndex: number) => {
     if (!currentQuestion) return;
@@ -898,6 +911,28 @@ export default function TakeExam() {
             </div>
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (isPaused && isAttemptActive) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <Pause className="w-10 h-10 text-amber-500 mx-auto" />
+            <div>
+              <div className="text-lg font-semibold text-slate-900">Exam paused</div>
+              <p className="text-sm text-slate-600 mt-2">
+                Your exam has been temporarily paused by the administrator.
+                Please wait — it will resume automatically.
+              </p>
+            </div>
+            <p className="text-xs text-slate-500">
+              Your answers are saved. Do not close this tab.
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }

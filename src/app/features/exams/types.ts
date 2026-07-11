@@ -77,6 +77,8 @@ export interface ExamTest {
   status?: ExamStatus;
   /** When set, the test is closed for new attempts (admin action). */
   manuallyClosedAt?: string;
+  /** UIDs of students whose active attempts are temporarily suspended by admin. */
+  pausedUids?: string[];
   publishedAt?: string;
   settings?: ExamAdvancedSettings;
   createdAt: string; // ISO

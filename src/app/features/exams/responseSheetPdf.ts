@@ -334,6 +334,22 @@ export function openResponseSheetPdf(params: ResponseSheetPdfParams) {
  * Renders the full HTML in a hidden same-origin iframe, captures with html2canvas,
  * then saves via jsPDF. Falls back to the print-window approach if capture fails.
  */
+/**
+ * Downloads HTML content as a file using a temporary anchor click.
+ * Does NOT open a new window, so popup blockers are irrelevant.
+ */
+function downloadAsHtml(htmlContent: string, filename: string) {
+  const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1_000);
+}
+
 export async function downloadResponseSheetPdf(
   params: ResponseSheetPdfParams,
   filename = "response-sheet.pdf",
@@ -346,13 +362,12 @@ export async function downloadResponseSheetPdf(
       import("jspdf"),
     ]);
   } catch {
-    openResponseSheetPdf(params);
+    // Libraries failed to load — download as HTML so student can open and print
+    downloadAsHtml(buildResponseSheetHtml(params), filename.replace(/\.pdf$/i, ".html"));
     return;
   }
 
   const htmlContent = buildResponseSheetHtml(params);
-  const blob = new Blob([htmlContent], { type: "text/html" });
-  const blobUrl = URL.createObjectURL(blob);
 
   const iframe = document.createElement("iframe");
   Object.assign(iframe.style, {
@@ -432,13 +447,13 @@ export async function downloadResponseSheetPdf(
         reject(new Error("iframe failed to load"));
       };
 
-      iframe.src = blobUrl;
+      // srcdoc avoids blob: URL CSP restrictions that can block iframe loading on some hosts
+      iframe.srcdoc = htmlContent;
     });
   } catch {
-    // Fallback: open in a new window so the student can at least print to PDF
-    openResponseSheetPdf(params);
+    // Fallback: download as HTML — no popup, no new window
+    downloadAsHtml(htmlContent, filename.replace(/\.pdf$/i, ".html"));
   } finally {
-    URL.revokeObjectURL(blobUrl);
     if (iframe.parentNode) document.body.removeChild(iframe);
   }
 }

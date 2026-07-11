@@ -1,5 +1,7 @@
 import {
   addDoc,
+  arrayRemove,
+  arrayUnion,
   collection,
   deleteDoc,
   deleteField,
@@ -7,6 +9,7 @@ import {
   getDoc,
   getDocs,
   limit,
+  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -172,6 +175,35 @@ export async function setExamManuallyClosed(testId: string, closed: boolean): Pr
   await updateExamTest(testId, {
     manuallyClosedAt: closed ? new Date().toISOString() : (null as unknown as string),
   } as Partial<ExamTest> & { manuallyClosedAt: string | null });
+}
+
+export async function pauseStudent(testId: string, uid: string): Promise<void> {
+  await updateDoc(examTestRef(testId), { pausedUids: arrayUnion(uid) } as any);
+}
+
+export async function unpauseStudent(testId: string, uid: string): Promise<void> {
+  await updateDoc(examTestRef(testId), { pausedUids: arrayRemove(uid) } as any);
+}
+
+export function subscribeToTest(
+  testId: string,
+  onChange: (data: Record<string, any>) => void,
+): () => void {
+  return onSnapshot(examTestRef(testId), (snap) => {
+    if (snap.exists()) onChange(snap.data() as Record<string, any>);
+  });
+}
+
+export function subscribeToInProgressAttempts(
+  testId: string,
+  onChange: (attempts: import("./types").ExamAttempt[]) => void,
+): () => void {
+  return onSnapshot(
+    query(examAttemptsCol(testId), where("status", "==", "in_progress")),
+    (snap) => {
+      onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as import("./types").ExamAttempt));
+    },
+  );
 }
 
 export async function deleteExamTest(testId: string) {

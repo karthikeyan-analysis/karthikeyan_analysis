@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
-import { ArrowLeft, Shield, Clock, CheckCircle } from "lucide-react";
+import { ArrowLeft, Shield, Clock, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
 
 export default function VideoPlayer() {
   const { id } = useParams();
@@ -17,6 +17,11 @@ export default function VideoPlayer() {
   const [playbackRate, setPlaybackRate] = useState(1);
 
   const video = videos.find((v) => v.id === id);
+  const [videoError, setVideoError] = useState(false);
+
+  useEffect(() => {
+    setVideoError(false);
+  }, [id]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -138,6 +143,26 @@ export default function VideoPlayer() {
                 </label>
               </div>
               {/* Video Element */}
+              {videoError ? (
+                <div className="w-full h-full flex items-center justify-center p-6">
+                  <div className="text-center space-y-3 max-w-sm">
+                    <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
+                    <p className="text-white font-semibold">Video failed to load</p>
+                    <p className="text-slate-400 text-sm">
+                      Check your internet connection, then refresh the page. If the problem persists, contact your instructor.
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-white border-slate-500 hover:bg-slate-800"
+                      onClick={() => { setVideoError(false); if (videoRef.current) { videoRef.current.load(); } }}
+                    >
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                      Retry
+                    </Button>
+                  </div>
+                </div>
+              ) : (
               <video
                 ref={videoRef}
                 className="w-full h-full"
@@ -152,10 +177,12 @@ export default function VideoPlayer() {
                 onLoadedMetadata={() => {
                   if (videoRef.current) videoRef.current.playbackRate = playbackRate;
                 }}
+                onError={() => setVideoError(true)}
               >
                 <source src={video.videoUrl} type="video/mp4" />
                 Your browser does not support the video tag.
               </video>
+              )}
 
             </div>
 
