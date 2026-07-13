@@ -146,6 +146,11 @@ export default function TakeExam() {
 
   const autosaveTimer = useRef<number | null>(null);
 
+  // Prefetch cache: populated as soon as testId+uid are known, before instructions are shown.
+  // Using a ref (not state) so reading it inside the main effect never triggers a re-run.
+  const prefetchedQsRef = useRef<ExamQuestionPublic[] | null>(null);
+  const prefetchedForTestId = useRef<string>("");
+
   const nowTick = useNowTicker(1000);
 
   const testId = id || "";
@@ -276,6 +281,40 @@ export default function TakeExam() {
     };
   }, [isGuestParticipant, pwSessionKey, testId, uid]);
 
+  // Eagerly pre-fetch questions as soon as testId + uid are available.
+  // This runs while the student is still on the instructions / password screen,
+  // so by the time they click "Continue to test" the questions are already in memory.
+  useEffect(() => {
+    if (!testId || !uid) return;
+    if (prefetchedForTestId.current === testId && prefetchedQsRef.current) return;
+
+    // Fast path: sessionStorage lets us skip the network entirely on refresh / rejoin
+    try {
+      const raw = sessionStorage.getItem(`exam_qs:${testId}`);
+      if (raw) {
+        const qs: ExamQuestionPublic[] = JSON.parse(raw);
+        if (Array.isArray(qs) && qs.length > 0) {
+          prefetchedQsRef.current = qs;
+          prefetchedForTestId.current = testId;
+          return;
+        }
+      }
+    } catch {}
+
+    // Background Firestore fetch — errors are silently swallowed;
+    // the main effect retries if the prefetch didn't complete in time.
+    let cancelled = false;
+    listPublicQuestions(testId)
+      .then((qs) => {
+        if (cancelled || !qs.length) return;
+        prefetchedQsRef.current = qs;
+        prefetchedForTestId.current = testId;
+        try { sessionStorage.setItem(`exam_qs:${testId}`, JSON.stringify(qs)); } catch {}
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [testId, uid]);
+
   useEffect(() => {
     if (!uid || !testId) return;
     if (!test) return;
@@ -286,10 +325,15 @@ export default function TakeExam() {
     const loadQuestionsAndAttempt = async () => {
       setLoading(true);
       try {
-        const rawQs = await listPublicQuestions(testId);
-        if (cancelled) return;
-
-        const attempt = await getAttempt(testId, uid);
+        // Run questions + attempt fetch in parallel.
+        // If prefetch already completed (questions were loaded during instructions screen),
+        // the questions promise resolves instantly from memory.
+        const [rawQs, attempt] = await Promise.all([
+          prefetchedQsRef.current && prefetchedForTestId.current === testId
+            ? Promise.resolve(prefetchedQsRef.current)
+            : listPublicQuestions(testId),
+          getAttempt(testId, uid),
+        ]);
         if (cancelled) return;
 
         if (!attempt) {
