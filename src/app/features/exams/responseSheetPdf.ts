@@ -181,8 +181,8 @@ export function buildResponseSheetHtml({
     .status-answered{background:#e0e7ff;color:#3730a3}
     .img-wrap{margin-top:8px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:6px;text-align:center}
     .img-wrap img{max-width:100%;height:auto;max-height:360px;object-fit:contain}
-    .options-list{margin-top:7px;columns:2;column-gap:24px}
-    .option-line{break-inside:avoid;display:flex;gap:5px;align-items:baseline;padding:2px 0;font-size:11px;color:#374151}
+    .options-list{margin-top:7px;display:grid;grid-template-columns:1fr 1fr;gap:3px 24px}
+    .option-line{display:flex;gap:5px;align-items:baseline;padding:2px 0;font-size:11px;color:#374151}
     .option-letter{font-weight:900;color:#111827;min-width:18px}
     .option-text{flex:1}
     .option-line.is-correct{color:#065f46;font-weight:700}
@@ -195,7 +195,7 @@ export function buildResponseSheetHtml({
     .save-btn{background:#fff;color:#4f46e5;border:none;border-radius:6px;padding:7px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:.02em}
     .save-btn:hover{background:#e0e7ff}
     .save-hint{font-size:12px;opacity:.85}
-    @media print{.save-bar{display:none!important}.brand img{height:50px}.watermark-text{font-size:34px}.options-list{columns:2}.question-row{padding:8px 0}.img-wrap img{max-height:300px}}
+    @media print{.save-bar{display:none!important}.brand img{height:50px}.watermark-text{font-size:34px}.question-row{padding:8px 0}.img-wrap img{max-height:300px}}
   </style>
 </head>
 <body>
@@ -391,11 +391,18 @@ export async function downloadResponseSheetPdf(
           const iframeDoc = iframe.contentDocument;
           if (!iframeDoc) { reject(new Error("iframe contentDocument unavailable")); return; }
 
-          // Hide the "Save as PDF" bar — not needed in the downloaded PDF
+          // Remove elements that don't belong in the PDF or cause html2canvas issues
           const saveBar = iframeDoc.querySelector(".save-bar") as HTMLElement | null;
-          if (saveBar) saveBar.style.display = "none";
+          if (saveBar) saveBar.remove();
+          // position:fixed causes html2canvas to render the watermark on every page;
+          // switching to absolute makes it appear once at the correct vertical position.
+          const watermark = iframeDoc.querySelector(".watermark") as HTMLElement | null;
+          if (watermark) watermark.style.position = "absolute";
 
-          // Wait for all images in the iframe to finish loading
+          // Wait for custom fonts (Inter) so text renders at the correct dimensions
+          try { if ((iframeDoc as any).fonts) await (iframeDoc as any).fonts.ready; } catch {}
+
+          // Wait for all images
           const images = Array.from(iframeDoc.querySelectorAll("img"));
           await Promise.allSettled(
             images.map(
@@ -409,24 +416,49 @@ export async function downloadResponseSheetPdf(
             ),
           );
 
-          // Size the iframe to its full content height so html2canvas captures everything
-          const scrollH = iframeDoc.documentElement.scrollHeight;
+          // Let the browser re-paint after font/image changes so scrollHeight is accurate
+          await new Promise<void>((res) => setTimeout(res, 300));
+
+          // Measure full document height — use the max of both to be safe
+          const scrollH = Math.max(
+            iframeDoc.documentElement.scrollHeight,
+            iframeDoc.body.scrollHeight,
+          );
+
+          // Expand the iframe so the browser lays out the full content
           iframe.style.height = `${scrollH}px`;
 
+          // Wait for the height change to propagate through browser layout
+          await new Promise<void>((res) => setTimeout(res, 150));
+
+          // Re-measure after reflow in case content grew (e.g. images)
+          const finalH = Math.max(
+            iframeDoc.documentElement.scrollHeight,
+            iframeDoc.body.scrollHeight,
+          );
+
+          // Capture the body at full content size.
+          // Explicit width + height are critical — without them html2canvas uses the
+          // element's visible (clipped) size, which inside a tiny hidden iframe may
+          // omit everything below the first screenful.
           const canvas = await html2canvas!(iframeDoc.body, {
-            scale: 1.2,
+            scale: 2,
             useCORS: true,
             allowTaint: false,
             backgroundColor: "#ffffff",
             windowWidth: 794,
-            windowHeight: scrollH,
+            windowHeight: finalH,
+            width: 794,
+            height: finalH,
+            scrollX: 0,
+            scrollY: 0,
           });
 
           const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
           const pageW = pdf.internal.pageSize.getWidth();
           const pageH = pdf.internal.pageSize.getHeight();
           const imgH = (canvas.height * pageW) / canvas.width;
-          const imgData = canvas.toDataURL("image/jpeg", 0.88);
+          const imgData = canvas.toDataURL("image/jpeg", 0.92);
 
           let y = 0;
           while (y < imgH) {
