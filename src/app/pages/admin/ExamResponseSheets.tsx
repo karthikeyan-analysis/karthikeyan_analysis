@@ -13,10 +13,10 @@ import {
 } from "../../features/exams/examApi";
 import { resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
-import { downloadResponseSheetPdf, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
+import { openResponseSheetInTab, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import bannerImage from "../../../banner.jpeg";
-import { Download, FileText, Loader2 } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 
 export default function ExamResponseSheets() {
   const { id } = useParams();
@@ -69,29 +69,22 @@ export default function ExamResponseSheets() {
 
   const batchLabel = useMemo(() => (test ? formatExamBatchLabel(test, batches) : ""), [batches, test]);
 
-  const [downloadingUid, setDownloadingUid] = useState<string | null>(null);
-
-  const downloadAttempt = async (attempt: ExamAttempt) => {
-    if (!test || downloadingUid === attempt.uid) return;
+  const downloadAttempt = (attempt: ExamAttempt) => {
+    if (!test) return;
     const participant = resolveAttemptParticipant(attempt, students);
-    setDownloadingUid(attempt.uid);
-    try {
-      await downloadResponseSheetPdf(
-        {
-          test,
-          attempt,
-          questions,
-          keys,
-          participant,
-          bannerImage,
-          photoURL: participant.photoURL,
-          generatedBy: "admin",
-        },
-        `${safeResponseSheetFileName(participant.name || participant.email || attempt.uid)}-response-sheet.pdf`,
-      );
-    } finally {
-      setDownloadingUid(null);
-    }
+    openResponseSheetInTab(
+      {
+        test,
+        attempt,
+        questions,
+        keys,
+        participant,
+        bannerImage,
+        photoURL: participant.photoURL,
+        generatedBy: "admin",
+      },
+      safeResponseSheetFileName(`${test.title}-${participant.name || participant.email || attempt.uid}-response-sheet`),
+    );
   };
 
   if (loading) {
@@ -174,14 +167,9 @@ export default function ExamResponseSheets() {
                             variant="outline"
                             size="sm"
                             title={`${fileName}.pdf`}
-                            disabled={downloadingUid === attempt.uid}
-                            onClick={() => void downloadAttempt(attempt)}
+                            onClick={() => downloadAttempt(attempt)}
                           >
-                            {downloadingUid === attempt.uid ? (
-                              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Generating…</>
-                            ) : (
-                              <><Download className="w-4 h-4 mr-2" />Download PDF</>
-                            )}
+                            <Download className="w-4 h-4 mr-2" />Open PDF
                           </Button>
                         </TableCell>
                       </TableRow>

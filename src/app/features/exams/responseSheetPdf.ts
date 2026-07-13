@@ -110,18 +110,31 @@ export function buildResponseSheetHtml({
       })
       .join("");
 
+    // When the question has no text (image-only questions), omit the empty title.
+    // Show just the numbered label on the same line as the meta chips.
+    const hasText = q.text && q.text.trim().length > 0;
+    const qHeadHtml = hasText
+      ? `<div class="q-head">
+          <div class="q-title">Q${idx + 1}. ${escapeHtml(q.text)}</div>
+          <div class="q-meta">
+            <span>${q.marks} mark${Number(q.marks || 0) === 1 ? "" : "s"}</span>
+            <span class="status status-${status.toLowerCase()}">${status}</span>
+          </div>
+        </div>`
+      : `<div class="q-head q-head-img">
+          <div class="q-num">Q${idx + 1}</div>
+          <div class="q-meta">
+            <span>${q.marks} mark${Number(q.marks || 0) === 1 ? "" : "s"}</span>
+            <span class="status status-${status.toLowerCase()}">${status}</span>
+          </div>
+        </div>`;
+
     const imgHtml = q.imageUrl
-      ? `<div class="img-wrap"><img src="${escapeHtml(q.imageUrl)}" alt="Q${idx + 1}" /></div>`
+      ? `<div class="img-wrap"><img src="${escapeHtml(q.imageUrl)}" alt="Question ${idx + 1}" /></div>`
       : "";
 
     return `<section class="question-row">
-      <div class="q-head">
-        <div class="q-title">Q${idx + 1}. ${escapeHtml(q.text || "")}</div>
-        <div class="q-meta">
-          <span>${q.marks} mark${Number(q.marks || 0) === 1 ? "" : "s"}</span>
-          <span class="status status-${status.toLowerCase()}">${status}</span>
-        </div>
-      </div>
+      ${qHeadHtml}
       ${imgHtml}
       <div class="options-list">${optionsHtml}</div>
       <div class="answer-summary">
@@ -179,8 +192,10 @@ export function buildResponseSheetHtml({
     .status-wrong{background:#ffe4e6;color:#9f1239}
     .status-unanswered{background:#f3f4f6;color:#4b5563}
     .status-answered{background:#e0e7ff;color:#3730a3}
-    .img-wrap{margin-top:8px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:6px;text-align:center}
-    .img-wrap img{max-width:100%;height:auto;max-height:360px;object-fit:contain}
+    .q-head-img{margin-bottom:4px}
+    .q-num{font-size:12px;font-weight:900;color:#111827}
+    .img-wrap{margin-top:6px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:6px;text-align:center}
+    .img-wrap img{max-width:100%;height:auto;max-height:520px;object-fit:contain;display:block;margin:0 auto}
     .options-list{margin-top:7px;display:grid;grid-template-columns:1fr 1fr;gap:3px 24px}
     .option-line{display:flex;gap:5px;align-items:baseline;padding:2px 0;font-size:11px;color:#374151}
     .option-letter{font-weight:900;color:#111827;min-width:18px}
@@ -195,7 +210,7 @@ export function buildResponseSheetHtml({
     .save-btn{background:#fff;color:#4f46e5;border:none;border-radius:6px;padding:7px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:.02em}
     .save-btn:hover{background:#e0e7ff}
     .save-hint{font-size:12px;opacity:.85}
-    @media print{.save-bar{display:none!important}.brand img{height:50px}.watermark-text{font-size:34px}.question-row{padding:8px 0}.img-wrap img{max-height:300px}}
+    @media print{.save-bar{display:none!important}.brand img{height:50px}.watermark-text{font-size:34px}.question-row{padding:8px 0}.img-wrap img{max-height:460px}}
   </style>
 </head>
 <body>
@@ -327,6 +342,33 @@ export function openResponseSheetPdf(params: ResponseSheetPdfParams) {
   w.document.open();
   w.document.write(buildResponseSheetHtml(params));
   w.document.close();
+}
+
+/**
+ * Opens the response sheet in a new browser tab so the student / admin can
+ * use the in-page "Save as PDF" button (window.print → Save as PDF).
+ *
+ * MUST be called synchronously inside a user-gesture (click) handler.
+ * When called synchronously, window.open() is never blocked by popup blockers.
+ * Falls back to downloading an HTML file if the tab was blocked anyway.
+ */
+export function openResponseSheetInTab(
+  params: ResponseSheetPdfParams,
+  filename?: string,
+): void {
+  const htmlContent = buildResponseSheetHtml(params);
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.open();
+    win.document.write(htmlContent);
+    win.document.close();
+  } else {
+    // Popup blocked: download as an HTML file the user can open and print
+    downloadAsHtml(
+      htmlContent,
+      (filename || safeResponseSheetFileName(params.participant.name || "student") + "-response-sheet") + ".html",
+    );
+  }
 }
 
 /**

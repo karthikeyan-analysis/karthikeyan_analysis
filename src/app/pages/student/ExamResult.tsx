@@ -11,7 +11,7 @@ import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } fr
 import StudentPhotoImage from "../../components/StudentPhotoImage";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
-import { downloadResponseSheetPdf, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
+import { openResponseSheetInTab, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 
 function initialsFromName(name: string) {
@@ -33,7 +33,6 @@ export default function ExamResult() {
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
   const [questions, setQuestions] = useState<ExamQuestionPublic[]>([]);
   const [keys, setKeys] = useState<ExamQuestionPrivate[] | null>(null);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -155,33 +154,28 @@ export default function ExamResult() {
     ? user.email?.trim() || "Guest"
     : user.studentId?.trim() || user.studentRecordId?.trim() || "-";
 
-  const downloadPdf = async () => {
-    if (downloadingPdf) return;
-    setDownloadingPdf(true);
-    try {
-      await downloadResponseSheetPdf(
-        {
-          test,
-          attempt,
-          questions,
-          keys,
-          bannerImage,
+  const downloadPdf = () => {
+    if (!test || !attempt) return;
+    openResponseSheetInTab(
+      {
+        test,
+        attempt,
+        questions,
+        keys,
+        bannerImage,
+        photoURL: studentPhotoSrc || photoURL,
+        participant: {
+          name: studentName,
+          email: user.email || attempt.participantEmail || "",
+          studentId: studentIdValue,
+          studentRecordId: user.studentRecordId || attempt.studentRecordId || "",
+          isGuest: user.isGuestExamParticipant === true || attempt.isGuest === true,
           photoURL: studentPhotoSrc || photoURL,
-          participant: {
-            name: studentName,
-            email: user.email || attempt.participantEmail || "",
-            studentId: studentIdValue,
-            studentRecordId: user.studentRecordId || attempt.studentRecordId || "",
-            isGuest: user.isGuestExamParticipant === true || attempt.isGuest === true,
-            photoURL: studentPhotoSrc || photoURL,
-          },
-          generatedBy: "student",
         },
-        `${safeResponseSheetFileName(studentName)}-response-sheet.pdf`,
-      );
-    } finally {
-      setDownloadingPdf(false);
-    }
+        generatedBy: "student",
+      },
+      safeResponseSheetFileName(studentName) + "-response-sheet",
+    );
   };
 
   return (
@@ -264,14 +258,9 @@ export default function ExamResult() {
                 <div className="mt-2">
                   <Button
                     className="bg-indigo-600 hover:bg-indigo-700"
-                    onClick={() => void downloadPdf()}
-                    disabled={downloadingPdf}
+                    onClick={downloadPdf}
                   >
-                    {downloadingPdf ? (
-                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating…</>
-                    ) : (
-                      <><Download className="w-4 h-4 mr-2" /> Download PDF</>
-                    )}
+                    <Download className="w-4 h-4 mr-2" /> Download PDF
                   </Button>
                 </div>
                 <p className="text-[11px] text-indigo-800/80 mt-2">
