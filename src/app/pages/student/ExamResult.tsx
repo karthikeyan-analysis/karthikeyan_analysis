@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
-import bannerImage from "../../../banner.jpeg";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
@@ -11,7 +10,6 @@ import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } fr
 import StudentPhotoImage from "../../components/StudentPhotoImage";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
-import { openResponseSheetInTab, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 
 function initialsFromName(name: string) {
@@ -154,29 +152,6 @@ export default function ExamResult() {
     ? user.email?.trim() || "Guest"
     : user.studentId?.trim() || user.studentRecordId?.trim() || "-";
 
-  const downloadPdf = () => {
-    if (!test || !attempt) return;
-    openResponseSheetInTab(
-      {
-        test,
-        attempt,
-        questions,
-        keys,
-        bannerImage,
-        photoURL: studentPhotoSrc || photoURL,
-        participant: {
-          name: studentName,
-          email: user.email || attempt.participantEmail || "",
-          studentId: studentIdValue,
-          studentRecordId: user.studentRecordId || attempt.studentRecordId || "",
-          isGuest: user.isGuestExamParticipant === true || attempt.isGuest === true,
-          photoURL: studentPhotoSrc || photoURL,
-        },
-        generatedBy: "student",
-      },
-      safeResponseSheetFileName(studentName) + "-response-sheet",
-    );
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
@@ -258,9 +233,9 @@ export default function ExamResult() {
                 <div className="mt-2">
                   <Button
                     className="bg-indigo-600 hover:bg-indigo-700"
-                    onClick={downloadPdf}
+                    onClick={() => navigate(`/student/tests/${testId}/response-sheet`)}
                   >
-                    <Download className="w-4 h-4 mr-2" /> Download PDF
+                    <Download className="w-4 h-4 mr-2" /> View Response Sheet
                   </Button>
                 </div>
                 <p className="text-[11px] text-indigo-800/80 mt-2">

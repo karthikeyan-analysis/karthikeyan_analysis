@@ -28,6 +28,7 @@ import MediaLibrary from "./pages/student/MediaLibrary";
 import TestSchedule from "./pages/student/TestSchedule";
 import TakeExam from "./pages/student/TakeExam";
 import ExamResult from "./pages/student/ExamResult";
+import ResponseSheetPage from "./pages/student/ResponseSheetPage";
 import GuestExamJoin from "./pages/student/GuestExamJoin";
 import VideoPlayer from "./pages/student/VideoPlayer";
 import PdfViewer from "./pages/student/PdfViewer";
@@ -179,6 +180,14 @@ export const router = createBrowserRouter([
     element: (
       <StudentOnlyRoute>
         <ExamResult />
+      </StudentOnlyRoute>
+    ),
+  },
+  {
+    path: "/student/tests/:id/response-sheet",
+    element: (
+      <StudentOnlyRoute>
+        <ResponseSheetPage />
       </StudentOnlyRoute>
     ),
   },

@@ -356,7 +356,19 @@ export function openResponseSheetInTab(
   params: ResponseSheetPdfParams,
   filename?: string,
 ): void {
-  const htmlContent = buildResponseSheetHtml(params);
+  // Vite serves bundled assets as absolute paths (/assets/banner-HASH.jpeg).
+  // In a window opened via window.open("","_blank") + document.write, the base URL
+  // is about:blank and relative paths resolve differently across browsers.
+  // Convert to a fully-qualified URL so every browser loads it correctly.
+  const fixedParams: ResponseSheetPdfParams = {
+    ...params,
+    bannerImage:
+      params.bannerImage.startsWith("/")
+        ? `${window.location.origin}${params.bannerImage}`
+        : params.bannerImage,
+  };
+
+  const htmlContent = buildResponseSheetHtml(fixedParams);
   const win = window.open("", "_blank");
   if (win) {
     win.document.open();
