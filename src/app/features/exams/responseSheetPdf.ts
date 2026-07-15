@@ -209,13 +209,31 @@ export function buildResponseSheetHtml({
     .save-bar{position:sticky;top:0;z-index:100;background:#4f46e5;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:2px solid #3730a3}
     .save-btn{background:#fff;color:#4f46e5;border:none;border-radius:6px;padding:7px 18px;font-weight:800;font-size:13px;cursor:pointer;letter-spacing:.02em}
     .save-btn:hover{background:#e0e7ff}
+    .save-btn:disabled{opacity:.6;cursor:wait}
     .save-hint{font-size:12px;opacity:.85}
     @media print{.save-bar{display:none!important}.brand img{height:50px}.watermark-text{font-size:34px}.question-row{padding:8px 0}.img-wrap img{max-height:460px}}
+    body.is-loading .content{visibility:hidden}
+    .load-overlay{position:fixed;inset:0;z-index:200;background:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .2s ease}
+    body:not(.is-loading) .load-overlay{opacity:0;pointer-events:none}
+    .load-box{width:260px;text-align:center}
+    .load-spinner{width:34px;height:34px;margin:0 auto 14px;border:3px solid #e0e7ff;border-top-color:#4f46e5;border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .load-label{font-size:13px;font-weight:700;color:#374151;margin-bottom:10px}
+    .load-track{height:6px;border-radius:999px;background:#e5e7eb;overflow:hidden}
+    .load-fill{height:100%;width:0%;background:#4f46e5;border-radius:999px;transition:width .15s ease}
+    @media print{.load-overlay{display:none!important}}
   </style>
 </head>
-<body>
+<body class="is-loading">
+  <div class="load-overlay" id="rsLoadOverlay">
+    <div class="load-box">
+      <div class="load-spinner"></div>
+      <div class="load-label" id="rsLoadLabel">Preparing response sheet…</div>
+      <div class="load-track"><div class="load-fill" id="rsLoadFill"></div></div>
+    </div>
+  </div>
   <div class="save-bar">
-    <button class="save-btn" onclick="window.print()">⬇ Save as PDF</button>
+    <button class="save-btn" id="rsSaveBtn" onclick="window.print()" disabled>Preparing…</button>
     <span class="save-hint">Click → choose "Save as PDF" in the print dialog</span>
   </div>
   <div class="watermark"><div class="watermark-text">${escapeHtml(`${studentName} • ${studentId}`)}</div></div>
@@ -283,50 +301,80 @@ export function buildResponseSheetHtml({
         try { return JSON.parse(img.getAttribute("data-fallback-srcs") || "[]"); } catch (e) { return []; }
       }
 
+      // Races every candidate URL for this <img> in parallel instead of trying
+      // them one at a time with a fixed wait between each — a slow/broken first
+      // candidate no longer blocks the whole page for several seconds.
       function loadImage(img) {
         return new Promise(function (resolve) {
-          var urls = fallbackUrls(img);
-          var index = Number(img.getAttribute("data-fallback-index") || "0");
-          var done = false;
-          var timeoutId = null;
+          if (img.complete && img.naturalWidth > 0) { resolve(); return; }
 
-          function finish() {
-            if (done) return;
-            done = true;
-            if (timeoutId) clearTimeout(timeoutId);
+          var urls = fallbackUrls(img);
+          var candidates = urls.length ? urls : [img.getAttribute("src") || ""];
+          var settled = false;
+          var remaining = candidates.length;
+          var overallTimeout = setTimeout(finish, 6000);
+
+          function finish(winningUrl) {
+            if (settled) return;
+            settled = true;
+            clearTimeout(overallTimeout);
+            if (winningUrl && img.src !== winningUrl) img.src = winningUrl;
             resolve();
           }
 
-          function tryNext() {
-            index += 1;
-            if (index < urls.length) {
-              img.setAttribute("data-fallback-index", String(index));
-              img.src = urls[index];
-              timeoutId = setTimeout(tryNext, 3500);
-              return;
-            }
-            finish();
-          }
-
-          if (img.complete && img.naturalWidth > 0) {
-            finish();
-            return;
-          }
-
-          img.addEventListener("load", finish, { once: true });
-          img.addEventListener("error", tryNext);
-          timeoutId = setTimeout(tryNext, 3500);
+          candidates.forEach(function (url) {
+            var probe = new Image();
+            probe.onload = function () { finish(url); };
+            probe.onerror = function () {
+              remaining -= 1;
+              if (remaining <= 0) finish();
+            };
+            probe.src = url;
+          });
         });
       }
 
-      function waitForImages() {
+      function waitForImages(onProgress) {
         var images = Array.prototype.slice.call(document.images || []);
-        if (!images.length) return Promise.resolve();
-        return Promise.all(images.map(loadImage));
+        if (!images.length) {
+          onProgress(1, 1);
+          return Promise.resolve();
+        }
+        var loaded = 0;
+        return Promise.all(
+          images.map(function (img) {
+            return loadImage(img).then(function () {
+              loaded += 1;
+              onProgress(loaded, images.length);
+            });
+          }),
+        );
+      }
+
+      function reveal() {
+        var overlay = document.getElementById("rsLoadOverlay");
+        var btn = document.getElementById("rsSaveBtn");
+        document.body.classList.remove("is-loading");
+        if (btn) { btn.disabled = false; btn.textContent = "⬇ Save as PDF"; }
+        if (overlay) setTimeout(function () { overlay.style.display = "none"; }, 220);
       }
 
       window.focus();
-      waitForImages();
+
+      var fill = document.getElementById("rsLoadFill");
+      var label = document.getElementById("rsLoadLabel");
+
+      waitForImages(function (loaded, total) {
+        var pct = total ? Math.round((loaded / total) * 100) : 100;
+        if (fill) fill.style.width = pct + "%";
+        if (label) label.textContent = "Preparing response sheet… " + pct + "%";
+      }).then(function () {
+        // Two animation frames guarantee the browser has actually painted the
+        // fully-laid-out page before we reveal it, so nothing "pops in" piece by piece.
+        requestAnimationFrame(function () {
+          requestAnimationFrame(reveal);
+        });
+      });
     })();
   </script>
 </body>
@@ -448,6 +496,11 @@ export async function downloadResponseSheetPdf(
           // Remove elements that don't belong in the PDF or cause html2canvas issues
           const saveBar = iframeDoc.querySelector(".save-bar") as HTMLElement | null;
           if (saveBar) saveBar.remove();
+          // The full-screen loading overlay must never appear in the captured canvas —
+          // remove it and unhide the content instead of waiting on its own reveal timing.
+          const loadOverlay = iframeDoc.querySelector(".load-overlay") as HTMLElement | null;
+          if (loadOverlay) loadOverlay.remove();
+          iframeDoc.body.classList.remove("is-loading");
           // position:fixed causes html2canvas to render the watermark on every page;
           // switching to absolute makes it appear once at the correct vertical position.
           const watermark = iframeDoc.querySelector(".watermark") as HTMLElement | null;

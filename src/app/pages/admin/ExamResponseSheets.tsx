@@ -16,7 +16,7 @@ import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { openResponseSheetInTab, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
 import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
 import bannerImage from "../../../banner.jpeg";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, Loader2 } from "lucide-react";
 
 export default function ExamResponseSheets() {
   const { id } = useParams();
