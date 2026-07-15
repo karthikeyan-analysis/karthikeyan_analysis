@@ -5,7 +5,22 @@ import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
-import { ArrowLeft, Shield, Clock, CheckCircle, AlertTriangle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Shield, Clock, CheckCircle, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
+import { getDownloadURL, ref as storageRef } from "firebase/storage";
+import { storage } from "../../../config/firebase";
+
+function getVideoErrorMessage(error: MediaError | null) {
+  switch (error?.code) {
+    case MediaError.MEDIA_ERR_NETWORK:
+      return "The video could not be downloaded. Check your connection and try again.";
+    case MediaError.MEDIA_ERR_DECODE:
+      return "This video file is damaged or uses a codec that this device cannot decode.";
+    case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+      return "This device cannot play the uploaded video format. Ask the administrator to upload an MP4 encoded with H.264 video and AAC audio.";
+    default:
+      return "The video could not be loaded. Please retry.";
+  }
+}
 
 export default function VideoPlayer() {
   const { id } = useParams();
@@ -18,10 +33,50 @@ export default function VideoPlayer() {
 
   const video = videos.find((v) => v.id === id);
   const [videoError, setVideoError] = useState(false);
+  const [videoErrorMessage, setVideoErrorMessage] = useState("");
+  const [playbackUrl, setPlaybackUrl] = useState("");
+  const [resolvingUrl, setResolvingUrl] = useState(false);
 
   useEffect(() => {
     setVideoError(false);
-  }, [id]);
+    setVideoErrorMessage("");
+
+    const rawUrl = video?.videoUrl?.trim() || "";
+    if (!rawUrl) {
+      setPlaybackUrl("");
+      setVideoError(true);
+      setVideoErrorMessage("No video file is attached to this lesson.");
+      return;
+    }
+
+    let cancelled = false;
+    const isFirebaseStorageUrl =
+      rawUrl.startsWith("gs://") ||
+      rawUrl.includes("firebasestorage.googleapis.com") ||
+      rawUrl.includes("storage.googleapis.com");
+
+    if (!isFirebaseStorageUrl) {
+      setPlaybackUrl(rawUrl);
+      return;
+    }
+
+    setResolvingUrl(true);
+    getDownloadURL(storageRef(storage, rawUrl))
+      .then((freshUrl) => {
+        if (!cancelled) setPlaybackUrl(freshUrl);
+      })
+      .catch((error) => {
+        console.warn("Could not refresh the video download URL; using the saved URL.", error);
+        if (!cancelled) setPlaybackUrl(rawUrl);
+      })
+      .finally(() => {
+        if (!cancelled) setResolvingUrl(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, video?.videoUrl]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -142,47 +197,77 @@ export default function VideoPlayer() {
                   </select>
                 </label>
               </div>
-              {/* Video Element */}
+              {/* Video Element — use the URL directly so the browser reads the
+                  real Content-Type instead of forcing every upload to MP4. */}
+              <video
+                ref={videoRef}
+                src={playbackUrl || undefined}
+                className="w-full h-full"
+                controls
+                controlsList="nodownload noremoteplayback noplaybackrate"
+                disablePictureInPicture
+                playsInline
+                preload="metadata"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                poster={video.thumbnail}
+                onContextMenu={(e) => e.preventDefault()}
+                onLoadedMetadata={() => {
+                  setVideoError(false);
+                  setVideoErrorMessage("");
+                  if (videoRef.current) videoRef.current.playbackRate = playbackRate;
+                }}
+                onCanPlay={() => {
+                  setVideoError(false);
+                  setVideoErrorMessage("");
+                }}
+                onError={(event) => {
+                  const mediaError = event.currentTarget.error;
+                  console.error("Video playback failed", {
+                    code: mediaError?.code,
+                    message: mediaError?.message,
+                    url: playbackUrl,
+                  });
+                  setVideoErrorMessage(getVideoErrorMessage(mediaError));
+                  setVideoError(true);
+                }}
+              >
+                Your browser does not support the video tag.
+              </video>
+
+              {resolvingUrl ? (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-slate-900">
+                  <div className="flex items-center gap-2 text-sm text-white">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Preparing secure video…
+                  </div>
+                </div>
+              ) : null}
+
               {videoError ? (
-                <div className="w-full h-full flex items-center justify-center p-6">
+                <div className="absolute inset-0 z-20 w-full h-full flex items-center justify-center bg-slate-900 p-6">
                   <div className="text-center space-y-3 max-w-sm">
                     <AlertTriangle className="w-10 h-10 text-amber-400 mx-auto" />
                     <p className="text-white font-semibold">Video failed to load</p>
                     <p className="text-slate-400 text-sm">
-                      Check your internet connection, then refresh the page. If the problem persists, contact your instructor.
+                      {videoErrorMessage}
                     </p>
                     <Button
                       variant="outline"
                       size="sm"
                       className="text-white border-slate-500 hover:bg-slate-800"
-                      onClick={() => { setVideoError(false); if (videoRef.current) { videoRef.current.load(); } }}
+                      onClick={() => {
+                        setVideoError(false);
+                        setVideoErrorMessage("");
+                        videoRef.current?.load();
+                      }}
                     >
                       <RefreshCw className="w-4 h-4 mr-2" />
                       Retry
                     </Button>
                   </div>
                 </div>
-              ) : (
-              <video
-                ref={videoRef}
-                className="w-full h-full"
-                controls
-                controlsList="nodownload noremoteplayback noplaybackrate"
-                disablePictureInPicture
-                playsInline
-                onPlay={() => setIsPlaying(true)}
-                onPause={() => setIsPlaying(false)}
-                poster={video.thumbnail}
-                onContextMenu={(e) => e.preventDefault()}
-                onLoadedMetadata={() => {
-                  if (videoRef.current) videoRef.current.playbackRate = playbackRate;
-                }}
-                onError={() => setVideoError(true)}
-              >
-                <source src={video.videoUrl} type="video/mp4" />
-                Your browser does not support the video tag.
-              </video>
-              )}
+              ) : null}
 
             </div>
 
