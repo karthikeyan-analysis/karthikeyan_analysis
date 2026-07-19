@@ -38,9 +38,45 @@ export type UserRole = "admin" | "student";
 const STUDENT_SESSION_KEY = "ka_student_session";
 
 function generateSessionToken(): string {
-  const arr = new Uint8Array(18);
-  crypto.getRandomValues(arr);
-  return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    const arr = new Uint8Array(18);
+    crypto.getRandomValues(arr);
+    return Array.from(arr, (b) => b.toString(16).padStart(2, "0")).join("");
+  } catch {
+    // Fallback for older browsers / non-secure contexts where Web Crypto is unavailable.
+    return `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 14)}`;
+  }
+}
+
+/** Prefer redirect on devices where popups are unreliable. */
+function shouldPreferGoogleRedirect(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  const isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
+  const isInAppBrowser = /FBAN|FBAV|Instagram|Line\/|WhatsApp|MicroMessenger/i.test(ua);
+  const isOldOrStrictSafari =
+    /Safari/i.test(ua) && !/Chrome|CriOS|Edg|Chromium|Android/i.test(ua);
+  return isMobile || isInAppBrowser || isOldOrStrictSafari;
+}
+
+const GOOGLE_LOGIN_ERROR_KEY = "ka_google_login_error";
+
+export function consumeGoogleLoginError(): string | null {
+  try {
+    const msg = sessionStorage.getItem(GOOGLE_LOGIN_ERROR_KEY);
+    if (msg) sessionStorage.removeItem(GOOGLE_LOGIN_ERROR_KEY);
+    return msg;
+  } catch {
+    return null;
+  }
+}
+
+function storeGoogleLoginError(message: string) {
+  try {
+    sessionStorage.setItem(GOOGLE_LOGIN_ERROR_KEY, message);
+  } catch {
+    /* ignore */
+  }
 }
 
 function getDeviceInfo(): string {
@@ -257,22 +293,109 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Handle the result of a redirect-based Google sign-in (cross-browser fallback).
-    // getRedirectResult resolves immediately with null if no redirect was pending.
-    getRedirectResult(auth).catch(() => {});
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        const userData = await fetchUserData(firebaseUser);
-        setUser(userData);
-      } else {
-        setUser(null);
+    const boot = async () => {
+      // Complete redirect Google login BEFORE listening to auth state,
+      // so older devices that use redirect get a fully provisioned student session.
+      try {
+        const redirectResult = await getRedirectResult(auth);
+        if (redirectResult?.user && !cancelled) {
+          const completed = await completeStudentGoogleSignIn(redirectResult.user);
+          if (!cancelled) {
+            if (!completed.success) {
+              storeGoogleLoginError(completed.error || "Google sign-in failed.");
+              setUser(null);
+            } else {
+              setUser(completed.user || null);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Google redirect login error:", error);
+        storeGoogleLoginError("Google sign-in failed. Please try again.");
       }
-      setLoading(false);
-    });
 
-    return unsubscribe;
+      if (cancelled) return;
+
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          const userData = await fetchUserData(firebaseUser);
+          if (!cancelled) setUser(userData);
+        } else if (!cancelled) {
+          setUser(null);
+        }
+        if (!cancelled) setLoading(false);
+      });
+    };
+
+    boot();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, []);
+
+  async function completeStudentGoogleSignIn(
+    firebaseUser: FirebaseUser,
+  ): Promise<{ success: boolean; error?: string; user?: User | null }> {
+    const signedInEmail = (firebaseUser.email || "").toLowerCase();
+
+    if (!signedInEmail) {
+      await signOut(auth);
+      return {
+        success: false,
+        error: "Google account email not found. Please try another account.",
+      };
+    }
+
+    const studentQuery = query(
+      collection(db, "students"),
+      where("email", "==", signedInEmail),
+    );
+    const studentSnap = await getDocs(studentQuery);
+
+    if (studentSnap.empty) {
+      await signOut(auth);
+      return {
+        success: false,
+        error:
+          "This Google account is not registered as a student. Contact admin.",
+      };
+    }
+
+    const studentRecord = studentSnap.docs[0].data() as {
+      name?: string;
+      email?: string;
+      studentId?: string;
+      batchId?: string;
+      photoURL?: string;
+    };
+    const studentRecordId = studentSnap.docs[0].id;
+
+    await setDoc(
+      doc(db, "users", firebaseUser.uid),
+      {
+        role: "student",
+        name: studentRecord.name || firebaseUser.displayName || "Student",
+        email: signedInEmail,
+        studentId: studentRecord.studentId,
+        batchId: studentRecord.batchId,
+        studentRecordId,
+        isGuestExamParticipant: false,
+        guestExamTestId: null,
+        ...(studentRecord.photoURL ? { photoURL: studentRecord.photoURL } : {}),
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+
+    await writeStudentSession(studentRecordId);
+    const studentUser = await fetchUserData(firebaseUser);
+    return { success: true, user: studentUser };
+  }
 
   const login = async (
     email: string,
@@ -307,84 +430,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Force account-picker even when the user already has a session.
     provider.setCustomParameters({ prompt: "select_account" });
 
-    let result;
-    try {
-      result = await signInWithPopup(auth, provider);
-    } catch (popupError: any) {
-      // popup-blocked: Firefox/Safari/iOS silently block popups not opened
-      // synchronously. Fall back to redirect flow — the page reloads and
-      // onAuthStateChanged picks up the signed-in user on return.
-      if (
-        popupError?.code === "auth/popup-blocked" ||
-        popupError?.code === "auth/cancelled-popup-request"
-      ) {
-        await signInWithRedirect(auth, provider);
-        // signInWithRedirect navigates away; this return is never reached in practice.
-        return { success: true };
-      }
-      if (popupError?.code === "auth/popup-closed-by-user") {
-        return { success: false, error: "Sign-in was cancelled. Please try again." };
-      }
-      throw popupError; // re-throw other errors (network, config, etc.)
-    }
+    const startRedirect = async () => {
+      await signInWithRedirect(auth, provider);
+      // Navigation leaves this page; callers should keep a "redirecting" state.
+      return { success: true as const };
+    };
 
     try {
-      const signedInEmail = (result.user.email || "").toLowerCase();
-
-      if (!signedInEmail) {
-        await signOut(auth);
-        return {
-          success: false,
-          error: "Google account email not found. Please try another account.",
-        };
+      if (shouldPreferGoogleRedirect()) {
+        return await startRedirect();
       }
 
-      const studentQuery = query(
-        collection(db, "students"),
-        where("email", "==", signedInEmail),
-      );
-      const studentSnap = await getDocs(studentQuery);
-
-      if (studentSnap.empty) {
-        await signOut(auth);
-        return {
-          success: false,
-          error:
-            "This Google account is not registered as a student. Contact admin.",
-        };
+      let result;
+      try {
+        result = await signInWithPopup(auth, provider);
+      } catch (popupError: any) {
+        // Popups fail often on older browsers, Safari, and in-app webviews.
+        if (
+          popupError?.code === "auth/popup-blocked" ||
+          popupError?.code === "auth/cancelled-popup-request" ||
+          popupError?.code === "auth/operation-not-supported-in-this-environment"
+        ) {
+          return await startRedirect();
+        }
+        if (popupError?.code === "auth/popup-closed-by-user") {
+          return { success: false, error: "Sign-in was cancelled. Please try again." };
+        }
+        // Network / unknown popup failures: try redirect once more before giving up.
+        if (
+          typeof popupError?.code === "string" &&
+          popupError.code.startsWith("auth/")
+        ) {
+          try {
+            return await startRedirect();
+          } catch {
+            throw popupError;
+          }
+        }
+        throw popupError;
       }
 
-      const studentRecord = studentSnap.docs[0].data() as {
-        name?: string;
-        email?: string;
-        studentId?: string;
-        batchId?: string;
-        photoURL?: string;
-      };
-      const studentRecordId = studentSnap.docs[0].id;
-
-      await setDoc(
-        doc(db, "users", result.user.uid),
-        {
-          role: "student",
-          name: studentRecord.name || result.user.displayName || "Student",
-          email: signedInEmail,
-          studentId: studentRecord.studentId,
-          batchId: studentRecord.batchId,
-          studentRecordId,
-          isGuestExamParticipant: false,
-          guestExamTestId: null,
-          ...(studentRecord.photoURL ? { photoURL: studentRecord.photoURL } : {}),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
-
-      // Register this device as the active session (invalidates any other device)
-      await writeStudentSession(studentRecordId);
-
-      const studentUser = await fetchUserData(result.user);
-      setUser(studentUser);
+      const completed = await completeStudentGoogleSignIn(result.user);
+      if (!completed.success) {
+        return { success: false, error: completed.error };
+      }
+      setUser(completed.user || null);
       return { success: true };
     } catch (error: any) {
       console.error("Student Google login error:", error);

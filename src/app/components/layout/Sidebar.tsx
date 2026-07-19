@@ -14,6 +14,7 @@ import {
   Radio,
   FileText,
   Globe,
+  Settings2,
 } from "lucide-react";
 import { cn } from "../ui/utils";
 
@@ -70,6 +71,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       to: "/admin/public-registrations",
       icon: Globe,
       label: "Public Registrations",
+      end: true,
+    },
+    {
+      to: "/admin/portal-settings",
+      icon: Settings2,
+      label: "Portal Settings",
       end: true,
     },
   ];

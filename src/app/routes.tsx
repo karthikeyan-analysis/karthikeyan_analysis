@@ -40,6 +40,7 @@ import PublicLogin from "./pages/public/PublicLogin";
 import PublicDashboard from "./pages/public/PublicDashboard";
 import PublicHallTicket from "./pages/public/PublicHallTicket";
 import PublicRegistrationsPage from "./pages/admin/PublicRegistrationsPage";
+import PortalSettingsPage from "./pages/admin/PortalSettingsPage";
 
 function StudentOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -150,6 +151,7 @@ export const router = createBrowserRouter([
       { path: "tests/attendance", element: <TestAttendanceAnalytics /> },
       { path: "reports/student-tests", element: <StudentTestReports /> },
       { path: "public-registrations", element: <PublicRegistrationsPage /> },
+      { path: "portal-settings", element: <PortalSettingsPage /> },
       { path: "tests/new", element: <ExamCreatePage /> },
       {
         path: "tests/:id",
