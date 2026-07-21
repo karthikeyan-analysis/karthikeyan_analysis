@@ -21,6 +21,12 @@ import {
 import { auth, db } from "../../config/firebase";
 import { saveGuestProfile } from "../features/exams/examApi";
 import {
+  normalizeStudentBatchIds,
+  resolveActiveBatchId,
+  writeStoredActiveBatch,
+  clearStoredActiveBatch,
+} from "../features/students/studentBatchUtils";
+import {
   collection,
   deleteField,
   doc,
@@ -126,7 +132,10 @@ interface User {
   name: string;
   role: UserRole;
   studentId?: string;
+  /** Active batch for media/tests (switcher). */
   batchId?: string;
+  /** All enrolled batches. */
+  batchIds?: string[];
   studentRecordId?: string;
   photoURL?: string;
   isGuestExamParticipant?: boolean;
@@ -147,6 +156,8 @@ interface AuthContextType {
     email: string,
     password: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  /** Switch active batch for multi-batch students. */
+  setActiveBatch: (batchId: string) => Promise<void>;
   logout: () => Promise<void>;
   isAuthenticated: boolean;
   loading: boolean;
@@ -181,6 +192,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         let studentId =
           typeof userData.studentId === "string" ? userData.studentId : undefined;
         let batchId = typeof userData.batchId === "string" ? userData.batchId : undefined;
+        let batchIds: string[] = Array.isArray(userData.batchIds)
+          ? (userData.batchIds as unknown[]).map((id) => String(id || "").trim()).filter(Boolean)
+          : [];
 
         if (role === "student") {
           const email = (
@@ -195,6 +209,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             photoURL?: string;
             studentId?: string;
             batchId?: string;
+            batchIds?: string[];
+            activeSessionToken?: string;
           };
 
           let studentData: StudentDoc | null = null;
@@ -217,27 +233,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (!studentSnap.empty) {
               studentRecordId = studentSnap.docs[0].id;
               studentData = studentSnap.docs[0].data() as StudentDoc;
-              void setDoc(
-                userDocRef,
-                {
-                  studentRecordId,
-                  studentId: studentData.studentId ?? studentId ?? null,
-                  batchId: studentData.batchId ?? batchId ?? null,
-                  ...(studentData.photoURL ? { photoURL: studentData.photoURL } : {}),
-                  updatedAt: new Date().toISOString(),
-                },
-                { merge: true },
-              );
             }
           }
 
-          if (studentData) {
+          if (studentData && studentRecordId) {
             if (studentData.name?.trim()) name = studentData.name.trim();
             if (typeof studentData.photoURL === "string" && studentData.photoURL.trim()) {
               photoURL = studentData.photoURL.trim();
             }
             if (studentData.studentId) studentId = studentData.studentId;
-            if (studentData.batchId) batchId = studentData.batchId;
+
+            batchIds = normalizeStudentBatchIds(studentData);
+            batchId = resolveActiveBatchId({
+              batchIds,
+              studentRecordId,
+              preferredFromUserDoc: batchId,
+            });
+
+            void setDoc(
+              userDocRef,
+              {
+                studentRecordId,
+                studentId: studentId ?? null,
+                batchId: batchId ?? null,
+                batchIds,
+                ...(studentData.photoURL ? { photoURL: studentData.photoURL } : {}),
+                updatedAt: new Date().toISOString(),
+              },
+              { merge: true },
+            );
           }
 
           // ── Single-device enforcement (skip for anonymous/guest users) ──
@@ -250,9 +274,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   sessionToken: string;
                 };
                 if (localId === studentRecordId) {
-                  const firestoreToken = (studentData as any)?.activeSessionToken as string | undefined;
+                  const firestoreToken = studentData?.activeSessionToken;
                   if (firestoreToken && localToken !== firestoreToken) {
-                    // Another device wrote a new token — kick this session out
                     localStorage.removeItem(STUDENT_SESSION_KEY);
                     sessionStorage.setItem("ka_kicked_reason", "other_device");
                     await signOut(auth);
@@ -278,6 +301,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role,
           studentId,
           batchId,
+          batchIds: batchIds.length ? batchIds : undefined,
           studentRecordId,
           photoURL,
           isGuestExamParticipant: userData.isGuestExamParticipant === true,
@@ -371,9 +395,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email?: string;
       studentId?: string;
       batchId?: string;
+      batchIds?: string[];
       photoURL?: string;
     };
     const studentRecordId = studentSnap.docs[0].id;
+    const batchIds = normalizeStudentBatchIds(studentRecord);
+    const activeBatchId = resolveActiveBatchId({
+      batchIds,
+      studentRecordId,
+      preferredFromUserDoc: studentRecord.batchId,
+    });
+
+    if (activeBatchId) {
+      writeStoredActiveBatch(studentRecordId, activeBatchId);
+    }
 
     await setDoc(
       doc(db, "users", firebaseUser.uid),
@@ -382,7 +417,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         name: studentRecord.name || firebaseUser.displayName || "Student",
         email: signedInEmail,
         studentId: studentRecord.studentId,
-        batchId: studentRecord.batchId,
+        batchId: activeBatchId ?? null,
+        batchIds,
         studentRecordId,
         isGuestExamParticipant: false,
         guestExamTestId: null,
@@ -510,6 +546,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         query(collection(db, "students"), where("email", "==", email)),
       );
       const guestStudent = guestStudentSnap.empty ? null : guestStudentSnap.docs[0];
+      const guestBatchIds = guestStudent
+        ? normalizeStudentBatchIds(guestStudent.data() as any)
+        : [];
 
       await setDoc(
         doc(db, "users", uid),
@@ -523,7 +562,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ? {
                 studentRecordId: guestStudent.id,
                 studentId: guestStudent.data()?.studentId ?? null,
-                batchId: guestStudent.data()?.batchId ?? null,
+                batchId: guestBatchIds[0] ?? guestStudent.data()?.batchId ?? null,
+                batchIds: guestBatchIds,
                 ...(guestStudent.data()?.photoURL
                   ? { photoURL: guestStudent.data()?.photoURL }
                   : {}),
@@ -599,6 +639,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const setActiveBatch = async (batchId: string) => {
+    const nextId = batchId.trim();
+    if (!user || user.role !== "student" || !user.studentRecordId) {
+      throw new Error("Not signed in as a student.");
+    }
+    const enrolled = user.batchIds?.length
+      ? user.batchIds
+      : user.batchId
+        ? [user.batchId]
+        : [];
+    if (!nextId || !enrolled.includes(nextId)) {
+      throw new Error("You are not enrolled in that batch.");
+    }
+
+    writeStoredActiveBatch(user.studentRecordId, nextId);
+    await setDoc(
+      doc(db, "users", user.id),
+      {
+        batchId: nextId,
+        batchIds: enrolled,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
+    setUser({ ...user, batchId: nextId, batchIds: enrolled });
+  };
+
   const logout = async () => {
     try {
       // Clear student device session from Firestore + localStorage
@@ -612,6 +679,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               activeDevice: deleteField(),
               activeDeviceLoginAt: deleteField(),
             } as any);
+            clearStoredActiveBatch(studentRecordId);
           }
         } catch { /* ignore Firestore errors on logout */ }
         localStorage.removeItem(STUDENT_SESSION_KEY);
@@ -631,6 +699,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loginStudentWithGoogle,
         loginGuestForExam,
         signupAdmin,
+        setActiveBatch,
         logout,
         isAuthenticated: !!user,
         loading,

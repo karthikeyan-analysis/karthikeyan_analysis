@@ -13,6 +13,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { ArrowLeft, Download, Loader2, Users } from "lucide-react";
 import { listExamTestsForAdmin, listAttemptsForAdmin } from "../../features/exams/examApi";
+import { studentBelongsToBatch } from "../../features/students/studentBatchUtils";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import { examIncludesBatch } from "../../features/exams/examBatchUtils";
 import { useData } from "../../context/DataContext";
@@ -100,7 +101,7 @@ export default function StudentTestReports() {
 
   const batchStudents = useMemo(() => {
     if (!selectedBatch) return [];
-    return [...students.filter((s) => s.batchId === selectedBatch)].sort((a, b) =>
+    return [...students.filter((s) => studentBelongsToBatch(s, selectedBatch))].sort((a, b) =>
       a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
     );
   }, [students, selectedBatch]);

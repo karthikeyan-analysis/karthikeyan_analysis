@@ -22,6 +22,12 @@ import {
 import { deleteObject, ref as storageRef } from "firebase/storage";
 import { db, storage } from "../../config/firebase";
 import { deleteStudentProfileImage } from "../features/students/studentPhotoStorage";
+import {
+  mergeBatchEnrollment,
+  normalizeStudentBatchIds,
+  studentBatchWriteFields,
+  studentBelongsToBatch,
+} from "../features/students/studentBatchUtils";
 
 export interface Batch {
   id: string;
@@ -40,7 +46,10 @@ export interface Student {
   email: string;
   enrolledDate: string;
   status: "active" | "inactive";
-  batchId?: string; // Batch enrollment
+  /** Active / primary batch (legacy + switcher selection mirrored here). */
+  batchId?: string;
+  /** All batch enrollments for this email (one Google login). */
+  batchIds?: string[];
   /** Profile image URL (Firebase Storage download link or external link e.g. Google Drive). */
   photoURL?: string;
   /** Browser + OS string of the currently registered device, e.g. "Chrome on Windows". */
@@ -101,6 +110,16 @@ interface DataContextType {
 
   students: Student[];
   addStudent: (student: Omit<Student, "id">) => Promise<string>;
+  /** Add an existing email to another batch (or create if new). */
+  enrollStudentInBatch: (params: {
+    email: string;
+    batchId: string;
+    name?: string;
+    studentId?: string;
+    status?: Student["status"];
+    enrolledDate?: string;
+    photoURL?: string;
+  }) => Promise<{ studentId: string; created: boolean; alreadyInBatch: boolean }>;
   updateStudent: (id: string, student: Partial<Student>) => Promise<void>;
   clearStudentPhoto: (id: string) => Promise<void>;
   clearStudentDevice: (id: string) => Promise<void>;
@@ -142,14 +161,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const batchesWithDerivedCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const s of students) {
-      if (!s.batchId) continue;
-      counts.set(s.batchId, (counts.get(s.batchId) || 0) + 1);
+      for (const bid of normalizeStudentBatchIds(s)) {
+        counts.set(bid, (counts.get(bid) || 0) + 1);
+      }
     }
     return batches.map((b) => ({
       ...b,
       studentCount: counts.get(b.id) || 0,
     }));
   }, [batches, students]);
+
+  const normalizeStudentDoc = (raw: Student): Student => {
+    const batchIds = normalizeStudentBatchIds(raw);
+    const fields = studentBatchWriteFields(batchIds, raw.batchId);
+    return {
+      ...raw,
+      batchId: fields.batchId || undefined,
+      batchIds: fields.batchIds.length ? fields.batchIds : undefined,
+    };
+  };
 
   // Load all data from Firestore on mount
   useEffect(() => {
@@ -189,10 +219,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const loadStudents = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, "students"));
-      const studentsData = querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as Student[];
+      const studentsData = querySnapshot.docs.map((docSnap) =>
+        normalizeStudentDoc({
+          id: docSnap.id,
+          ...(docSnap.data() as Omit<Student, "id">),
+        }),
+      );
       setStudents(studentsData);
     } catch (error) {
       console.error("Error loading students:", error);
@@ -277,19 +309,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const batch = writeBatch(db);
       batch.delete(doc(db, "batches", id));
 
-      // Remove batch association from students
-      const affectedStudents = students.filter((s) => s.batchId === id);
+      // Remove this batch from every enrolled student (supports multi-batch).
+      const affectedStudents = students.filter((s) => studentBelongsToBatch(s, id));
       affectedStudents.forEach((student) => {
-        batch.update(doc(db, "students", student.id), { batchId: null });
+        const remaining = normalizeStudentBatchIds(student).filter((bid) => bid !== id);
+        const fields = studentBatchWriteFields(remaining);
+        batch.update(doc(db, "students", student.id), {
+          batchId: fields.batchId,
+          batchIds: fields.batchIds,
+        });
       });
 
       await batch.commit();
 
       setBatches(batches.filter((b) => b.id !== id));
       setStudents(
-        students.map((s) =>
-          s.batchId === id ? { ...s, batchId: undefined } : s,
-        ),
+        students.map((s) => {
+          if (!studentBelongsToBatch(s, id)) return s;
+          const remaining = normalizeStudentBatchIds(s).filter((bid) => bid !== id);
+          const fields = studentBatchWriteFields(remaining);
+          return {
+            ...s,
+            batchId: fields.batchId || undefined,
+            batchIds: fields.batchIds.length ? fields.batchIds : undefined,
+          };
+        }),
       );
     } catch (error) {
       console.error("Error deleting batch:", error);
@@ -300,30 +344,88 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Student operations
   const addStudent = async (student: Omit<Student, "id">) => {
     try {
-      const newStudent = {
+      const batchFields = studentBatchWriteFields(
+        normalizeStudentBatchIds(student).length
+          ? normalizeStudentBatchIds(student)
+          : student.batchId
+            ? [student.batchId]
+            : [],
+        student.batchId,
+      );
+      const newStudent: Omit<Student, "id"> = {
         ...student,
         email: student.email.toLowerCase(),
         enrolledDate:
           student.enrolledDate || new Date().toISOString().split("T")[0],
+        batchId: batchFields.batchId || undefined,
+        batchIds: batchFields.batchIds.length ? batchFields.batchIds : undefined,
       };
       const docRef = await addDoc(collection(db, "students"), newStudent);
       const studentWithId = { ...newStudent, id: docRef.id };
       setStudents((prev) => [...prev, studentWithId]);
-
-      // Update batch student count
-      if (newStudent.batchId) {
-        const batch = batches.find((b) => b.id === newStudent.batchId);
-        if (batch) {
-          await updateBatch(newStudent.batchId, {
-            studentCount: batch.studentCount + 1,
-          });
-        }
-      }
       return docRef.id;
     } catch (error) {
       console.error("Error adding student:", error);
       throw error;
     }
+  };
+
+  const enrollStudentInBatch = async (params: {
+    email: string;
+    batchId: string;
+    name?: string;
+    studentId?: string;
+    status?: Student["status"];
+    enrolledDate?: string;
+    photoURL?: string;
+  }): Promise<{ studentId: string; created: boolean; alreadyInBatch: boolean }> => {
+    const email = params.email.trim().toLowerCase();
+    const targetBatchId = params.batchId.trim();
+    if (!email) throw new Error("Email is required.");
+    if (!targetBatchId) throw new Error("Batch is required.");
+
+    const existing = students.find((s) => s.email.trim().toLowerCase() === email);
+    if (!existing) {
+      const id = await addStudent({
+        studentId: params.studentId || `STU-${Date.now()}`,
+        name: params.name || email.split("@")[0] || "Student",
+        email,
+        status: params.status || "active",
+        enrolledDate: params.enrolledDate || new Date().toISOString().split("T")[0],
+        batchId: targetBatchId,
+        batchIds: [targetBatchId],
+        ...(params.photoURL ? { photoURL: params.photoURL } : {}),
+      });
+      return { studentId: id, created: true, alreadyInBatch: false };
+    }
+
+    const merged = mergeBatchEnrollment(existing, targetBatchId);
+    if (merged.alreadyInBatch) {
+      return { studentId: existing.id, created: false, alreadyInBatch: true };
+    }
+
+    await updateDoc(doc(db, "students", existing.id), {
+      batchId: merged.batchId,
+      batchIds: merged.batchIds,
+      ...(params.name ? { name: params.name } : {}),
+      ...(params.studentId ? { studentId: params.studentId } : {}),
+      ...(params.photoURL ? { photoURL: params.photoURL } : {}),
+    });
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === existing.id
+          ? {
+              ...s,
+              batchId: merged.batchId,
+              batchIds: merged.batchIds,
+              ...(params.name ? { name: params.name } : {}),
+              ...(params.studentId ? { studentId: params.studentId } : {}),
+              ...(params.photoURL ? { photoURL: params.photoURL } : {}),
+            }
+          : s,
+      ),
+    );
+    return { studentId: existing.id, created: false, alreadyInBatch: false };
   };
 
   const clearStudentPhoto = async (id: string) => {
@@ -362,36 +464,35 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const updateStudent = async (id: string, updates: Partial<Student>) => {
     try {
       const oldStudent = students.find((s) => s.id === id);
-      const normalizedUpdates = {
+      let normalizedUpdates: Partial<Student> & Record<string, unknown> = {
         ...updates,
         ...(updates.email ? { email: updates.email.toLowerCase() } : {}),
       };
-      await updateDoc(doc(db, "students", id), normalizedUpdates);
-      setStudents(
-        students.map((s) => (s.id === id ? { ...s, ...normalizedUpdates } : s)),
-      );
 
-      // Update batch student counts if batch changed
-      if (oldStudent && oldStudent.batchId !== normalizedUpdates.batchId) {
-        if (oldStudent.batchId) {
-          const oldBatch = batches.find((b) => b.id === oldStudent.batchId);
-          if (oldBatch) {
-            await updateBatch(oldStudent.batchId, {
-              studentCount: Math.max(0, oldBatch.studentCount - 1),
-            });
-          }
+      if (updates.batchIds !== undefined || updates.batchId !== undefined) {
+        let resolvedIds: string[];
+        if (updates.batchIds !== undefined) {
+          resolvedIds = normalizeStudentBatchIds({ batchIds: updates.batchIds });
+        } else {
+          // Edit form sets a single batchId → replace membership with that batch (or unassign).
+          const single = String(updates.batchId || "").trim();
+          resolvedIds = single ? [single] : [];
         }
-        if (normalizedUpdates.batchId) {
-          const newBatch = batches.find(
-            (b) => b.id === normalizedUpdates.batchId,
-          );
-          if (newBatch) {
-            await updateBatch(normalizedUpdates.batchId, {
-              studentCount: newBatch.studentCount + 1,
-            });
-          }
-        }
+        const fields = studentBatchWriteFields(
+          resolvedIds,
+          updates.batchId ?? oldStudent?.batchId,
+        );
+        normalizedUpdates.batchId = fields.batchId;
+        normalizedUpdates.batchIds = fields.batchIds;
       }
+
+      await updateDoc(doc(db, "students", id), normalizedUpdates as any);
+      setStudents((prev) =>
+        prev.map((s) => {
+          if (s.id !== id) return s;
+          return normalizeStudentDoc({ ...s, ...normalizedUpdates } as Student);
+        }),
+      );
     } catch (error) {
       console.error("Error updating student:", error);
       throw error;
@@ -400,20 +501,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const deleteStudent = async (id: string) => {
     try {
-      const student = students.find((s) => s.id === id);
       await deleteStudentProfileImage(id);
       await deleteDoc(doc(db, "students", id));
       setStudents(students.filter((s) => s.id !== id));
-
-      // Update batch student count
-      if (student?.batchId) {
-        const batch = batches.find((b) => b.id === student.batchId);
-        if (batch) {
-          await updateBatch(student.batchId, {
-            studentCount: Math.max(0, batch.studentCount - 1),
-          });
-        }
-      }
     } catch (error) {
       console.error("Error deleting student:", error);
       throw error;
@@ -421,7 +511,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const getStudentsByBatch = (batchId: string): Student[] => {
-    return students.filter((s) => s.batchId === batchId);
+    return students.filter((s) => studentBelongsToBatch(s, batchId));
   };
 
   // Content operations
@@ -570,6 +660,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         deleteBatch,
         students,
         addStudent,
+        enrollStudentInBatch,
         updateStudent,
         clearStudentPhoto,
         clearStudentDevice,

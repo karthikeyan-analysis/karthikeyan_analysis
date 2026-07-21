@@ -89,7 +89,16 @@ export default function Login({ role = "student" }: LoginProps) {
   useEffect(() => {
     if (authLoading || loading) return;
     if (role === "student" && user?.role === "student") {
-      navigate("/student", { replace: true });
+      const ids = user.batchIds?.length
+        ? user.batchIds
+        : user.batchId
+          ? [user.batchId]
+          : [];
+      if (ids.length > 1 && (!user.batchId || !ids.includes(user.batchId))) {
+        navigate("/student/select-batch", { replace: true });
+      } else {
+        navigate("/student", { replace: true });
+      }
     }
     if (role === "admin" && user?.role === "admin") {
       navigate("/admin", { replace: true });
@@ -123,7 +132,8 @@ export default function Login({ role = "student" }: LoginProps) {
     try {
       const result = await loginStudentWithGoogle();
       if (result.success) {
-        // Popup path navigates here; redirect path leaves the page.
+        // Popup path: AuthContext has user; redirect effect / navigate below.
+        // Prefer select-batch when multi-enrolled without an active choice.
         navigate("/student");
       } else {
         setError(result.error || "Google sign-in failed.");

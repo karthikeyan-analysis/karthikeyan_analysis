@@ -4,7 +4,14 @@ import { useAuth } from "../../context/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import { BookOpen, Video, FileText, Layers3, CalendarClock } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
+import { BookOpen, Video, FileText, Layers3, CalendarClock, Loader2 } from "lucide-react";
 import StudentAvatar from "../../components/StudentAvatar";
 import { examIncludesBatch } from "../../features/exams/examBatchUtils";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
@@ -22,10 +29,35 @@ function localDateKey(date = new Date()) {
 
 export default function StudentDashboard() {
   const { content, videos, tests, batches } = useData();
-  const { user } = useAuth();
+  const { user, setActiveBatch } = useAuth();
   const { photoURL } = useStudentPhoto();
   const navigate = useNavigate();
   const [examTests, setExamTests] = useState<ExamTest[]>([]);
+  const [switchingBatch, setSwitchingBatch] = useState(false);
+
+  const enrolledBatchIds = useMemo(() => {
+    if (!user) return [];
+    return user.batchIds?.length ? user.batchIds : user.batchId ? [user.batchId] : [];
+  }, [user]);
+
+  const enrolledBatchOptions = useMemo(() => {
+    return enrolledBatchIds.map((id) => ({
+      id,
+      name: batches.find((b) => b.id === id)?.name || "Unknown batch",
+    }));
+  }, [batches, enrolledBatchIds]);
+
+  const handleBatchSwitch = async (batchId: string) => {
+    if (!batchId || batchId === user?.batchId) return;
+    setSwitchingBatch(true);
+    try {
+      await setActiveBatch(batchId);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setSwitchingBatch(false);
+    }
+  };
 
   const canAccessItem = (item: {
     visibilityType: "ALL" | "SELECTIVE" | "BATCH";
@@ -159,13 +191,49 @@ export default function StudentDashboard() {
             </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <Badge variant="outline" className="bg-white">
-              {availableSubjects.length} subjects
-            </Badge>
-            <Badge variant="outline" className="bg-white">
-              {todaysExamCount} test today
-            </Badge>
+          <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+            {enrolledBatchOptions.length > 1 ? (
+              <div className="w-full sm:w-56 space-y-1">
+                <p className="text-[11px] uppercase tracking-wide text-slate-500">Active batch</p>
+                <Select
+                  value={user?.batchId || ""}
+                  onValueChange={(value) => void handleBatchSwitch(value)}
+                  disabled={switchingBatch}
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue placeholder="Select batch" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {enrolledBatchOptions.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {switchingBatch ? (
+                  <p className="text-xs text-slate-500 flex items-center gap-1">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Switching…
+                  </p>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-xs text-indigo-700 hover:underline text-left"
+                    onClick={() => navigate("/student/select-batch")}
+                  >
+                    Open batch picker
+                  </button>
+                )}
+              </div>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="bg-white">
+                {availableSubjects.length} subjects
+              </Badge>
+              <Badge variant="outline" className="bg-white">
+                {todaysExamCount} test today
+              </Badge>
+            </div>
           </div>
         </CardContent>
       </Card>

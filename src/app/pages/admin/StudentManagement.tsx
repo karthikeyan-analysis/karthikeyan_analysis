@@ -52,6 +52,11 @@ import {
   normalizeStudentPhotoUrl,
   resolveStudentPhotoDisplayUrl,
 } from "../../features/students/studentPhotoUrl";
+import {
+  normalizeStudentBatchIds,
+  studentBelongsToBatch,
+  studentHasNoBatch,
+} from "../../features/students/studentBatchUtils";
 
 type StudentSortKey = "name" | "studentId" | "email" | "batch" | "enrolledNewest" | "enrolledOldest" | "status";
 
@@ -134,7 +139,7 @@ function StudentPhotoFields({
 }
 
 export default function StudentManagement() {
-  const { students, batches, addStudent, updateStudent, deleteStudent, clearStudentPhoto, clearStudentDevice } =
+  const { students, batches, addStudent, enrollStudentInBatch, updateStudent, deleteStudent, clearStudentPhoto, clearStudentDevice } =
     useData();
   const [resettingDeviceIds, setResettingDeviceIds] = useState<Set<string>>(new Set());
 
@@ -173,6 +178,7 @@ export default function StudentManagement() {
   const [importSummary, setImportSummary] = useState<{
     total: number;
     created: number;
+    updated: number;
     skipped: number;
     failed: number;
     failures: Array<{ email?: string; reason: string }>;
@@ -184,6 +190,7 @@ export default function StudentManagement() {
     email: "",
     status: "active" as "active" | "inactive",
     batchId: "",
+    batchIds: [] as string[],
   });
 
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -209,6 +216,12 @@ export default function StudentManagement() {
     return batches.find((b) => b.id === batchId)?.name || "Unknown";
   };
 
+  const getStudentBatchLabels = (student: Student) => {
+    const ids = normalizeStudentBatchIds(student);
+    if (!ids.length) return ["Not Assigned"];
+    return ids.map((id) => getBatchName(id));
+  };
+
   const filteredStudents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const dateValue = (value?: string) => {
@@ -221,22 +234,29 @@ export default function StudentManagement() {
       selectedBatch === "all"
         ? [...students]
         : selectedBatch === "unassigned"
-          ? students.filter((student) => !student.batchId)
-          : students.filter((student) => student.batchId === selectedBatch);
+          ? students.filter((student) => studentHasNoBatch(student))
+          : students.filter((student) => studentBelongsToBatch(student, selectedBatch));
 
     if (q) {
       list = list.filter(
         (student) =>
           student.name.toLowerCase().includes(q) ||
           student.email.toLowerCase().includes(q) ||
-          student.studentId.toLowerCase().includes(q),
+          student.studentId.toLowerCase().includes(q) ||
+          getStudentBatchLabels(student).some((label) =>
+            label.toLowerCase().includes(q),
+          ),
       );
     }
 
     return list.sort((a, b) => {
       if (studentSortKey === "studentId") return textValue(a.studentId).localeCompare(textValue(b.studentId));
       if (studentSortKey === "email") return textValue(a.email).localeCompare(textValue(b.email));
-      if (studentSortKey === "batch") return textValue(getBatchName(a.batchId)).localeCompare(textValue(getBatchName(b.batchId)));
+      if (studentSortKey === "batch") {
+        return getStudentBatchLabels(a)
+          .join(", ")
+          .localeCompare(getStudentBatchLabels(b).join(", "));
+      }
       if (studentSortKey === "enrolledNewest") return dateValue(b.enrolledDate) - dateValue(a.enrolledDate);
       if (studentSortKey === "enrolledOldest") return dateValue(a.enrolledDate) - dateValue(b.enrolledDate);
       if (studentSortKey === "status") return textValue(a.status).localeCompare(textValue(b.status));
@@ -490,6 +510,7 @@ export default function StudentManagement() {
     setImporting(true);
     const failures: Array<{ email?: string; reason: string }> = [];
     let created = 0;
+    let updated = 0;
     let skipped = 0;
     let failed = 0;
 
@@ -513,22 +534,27 @@ export default function StudentManagement() {
         continue;
       }
       seenInFile.add(email);
-      if (existingEmailSet.has(email)) {
-        skipped += 1;
-        failures.push({ email, reason: "Already exists in system (duplicate email)" });
-        continue;
-      }
       try {
-        await addStudent({
-          studentId: row.studentId,
-          name: row.name,
+        const result = await enrollStudentInBatch({
           email,
-          status: importStatus,
           batchId: importBatchId,
+          name: row.name,
+          studentId: row.studentId,
+          status: importStatus,
           enrolledDate: row.enrolledDate || new Date().toISOString().split("T")[0],
           ...(row.photoURL ? { photoURL: row.photoURL } : {}),
         });
-        created += 1;
+        if (result.created) {
+          created += 1;
+        } else if (result.alreadyInBatch) {
+          skipped += 1;
+          failures.push({
+            email,
+            reason: "Already enrolled in this batch",
+          });
+        } else {
+          updated += 1;
+        }
         existingEmailSet.add(email);
       } catch (e: any) {
         failed += 1;
@@ -539,6 +565,7 @@ export default function StudentManagement() {
     setImportSummary({
       total: importRows.length,
       created,
+      updated,
       skipped,
       failed,
       failures,
@@ -579,16 +606,47 @@ export default function StudentManagement() {
 
     try {
       if (editingStudent) {
-        await updateStudent(editingStudent.id, formData);
+        const selectedBatchIds =
+          formData.batchIds.length > 0
+            ? formData.batchIds
+            : formData.batchId
+              ? [formData.batchId]
+              : [];
+        await updateStudent(editingStudent.id, {
+          studentId: formData.studentId,
+          name: formData.name,
+          email: formData.email,
+          status: formData.status,
+          batchIds: selectedBatchIds,
+          batchId: selectedBatchIds[0] || "",
+        });
         await applyPhotoToStudent(editingStudent.id);
         setEditingStudent(null);
       } else {
-        const newId = await addStudent({
-          ...formData,
+        if (!formData.batchId) {
+          setError("Please select a batch.");
+          setIsLoading(false);
+          return;
+        }
+        const result = await enrollStudentInBatch({
+          email: formData.email,
+          batchId: formData.batchId,
+          name: formData.name,
+          studentId: formData.studentId,
+          status: formData.status,
           enrolledDate: new Date().toISOString().split("T")[0],
         });
-        await applyPhotoToStudent(newId);
+        if (result.alreadyInBatch) {
+          setError("This student is already enrolled in the selected batch.");
+          setIsLoading(false);
+          return;
+        }
+        await applyPhotoToStudent(result.studentId);
         setIsAddDialogOpen(false);
+        if (!result.created) {
+          // Soft success notice via clearing error with a temporary message
+          setError("");
+        }
       }
 
       setPhotoFile(null);
@@ -599,6 +657,7 @@ export default function StudentManagement() {
         email: "",
         status: "active",
         batchId: "",
+        batchIds: [],
       });
     } catch (err: any) {
       setError(err?.message || "Failed to save student");
@@ -611,12 +670,14 @@ export default function StudentManagement() {
     setPhotoFile(null);
     setPhotoUrlText(student.photoURL || "");
     setEditingStudent(student);
+    const ids = normalizeStudentBatchIds(student);
     setFormData({
       studentId: student.studentId,
       name: student.name,
       email: student.email,
       status: student.status,
-      batchId: student.batchId || "",
+      batchId: student.batchId || ids[0] || "",
+      batchIds: ids,
     });
   };
 
@@ -643,17 +704,32 @@ export default function StudentManagement() {
       email: "",
       status: "active",
       batchId: "",
+      batchIds: [],
     });
     setEditingStudent(null);
     setError("");
   };
 
   const getStudentCountByBatch = (batchId: string) => {
-    return students.filter((s) => s.batchId === batchId).length;
+    return students.filter((s) => studentBelongsToBatch(s, batchId)).length;
   };
 
   const getUnassignedStudentCount = () => {
-    return students.filter((s) => !s.batchId).length;
+    return students.filter((s) => studentHasNoBatch(s)).length;
+  };
+
+  const toggleFormBatchId = (batchId: string) => {
+    setFormData((prev) => {
+      const has = prev.batchIds.includes(batchId);
+      const batchIds = has
+        ? prev.batchIds.filter((id) => id !== batchId)
+        : [...prev.batchIds, batchId];
+      return {
+        ...prev,
+        batchIds,
+        batchId: batchIds[0] || "",
+      };
+    });
   };
 
   return (
@@ -680,7 +756,7 @@ export default function StudentManagement() {
               <DialogDescription>
                 {editingStudent
                   ? "Update student information"
-                  : "Add a new student to the portal"}
+                  : "Add a student or enroll an existing email into another batch"}
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
@@ -732,7 +808,11 @@ export default function StudentManagement() {
                   <Select
                     value={formData.batchId}
                     onValueChange={(value) =>
-                      setFormData({ ...formData, batchId: value })
+                      setFormData({
+                        ...formData,
+                        batchId: value,
+                        batchIds: value ? [value] : [],
+                      })
                     }
                   >
                     <SelectTrigger id="batch">
@@ -746,6 +826,9 @@ export default function StudentManagement() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-slate-500">
+                    If this email already exists, they will be added to this batch (same Google login).
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
@@ -941,7 +1024,7 @@ export default function StudentManagement() {
                         </p>
                       )}
                       <p className="text-xs text-slate-500 mt-2">
-                        Duplicate emails already in the system will be skipped automatically.
+                        Existing emails are enrolled into this batch (not skipped). Already-in-batch rows are skipped.
                       </p>
                     </CardContent>
                   </Card>
@@ -956,6 +1039,7 @@ export default function StudentManagement() {
                       <div className="flex flex-wrap gap-2">
                         <Badge variant="outline">Total: {importSummary.total}</Badge>
                         <Badge className="bg-emerald-100 text-emerald-800">Created: {importSummary.created}</Badge>
+                        <Badge className="bg-indigo-100 text-indigo-800">Added to batch: {importSummary.updated}</Badge>
                         <Badge className="bg-slate-100 text-slate-800">Skipped: {importSummary.skipped}</Badge>
                         {importSummary.failed > 0 ? (
                           <Badge className="bg-rose-100 text-rose-800">Failed: {importSummary.failed}</Badge>
@@ -1132,6 +1216,8 @@ export default function StudentManagement() {
                         onSubmit={handleSubmit}
                         onReset={resetForm}
                         getBatchName={getBatchName}
+                        getStudentBatchLabels={getStudentBatchLabels}
+                        toggleFormBatchId={toggleFormBatchId}
                         photoPreviewUrl={
                           editingStudent?.id === student.id
                             ? photoPreviewDisplay
@@ -1194,6 +1280,8 @@ export default function StudentManagement() {
                           onSubmit={handleSubmit}
                           onReset={resetForm}
                           getBatchName={getBatchName}
+                        getStudentBatchLabels={getStudentBatchLabels}
+                        toggleFormBatchId={toggleFormBatchId}
                           showBatchColumn={false}
                           photoPreviewUrl={
                             editingStudent?.id === student.id
@@ -1260,6 +1348,8 @@ export default function StudentManagement() {
                           onSubmit={handleSubmit}
                           onReset={resetForm}
                           getBatchName={getBatchName}
+                        getStudentBatchLabels={getStudentBatchLabels}
+                        toggleFormBatchId={toggleFormBatchId}
                           showBatchColumn={false}
                           photoPreviewUrl={
                             editingStudent?.id === student.id
@@ -1311,6 +1401,8 @@ interface StudentRowProps {
   onSubmit: (e: React.FormEvent) => void;
   onReset: () => void;
   getBatchName: (batchId?: string) => string;
+  getStudentBatchLabels: (student: Student) => string[];
+  toggleFormBatchId: (batchId: string) => void;
   showBatchColumn?: boolean;
   photoPreviewUrl: string | null;
   photoUrlText: string;
@@ -1333,6 +1425,8 @@ function StudentRow({
   onSubmit,
   onReset,
   getBatchName,
+  getStudentBatchLabels,
+  toggleFormBatchId,
   showBatchColumn = true,
   photoPreviewUrl,
   photoUrlText,
@@ -1367,7 +1461,13 @@ function StudentRow({
       <TableCell>{student.email}</TableCell>
       {showBatchColumn && (
         <TableCell className="text-sm text-slate-600">
-          {getBatchName(student.batchId)}
+          <div className="flex flex-wrap gap-1">
+            {getStudentBatchLabels(student).map((label) => (
+              <Badge key={label} variant="outline" className="font-normal">
+                {label}
+              </Badge>
+            ))}
+          </div>
         </TableCell>
       )}
       <TableCell>{student.enrolledDate}</TableCell>
@@ -1472,24 +1572,29 @@ function StudentRow({
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit-batch">Batch</Label>
-                    <Select
-                      value={formData.batchId}
-                      onValueChange={(value) =>
-                        setFormData({ ...formData, batchId: value })
-                      }
-                    >
-                      <SelectTrigger id="edit-batch">
-                        <SelectValue placeholder="Select a batch" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {batches.map((batch) => (
-                          <SelectItem key={batch.id} value={batch.id}>
-                            {batch.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Batches (multi-enroll)</Label>
+                    <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 divide-y">
+                      {batches.map((batch) => {
+                        const checked = (formData.batchIds || []).includes(batch.id);
+                        return (
+                          <label
+                            key={batch.id}
+                            className="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-slate-50"
+                          >
+                            <input
+                              type="checkbox"
+                              className="rounded border-slate-300"
+                              checked={checked}
+                              onChange={() => toggleFormBatchId(batch.id)}
+                            />
+                            <span>{batch.name}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      Select every batch this student should access. They will pick an active batch after Google login.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="edit-status">Status</Label>

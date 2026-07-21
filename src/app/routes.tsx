@@ -41,6 +41,20 @@ import PublicDashboard from "./pages/public/PublicDashboard";
 import PublicHallTicket from "./pages/public/PublicHallTicket";
 import PublicRegistrationsPage from "./pages/admin/PublicRegistrationsPage";
 import PortalSettingsPage from "./pages/admin/PortalSettingsPage";
+import SelectBatchPage from "./pages/student/SelectBatchPage";
+
+function studentNeedsBatchPicker(user: {
+  role: string;
+  batchId?: string;
+  batchIds?: string[];
+  isGuestExamParticipant?: boolean;
+} | null) {
+  if (!user || user.role !== "student") return false;
+  if (user.isGuestExamParticipant) return false;
+  const ids = user.batchIds?.length ? user.batchIds : user.batchId ? [user.batchId] : [];
+  if (ids.length <= 1) return false;
+  return !user.batchId || !ids.includes(user.batchId);
+}
 
 function StudentOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
@@ -48,6 +62,26 @@ function StudentOnlyRoute({ children }: { children: ReactElement }) {
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
   if (user.role !== "student") return <Navigate to="/admin" replace />;
+  if (studentNeedsBatchPicker(user)) {
+    return <Navigate to="/student/select-batch" replace />;
+  }
+
+  return children;
+}
+
+function StudentBatchSelectRoute({ children }: { children: ReactElement }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+  if (!user) return <Navigate to="/login" replace />;
+  if (user.role !== "student") return <Navigate to="/admin" replace />;
+
+  const ids = user.batchIds?.length ? user.batchIds : user.batchId ? [user.batchId] : [];
+  // If they only have one batch (or already have a valid active one), go to dashboard.
+  if (ids.length <= 1) return <Navigate to="/student" replace />;
+  if (user.batchId && ids.includes(user.batchId)) {
+    // Still allow opening the picker to switch (user navigated intentionally).
+  }
 
   return children;
 }
@@ -167,6 +201,14 @@ export const router = createBrowserRouter([
         ],
       },
     ],
+  },
+  {
+    path: "/student/select-batch",
+    element: (
+      <StudentBatchSelectRoute>
+        <SelectBatchPage />
+      </StudentBatchSelectRoute>
+    ),
   },
   {
     // Exam pages are full-screen (no sidebar/header) for proctoring-style UX.

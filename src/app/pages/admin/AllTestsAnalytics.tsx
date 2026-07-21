@@ -13,6 +13,7 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
 import { Download, Loader2, ArrowLeft } from "lucide-react";
 import { formatExamBatchLabel, getExamBatchIds } from "../../features/exams/examBatchUtils";
+import { studentBelongsToBatch } from "../../features/students/studentBatchUtils";
 import { listAllTestsWithAttemptsForAdmin } from "../../features/exams/examApi";
 import type { ExamAttempt, ExamTest } from "../../features/exams/types";
 import {
@@ -172,7 +173,7 @@ export default function AllTestsAnalytics() {
 
   const batchTestAnalyticsRows: BatchTestAnalyticsRow[] = useMemo(() => {
     return batches.flatMap((batch) => {
-      const batchStudents = students.filter((s) => s.batchId === batch.id);
+      const batchStudents = students.filter((s) => studentBelongsToBatch(s, batch.id));
       return testsSorted
         .filter((r) => {
           const assignedToBatch = getExamBatchIds(r.test).includes(batch.id);
@@ -233,7 +234,7 @@ export default function AllTestsAnalytics() {
       return {
         batchId: batch.id,
         batchName: batch.name,
-        studentCount: students.filter((s) => s.batchId === batch.id).length,
+        studentCount: students.filter((s) => studentBelongsToBatch(s, batch.id)).length,
         testsCount: relatedRows.length,
         eligibleSlots,
         started,
