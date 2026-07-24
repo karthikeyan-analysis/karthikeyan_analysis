@@ -466,7 +466,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const oldStudent = students.find((s) => s.id === id);
       let normalizedUpdates: Partial<Student> & Record<string, unknown> = {
         ...updates,
-        ...(updates.email ? { email: updates.email.toLowerCase() } : {}),
+        ...(updates.email ? { email: updates.email.trim().toLowerCase() } : {}),
       };
 
       if (updates.batchIds !== undefined || updates.batchId !== undefined) {
