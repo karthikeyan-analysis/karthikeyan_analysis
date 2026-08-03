@@ -53,6 +53,10 @@ function normalizeProxyPath(reqPath, reqUrl) {
     if (path.startsWith("/realtimeProxy")) {
         path = path.slice("/realtimeProxy".length) || "/";
     }
+    // Gen2 / Cloud Run sometimes presents the full URL path.
+    if (path.includes("/realtimeProxy/")) {
+        path = path.slice(path.indexOf("/realtimeProxy/") + "/realtimeProxy".length) || "/";
+    }
     if (!path.startsWith(CLIENT_PREFIX)) {
         path = `${CLIENT_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
     }
@@ -63,9 +67,11 @@ function isIceServersPath(path) {
     return path.endsWith("/generate-ice-servers");
 }
 /**
- * partytracks only forwards a request body when Content-Length > 0.
- * Firebase/Express often leaves us with a parsed `req.body` and we must
- * rebuild a Buffer + Content-Length or tracks/new reaches Cloudflare empty → 400.
+ * Rebuild a raw body Buffer for partytracks.
+ *
+ * Important: Express/Firebase often sets `req.body` to `{}` for empty JSON
+ * POSTs. Treating that as a real body sends "{}" to Cloudflare and breaks
+ * `/sessions/new`. Only forward non-empty payloads.
  */
 function resolveRequestBody(req) {
     const method = (req.method || "GET").toUpperCase();
@@ -79,15 +85,23 @@ function resolveRequestBody(req) {
     if (Buffer.isBuffer(req.body))
         return req.body.length > 0 ? req.body : undefined;
     if (typeof req.body === "string") {
-        return req.body.length > 0 ? Buffer.from(req.body) : undefined;
+        const trimmed = req.body.trim();
+        if (!trimmed || trimmed === "{}")
+            return undefined;
+        return Buffer.from(req.body);
     }
-    // Express JSON parser
-    return Buffer.from(JSON.stringify(req.body));
+    if (typeof req.body === "object") {
+        if (Array.isArray(req.body)) {
+            return Buffer.from(JSON.stringify(req.body));
+        }
+        // Empty object from JSON parser — not a real client payload.
+        if (Object.keys(req.body).length === 0)
+            return undefined;
+        return Buffer.from(JSON.stringify(req.body));
+    }
+    return undefined;
 }
-/**
- * Keep classId for our auth gate only — do not forward it to Cloudflare SFU.
- * Unknown query params on tracks/new can yield opaque 400s from the Realtime API.
- */
+/** Keep classId for our auth gate only — never forward it to Cloudflare SFU. */
 function cloudflareSearch(search) {
     if (!search)
         return "";
@@ -101,12 +115,23 @@ function isLocalHttpOrigin(origin, referer) {
     return candidates.some((value) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value) ||
         /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/i.test(value));
 }
+function errorMessage(error) {
+    if (error instanceof Error)
+        return error.message;
+    return String(error);
+}
 /**
  * The only "video" backend function. Every session/track/renegotiate call from
  * the browser comes through here first: verify Firebase Auth + enrollment/role
  * for this class, then hand off to Cloudflare's `routePartyTracksRequest`.
  */
-exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.cfRealtimeAppId, exports.cfRealtimeAppToken, exports.cfTurnAppId, exports.cfTurnAppToken] }, async (req, res) => {
+exports.realtimeProxy = (0, https_1.onRequest)({
+    cors: true,
+    secrets: [exports.cfRealtimeAppId, exports.cfRealtimeAppToken, exports.cfTurnAppId, exports.cfTurnAppToken],
+    // Live-class media negotiation can be chatty; keep instances warm-ish.
+    timeoutSeconds: 60,
+    memory: "512MiB",
+}, async (req, res) => {
     try {
         const authHeader = req.get("Authorization") || "";
         const idToken = authHeader.replace(/^Bearer\s+/i, "").trim();
@@ -123,6 +148,7 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             return;
         }
         const { path, search } = normalizeProxyPath(req.path || "/", req.url || "");
+        const method = (req.method || "GET").toUpperCase();
         const classId = String(req.query.classId || "");
         if (!classId) {
             if (!isIceServersPath(path)) {
@@ -152,6 +178,13 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
                 return;
             }
         }
+        const appId = exports.cfRealtimeAppId.value()?.trim();
+        const appToken = exports.cfRealtimeAppToken.value()?.trim();
+        if (!appId || !appToken) {
+            v2_1.logger.error("realtimeProxy missing Cloudflare Realtime secrets");
+            res.status(500).send("Live class media is not configured (missing Cloudflare secrets).");
+            return;
+        }
         const { routePartyTracksRequest } = await import("partytracks/server");
         const bodyBuf = resolveRequestBody(req);
         const headers = new Headers();
@@ -161,7 +194,9 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             if (lower === "host" ||
                 lower === "content-length" ||
                 lower === "connection" ||
-                lower === "transfer-encoding") {
+                lower === "transfer-encoding" ||
+                lower === "accept-encoding" // avoid compressed upstream bodies we mishandle
+            ) {
                 continue;
             }
             if (typeof value === "string")
@@ -169,34 +204,57 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             else if (Array.isArray(value))
                 headers.set(key, value.join(", "));
         }
-        // partytracks only attaches `body` when Content-Length > 0. Always set it
-        // ourselves from the buffer we will send.
-        if (bodyBuf) {
+        // partytracks only attaches `body` when Content-Length > 0.
+        // Google frontends return HTTP 411 if POST has neither body nor Content-Length.
+        // That HTML 411 previously made partytracks throw while parsing JSON → opaque 500.
+        if (bodyBuf && bodyBuf.length > 0) {
             headers.set("content-length", String(bodyBuf.length));
             if (!headers.has("content-type")) {
                 headers.set("content-type", "application/json");
             }
         }
+        else if (method !== "GET" && method !== "HEAD") {
+            headers.set("content-length", "0");
+            headers.delete("content-type");
+        }
         const cfSearch = cloudflareSearch(search);
         const fetchRequest = new Request(`https://internal.local${path}${cfSearch}`, {
-            method: req.method,
+            method,
             headers,
-            body: bodyBuf,
+            ...(bodyBuf && bodyBuf.length > 0 ? { body: bodyBuf } : {}),
         });
-        const response = await routePartyTracksRequest({
-            appId: exports.cfRealtimeAppId.value(),
-            token: exports.cfRealtimeAppToken.value(),
-            turnServerAppId: exports.cfTurnAppId.value() || undefined,
-            turnServerAppToken: exports.cfTurnAppToken.value() || undefined,
-            prefix: CLIENT_PREFIX,
-            lockSessionToInitiator: true,
-            request: fetchRequest,
-        });
+        let response;
+        try {
+            response = await routePartyTracksRequest({
+                appId,
+                token: appToken,
+                turnServerAppId: exports.cfTurnAppId.value()?.trim() || undefined,
+                turnServerAppToken: exports.cfTurnAppToken.value()?.trim() || undefined,
+                prefix: CLIENT_PREFIX,
+                lockSessionToInitiator: true,
+                request: fetchRequest,
+            });
+        }
+        catch (upstreamErr) {
+            v2_1.logger.error("realtimeProxy partytracks failure", {
+                path,
+                method,
+                uid,
+                classId: classId || null,
+                bodyBytes: bodyBuf?.length ?? 0,
+                error: errorMessage(upstreamErr),
+            });
+            res
+                .status(502)
+                .send(`Cloudflare Realtime request failed (${path}): ${errorMessage(upstreamErr)}`);
+            return;
+        }
         if (response.status >= 400) {
             const errText = await response.clone().text().catch(() => "");
             v2_1.logger.warn("realtimeProxy upstream error", {
                 status: response.status,
                 path,
+                method,
                 uid,
                 classId: classId || null,
                 bodyBytes: bodyBuf?.length ?? 0,
@@ -206,6 +264,11 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
         res.status(response.status);
         response.headers.forEach((value, key) => {
             if (key.toLowerCase() === "set-cookie")
+                return;
+            // Avoid leaking hop-by-hop / encoding issues through Vercel rewrite.
+            if (key.toLowerCase() === "transfer-encoding")
+                return;
+            if (key.toLowerCase() === "content-encoding")
                 return;
             res.setHeader(key, value);
         });
@@ -219,10 +282,12 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             res.append("set-cookie", adjusted);
         }
         const buf = Buffer.from(await response.arrayBuffer());
+        // Ensure clients always get an explicit length through proxies.
+        res.setHeader("content-length", String(buf.length));
         res.send(buf);
     }
     catch (error) {
         v2_1.logger.error("realtimeProxy error", error);
-        res.status(500).send("Internal error");
+        res.status(500).send(`Realtime proxy error: ${errorMessage(error)}`);
     }
 });
