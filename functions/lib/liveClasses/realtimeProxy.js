@@ -46,8 +46,6 @@ exports.cfTurnAppToken = (0, params_1.defineSecret)("CF_TURN_APP_TOKEN");
 /**
  * Client-facing proxy path (Vercel rewrite + Vite dev proxy). Must match
  * `realtimeClient.ts` and the cookie Path set by `routePartyTracksRequest`.
- * Using "" here breaks Path= on the session-lock cookie and can 404 depending
- * on how the path is rewritten into the Fetch Request.
  */
 const CLIENT_PREFIX = "/api/realtime";
 function normalizeProxyPath(reqPath, reqUrl) {
@@ -65,10 +63,48 @@ function isIceServersPath(path) {
     return path.endsWith("/generate-ice-servers");
 }
 /**
+ * partytracks only forwards a request body when Content-Length > 0.
+ * Firebase/Express often leaves us with a parsed `req.body` and we must
+ * rebuild a Buffer + Content-Length or tracks/new reaches Cloudflare empty → 400.
+ */
+function resolveRequestBody(req) {
+    const method = (req.method || "GET").toUpperCase();
+    if (method === "GET" || method === "HEAD")
+        return undefined;
+    if (Buffer.isBuffer(req.rawBody) && req.rawBody.length > 0) {
+        return req.rawBody;
+    }
+    if (req.body == null || req.body === "")
+        return undefined;
+    if (Buffer.isBuffer(req.body))
+        return req.body.length > 0 ? req.body : undefined;
+    if (typeof req.body === "string") {
+        return req.body.length > 0 ? Buffer.from(req.body) : undefined;
+    }
+    // Express JSON parser
+    return Buffer.from(JSON.stringify(req.body));
+}
+/**
+ * Keep classId for our auth gate only — do not forward it to Cloudflare SFU.
+ * Unknown query params on tracks/new can yield opaque 400s from the Realtime API.
+ */
+function cloudflareSearch(search) {
+    if (!search)
+        return "";
+    const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+    params.delete("classId");
+    const next = params.toString();
+    return next ? `?${next}` : "";
+}
+function isLocalHttpOrigin(origin, referer) {
+    const candidates = [origin, referer];
+    return candidates.some((value) => /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(value) ||
+        /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/i.test(value));
+}
+/**
  * The only "video" backend function. Every session/track/renegotiate call from
  * the browser comes through here first: verify Firebase Auth + enrollment/role
- * for this class, then hand off to Cloudflare's `routePartyTracksRequest`
- * (dynamic import — partytracks is ESM-only; this project is CommonJS).
+ * for this class, then hand off to Cloudflare's `routePartyTracksRequest`.
  */
 exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.cfRealtimeAppId, exports.cfRealtimeAppToken, exports.cfTurnAppId, exports.cfTurnAppToken] }, async (req, res) => {
     try {
@@ -87,9 +123,6 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             return;
         }
         const { path, search } = normalizeProxyPath(req.path || "/", req.url || "");
-        // partytracks' built-in ICE fetch omits query params. Allow authenticated
-        // callers to mint ICE/TURN without classId so session setup can proceed.
-        // Session/track routes still require class-scoped authorization below.
         const classId = String(req.query.classId || "");
         if (!classId) {
             if (!isIceServersPath(path)) {
@@ -120,20 +153,35 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             }
         }
         const { routePartyTracksRequest } = await import("partytracks/server");
+        const bodyBuf = resolveRequestBody(req);
         const headers = new Headers();
         for (const [key, value] of Object.entries(req.headers)) {
+            const lower = key.toLowerCase();
+            // Host/length are recomputed; hop-by-hop headers must not be forwarded.
+            if (lower === "host" ||
+                lower === "content-length" ||
+                lower === "connection" ||
+                lower === "transfer-encoding") {
+                continue;
+            }
             if (typeof value === "string")
                 headers.set(key, value);
             else if (Array.isArray(value))
                 headers.set(key, value.join(", "));
         }
-        headers.delete("host");
-        headers.delete("content-length");
-        const hasBody = !["GET", "HEAD"].includes(req.method) && (req.rawBody?.length ?? 0) > 0;
-        const fetchRequest = new Request(`https://internal.local${path}${search}`, {
+        // partytracks only attaches `body` when Content-Length > 0. Always set it
+        // ourselves from the buffer we will send.
+        if (bodyBuf) {
+            headers.set("content-length", String(bodyBuf.length));
+            if (!headers.has("content-type")) {
+                headers.set("content-type", "application/json");
+            }
+        }
+        const cfSearch = cloudflareSearch(search);
+        const fetchRequest = new Request(`https://internal.local${path}${cfSearch}`, {
             method: req.method,
             headers,
-            body: hasBody ? req.rawBody : undefined,
+            body: bodyBuf,
         });
         const response = await routePartyTracksRequest({
             appId: exports.cfRealtimeAppId.value(),
@@ -141,29 +189,33 @@ exports.realtimeProxy = (0, https_1.onRequest)({ cors: true, secrets: [exports.c
             turnServerAppId: exports.cfTurnAppId.value() || undefined,
             turnServerAppToken: exports.cfTurnAppToken.value() || undefined,
             prefix: CLIENT_PREFIX,
-            // Default in partytracks is NODE_ENV==="production" only — Functions
-            // often don't set that, so lock must be forced on explicitly.
             lockSessionToInitiator: true,
             request: fetchRequest,
         });
+        if (response.status >= 400) {
+            const errText = await response.clone().text().catch(() => "");
+            v2_1.logger.warn("realtimeProxy upstream error", {
+                status: response.status,
+                path,
+                uid,
+                classId: classId || null,
+                bodyBytes: bodyBuf?.length ?? 0,
+                upstream: errText.slice(0, 500),
+            });
+        }
         res.status(response.status);
         response.headers.forEach((value, key) => {
             if (key.toLowerCase() === "set-cookie")
                 return;
             res.setHeader(key, value);
         });
-        // Headers.forEach comma-joins repeated Set-Cookie values — use getSetCookie.
         const setCookies = response.headers.getSetCookie?.() ?? [];
         const origin = req.get("origin") || "";
         const referer = req.get("referer") || "";
-        const isLocalHttp = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
-            /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(referer) ||
-            /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/i.test(origin) ||
-            /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/i.test(referer);
+        const localHttp = isLocalHttpOrigin(origin, referer);
         for (const cookie of setCookies) {
-            // partytracks always sets Secure; browsers on http://localhost drop it.
-            // Strip Secure only for local Vite so session-lock still works in dev.
-            const adjusted = isLocalHttp ? cookie.replace(/;\s*Secure/gi, "") : cookie;
+            // partytracks always sets Secure; browsers on http://LAN drop it.
+            const adjusted = localHttp ? cookie.replace(/;\s*Secure/gi, "") : cookie;
             res.append("set-cookie", adjusted);
         }
         const buf = Buffer.from(await response.arrayBuffer());

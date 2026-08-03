@@ -49,6 +49,20 @@ export function useLiveClassPresence(params: {
   const camera = useMemo(() => getCamera(), []);
   const screenshare = useMemo(() => getScreenshare(), []);
 
+  // Turn mic + camera on when joining so remote peers can see/hear without
+  // an extra click (users can still mute from the control bar).
+  useEffect(() => {
+    if (!partyTracks) return;
+    try {
+      mic.enableSource();
+      camera.enableSource();
+      mic.startBroadcasting();
+      camera.startBroadcasting();
+    } catch (err) {
+      console.warn("Could not auto-enable mic/camera", err);
+    }
+  }, [partyTracks, mic, camera]);
+
   // Best-effort hardware release (camera/mic indicator lights) on leave.
   useEffect(() => {
     return () => {
@@ -60,6 +74,8 @@ export function useLiveClassPresence(params: {
 
   const session$ = useMemo(() => partyTracks?.session$ ?? NEVER, [partyTracks]);
   const sessionError$ = useMemo(() => partyTracks?.sessionError$ ?? NEVER, [partyTracks]);
+  const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
+
   const audioMeta$ = useMemo(
     () => (partyTracks ? partyTracks.push(mic.broadcastTrack$) : NEVER),
     [partyTracks, mic],
@@ -68,9 +84,14 @@ export function useLiveClassPresence(params: {
     () => (partyTracks ? partyTracks.push(camera.broadcastTrack$) : NEVER),
     [partyTracks, camera],
   );
+  // Only push screenshare while actively sharing — idle screenshare pushes
+  // were a common source of tracks/new 400 noise.
   const screenMeta$ = useMemo(
-    () => (partyTracks ? partyTracks.push(screenshare.video.broadcastTrack$) : NEVER),
-    [partyTracks, screenshare],
+    () =>
+      partyTracks && isScreenOn
+        ? partyTracks.push(screenshare.video.broadcastTrack$)
+        : NEVER,
+    [partyTracks, screenshare, isScreenOn],
   );
 
   const session = useObservableAsValue(session$);
@@ -85,12 +106,8 @@ export function useLiveClassPresence(params: {
     }
   }, [sessionError]);
 
-  // broadcastTrack$ always emits *something* (including an empty fallback when
-  // off) — only advertise tracks in presence while actually broadcasting so
-  // remotes don't pull blank tracks.
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
-  const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
 
   // Keep our own presence doc in sync with the current session + published tracks.
   useEffect(() => {

@@ -40,6 +40,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/api\/realtime/, '/realtimeProxy'),
         secure: true,
+        // Keep Set-Cookie Path usable on localhost / LAN Vite.
+        cookiePathRewrite: {
+          '/api/realtime': '/api/realtime',
+        },
       },
     },
   },
