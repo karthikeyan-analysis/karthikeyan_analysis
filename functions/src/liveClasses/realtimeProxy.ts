@@ -102,7 +102,7 @@ function errorMessage(error: unknown): string {
  */
 async function withStreamBodyFetch<T>(fn: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     if (init?.body != null && (init as { duplex?: string }).duplex == null) {
       const body = init.body as { getReader?: unknown };
       if (typeof body === "object" && typeof body.getReader === "function") {

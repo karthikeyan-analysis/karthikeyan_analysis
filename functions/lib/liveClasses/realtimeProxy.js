@@ -121,6 +121,29 @@ function errorMessage(error) {
     return String(error);
 }
 /**
+ * partytracks forwards `request.body` (a ReadableStream) into `fetch()`.
+ * Node 18+/undici requires `duplex: "half"` for stream bodies — without it
+ * every tracks/new (and any POST with a body) throws and we return 500.
+ */
+async function withStreamBodyFetch(fn) {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = ((input, init) => {
+        if (init?.body != null && init.duplex == null) {
+            const body = init.body;
+            if (typeof body === "object" && typeof body.getReader === "function") {
+                return originalFetch(input, { ...init, duplex: "half" });
+            }
+        }
+        return originalFetch(input, init);
+    });
+    try {
+        return await fn();
+    }
+    finally {
+        globalThis.fetch = originalFetch;
+    }
+}
+/**
  * The only "video" backend function. Every session/track/renegotiate call from
  * the browser comes through here first: verify Firebase Auth + enrollment/role
  * for this class, then hand off to Cloudflare's `routePartyTracksRequest`.
@@ -225,7 +248,7 @@ exports.realtimeProxy = (0, https_1.onRequest)({
         });
         let response;
         try {
-            response = await routePartyTracksRequest({
+            response = await withStreamBodyFetch(() => routePartyTracksRequest({
                 appId,
                 token: appToken,
                 turnServerAppId: exports.cfTurnAppId.value()?.trim() || undefined,
@@ -233,7 +256,7 @@ exports.realtimeProxy = (0, https_1.onRequest)({
                 prefix: CLIENT_PREFIX,
                 lockSessionToInitiator: true,
                 request: fetchRequest,
-            });
+            }));
         }
         catch (upstreamErr) {
             v2_1.logger.error("realtimeProxy partytracks failure", {
