@@ -154,6 +154,41 @@ service cloud.firestore {
       }
     }
 
+    match /liveClasses/{id} {
+      // Signed-in read so students can see schedules/status before joining.
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+
+      match /attendance/{studentRecordId} {
+        // Keyed by studentRecordId, not uid — ownership is checked via the studentUid field.
+        allow read: if isAdmin() || resource.data.studentUid == request.auth.uid;
+        allow create: if isSignedIn() && request.resource.data.studentUid == request.auth.uid;
+        allow update: if isAdmin() || resource.data.studentUid == request.auth.uid;
+        allow delete: if isAdmin();
+      }
+
+      match /doubts/{doubtId} {
+        // Visible only to admins (host/co-host) and the student who raised it.
+        allow read: if isAdmin() || resource.data.studentUid == request.auth.uid;
+        allow create: if isSignedIn() && request.resource.data.studentUid == request.auth.uid;
+        allow update, delete: if isAdmin();
+      }
+
+      match /presence/{uid} {
+        // Live roster — readable by anyone signed in so participants can see who's in the call.
+        // A participant owns their own doc; a host/co-host may only flip the three
+        // cooperative control flags on someone else's doc, nothing else.
+        allow read: if isSignedIn();
+        allow create, delete: if isOwner(uid);
+        allow update: if isOwner(uid)
+          || (
+            isAdmin()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(["mutedByHost", "videoDisabledByHost", "kicked", "updatedAt"])
+          );
+      }
+    }
+
     match /{document=**} {
       allow read, write: if isAdmin();
     }

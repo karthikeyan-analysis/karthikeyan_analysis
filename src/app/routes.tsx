@@ -1,6 +1,6 @@
 import React from "react";
-import { createBrowserRouter, Navigate } from "react-router";
 import type { ReactElement } from "react";
+import { createBrowserRouter, Navigate, useLocation } from "react-router";
 import { useAuth } from "./context/AuthContext";
 import { usePublicAuth } from "./context/PublicAuthContext";
 import DashboardLayout from "./components/layout/DashboardLayout";
@@ -42,6 +42,13 @@ import PublicHallTicket from "./pages/public/PublicHallTicket";
 import PublicRegistrationsPage from "./pages/admin/PublicRegistrationsPage";
 import PortalSettingsPage from "./pages/admin/PortalSettingsPage";
 import SelectBatchPage from "./pages/student/SelectBatchPage";
+import LiveClassManagement from "./pages/admin/LiveClassManagement";
+import LiveClassRoom from "./pages/admin/LiveClassRoom";
+import LiveClassAttendance from "./pages/admin/LiveClassAttendance";
+import CoHostManagement from "./pages/admin/CoHostManagement";
+import LiveClasses from "./pages/student/LiveClasses";
+import LiveClassJoin from "./pages/student/LiveClassJoin";
+import LiveClassRecording from "./pages/student/LiveClassRecording";
 
 function studentNeedsBatchPicker(user: {
   role: string;
@@ -61,7 +68,14 @@ function StudentOnlyRoute({ children }: { children: ReactElement }) {
 
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "student") return <Navigate to="/admin" replace />;
+  if (user.role !== "student") {
+    return (
+      <Navigate
+        to={user.adminKind === "cohost" ? "/admin/live-classes" : "/admin"}
+        replace
+      />
+    );
+  }
   if (studentNeedsBatchPicker(user)) {
     return <Navigate to="/student/select-batch" replace />;
   }
@@ -74,8 +88,14 @@ function StudentBatchSelectRoute({ children }: { children: ReactElement }) {
 
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "student") return <Navigate to="/admin" replace />;
-
+  if (user.role !== "student") {
+    return (
+      <Navigate
+        to={user.adminKind === "cohost" ? "/admin/live-classes" : "/admin"}
+        replace
+      />
+    );
+  }
   const ids = user.batchIds?.length ? user.batchIds : user.batchId ? [user.batchId] : [];
   // If they only have one batch (or already have a valid active one), go to dashboard.
   if (ids.length <= 1) return <Navigate to="/student" replace />;
@@ -89,7 +109,14 @@ function StudentBatchSelectRoute({ children }: { children: ReactElement }) {
 function GuestJoinRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
   if (loading) return null;
-  if (user?.role === "admin") return <Navigate to="/admin" replace />;
+  if (user?.role === "admin") {
+    return (
+      <Navigate
+        to={user.adminKind === "cohost" ? "/admin/live-classes" : "/admin"}
+        replace
+      />
+    );
+  }
   return children;
 }
 
@@ -102,10 +129,20 @@ function PublicProtectedRoute({ children }: { children: ReactElement }) {
 
 function AdminOnlyRoute({ children }: { children: ReactElement }) {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return null;
   if (!user) return <Navigate to="/admin/login" replace />;
   if (user.role !== "admin") return <Navigate to="/student" replace />;
+
+  // Co-hosts may only use Live Classes (list / room / attendance / recording).
+  if (user.adminKind === "cohost") {
+    const path = location.pathname;
+    const allowed =
+      path === "/admin/live-classes" ||
+      path.startsWith("/admin/live-classes/");
+    if (!allowed) return <Navigate to="/admin/live-classes" replace />;
+  }
 
   return children;
 }
@@ -186,6 +223,10 @@ export const router = createBrowserRouter([
       { path: "reports/student-tests", element: <StudentTestReports /> },
       { path: "public-registrations", element: <PublicRegistrationsPage /> },
       { path: "portal-settings", element: <PortalSettingsPage /> },
+      { path: "co-hosts", element: <CoHostManagement /> },
+      { path: "live-classes", element: <LiveClassManagement /> },
+      { path: "live-classes/:id/attendance", element: <LiveClassAttendance /> },
+      { path: "live-classes/:id/recording", element: <LiveClassRecording /> },
       { path: "tests/new", element: <ExamCreatePage /> },
       {
         path: "tests/:id",
@@ -201,6 +242,15 @@ export const router = createBrowserRouter([
         ],
       },
     ],
+  },
+  {
+    // Full-screen like the exam room — a video call benefits from the full viewport.
+    path: "/admin/live-classes/:id/room",
+    element: (
+      <AdminOnlyRoute>
+        <LiveClassRoom />
+      </AdminOnlyRoute>
+    ),
   },
   {
     path: "/student/select-batch",
@@ -236,6 +286,15 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    // Full-screen — same reasoning as the exam room.
+    path: "/student/live-classes/:id",
+    element: (
+      <StudentOnlyRoute>
+        <LiveClassJoin />
+      </StudentOnlyRoute>
+    ),
+  },
+  {
     path: "/student",
     element: (
       <StudentOnlyRoute>
@@ -248,6 +307,8 @@ export const router = createBrowserRouter([
       { path: "pdf/:id", element: <PdfViewer /> },
       { path: "video/:id", element: <VideoPlayer /> },
       { path: "tests", element: <TestSchedule /> },
+      { path: "live-classes", element: <LiveClasses /> },
+      { path: "live-classes/:id/recording", element: <LiveClassRecording /> },
     ],
   },
   {

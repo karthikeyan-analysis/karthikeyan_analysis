@@ -33,10 +33,20 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitExamAttempt = void 0;
+exports.submitExamAttempt = exports.resetCoHostPassword = exports.deleteCoHost = exports.createCoHost = exports.getRecordingPlaybackUrl = exports.getRecordingUploadUrl = exports.realtimeProxy = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 admin.initializeApp();
+var realtimeProxy_1 = require("./liveClasses/realtimeProxy");
+Object.defineProperty(exports, "realtimeProxy", { enumerable: true, get: function () { return realtimeProxy_1.realtimeProxy; } });
+var getRecordingUploadUrl_1 = require("./liveClasses/getRecordingUploadUrl");
+Object.defineProperty(exports, "getRecordingUploadUrl", { enumerable: true, get: function () { return getRecordingUploadUrl_1.getRecordingUploadUrl; } });
+var getRecordingPlaybackUrl_1 = require("./liveClasses/getRecordingPlaybackUrl");
+Object.defineProperty(exports, "getRecordingPlaybackUrl", { enumerable: true, get: function () { return getRecordingPlaybackUrl_1.getRecordingPlaybackUrl; } });
+var coHostAccounts_1 = require("./liveClasses/coHostAccounts");
+Object.defineProperty(exports, "createCoHost", { enumerable: true, get: function () { return coHostAccounts_1.createCoHost; } });
+Object.defineProperty(exports, "deleteCoHost", { enumerable: true, get: function () { return coHostAccounts_1.deleteCoHost; } });
+Object.defineProperty(exports, "resetCoHostPassword", { enumerable: true, get: function () { return coHostAccounts_1.resetCoHostPassword; } });
 exports.submitExamAttempt = (0, https_1.onCall)({
     // Allow callable invocation from browsers (local dev + production).
     cors: true,

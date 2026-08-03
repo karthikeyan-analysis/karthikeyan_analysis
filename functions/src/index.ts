@@ -3,6 +3,11 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 
 admin.initializeApp();
 
+export { realtimeProxy } from "./liveClasses/realtimeProxy";
+export { getRecordingUploadUrl } from "./liveClasses/getRecordingUploadUrl";
+export { getRecordingPlaybackUrl } from "./liveClasses/getRecordingPlaybackUrl";
+export { createCoHost, deleteCoHost, resetCoHostPassword } from "./liveClasses/coHostAccounts";
+
 export const submitExamAttempt = onCall(
   {
     // Allow callable invocation from browsers (local dev + production).

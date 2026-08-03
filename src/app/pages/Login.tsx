@@ -101,7 +101,7 @@ export default function Login({ role = "student" }: LoginProps) {
       }
     }
     if (role === "admin" && user?.role === "admin") {
-      navigate("/admin", { replace: true });
+      navigate(user.adminKind === "cohost" ? "/admin/live-classes" : "/admin", { replace: true });
     }
   }, [authLoading, loading, navigate, role, user]);
 
@@ -113,6 +113,8 @@ export default function Login({ role = "student" }: LoginProps) {
     try {
       const success = await login(email, password, role);
       if (success) {
+        // Co-hosts are redirected by the effect above once user.adminKind is set;
+        // fall back to /admin which AdminOnlyRoute remaps for co-hosts.
         navigate(role === "admin" ? "/admin" : "/student");
       } else {
         setError("Invalid email or password. Please check your credentials.");
@@ -257,17 +259,18 @@ export default function Login({ role = "student" }: LoginProps) {
             <div className="pt-4 border-t">
               <p className="text-xs text-center text-slate-500">
                 {role === "admin"
-                  ? "Use your email and password registered in Firebase to sign in."
+                  ? "Admins and co-hosts sign in here with the email and password shared with them."
                   : "Students can sign in only with their admin-registered Google account."}
               </p>
               {role === "admin" && (
                 <p className="text-sm text-center text-slate-600 mt-2">
-                  Need an admin account?{" "}
+                  Co-hosts: use the credentials from Co-Host Management.{" "}
+                  Full admins:{" "}
                   <Link
                     to="/admin/signup"
                     className="text-indigo-600 hover:underline"
                   >
-                    Create one
+                    create an admin account
                   </Link>
                 </p>
               )}

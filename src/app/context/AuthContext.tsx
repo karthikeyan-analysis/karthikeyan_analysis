@@ -131,6 +131,11 @@ interface User {
   email: string;
   name: string;
   role: UserRole;
+  /**
+   * Full portal admins omit this (or "full"). Co-hosts created via Co-Host
+   * Management have "cohost" and only get Live Classes access.
+   */
+  adminKind?: "full" | "cohost";
   studentId?: string;
   /** Active batch for media/tests (switcher). */
   batchId?: string;
@@ -294,11 +299,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           photoURL = firebaseUser.photoURL;
         }
 
+        let adminKind: "full" | "cohost" | undefined;
+        if (role === "admin") {
+          const fromUser =
+            userData.adminKind === "cohost" || userData.kind === "cohost" ? "cohost" : undefined;
+          if (fromUser) {
+            adminKind = "cohost";
+          } else {
+            try {
+              const adminSnap = await getDoc(doc(db, "admins", firebaseUser.uid));
+              const adm = adminSnap.data() as { kind?: string; adminKind?: string } | undefined;
+              if (adm?.kind === "cohost" || adm?.adminKind === "cohost") adminKind = "cohost";
+              else adminKind = "full";
+            } catch {
+              adminKind = "full";
+            }
+          }
+        }
+
         return {
           id: firebaseUser.uid,
           email: firebaseUser.email || userData.email || "",
           name,
           role,
+          adminKind,
           studentId,
           batchId,
           batchIds: batchIds.length ? batchIds : undefined,

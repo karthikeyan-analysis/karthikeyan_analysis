@@ -31,6 +31,19 @@ export default defineConfig({
     },
   },
 
+  // Same-origin /api/realtime → Cloud Function (mirrors vercel.json). Required
+  // so the partytracks session-lock cookie (SameSite=Strict) is sent back.
+  server: {
+    proxy: {
+      '/api/realtime': {
+        target: 'https://us-central1-karthikeyan-analysis.cloudfunctions.net',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/realtime/, '/realtimeProxy'),
+        secure: true,
+      },
+    },
+  },
+
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 })
