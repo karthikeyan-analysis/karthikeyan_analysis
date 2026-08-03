@@ -62,12 +62,13 @@ function LiveClassRoomInner({
   name: string;
 }) {
   const navigate = useNavigate();
-  const { partyTracks, connectError, isConnected, mic, camera, screenshare, roster } = useLiveClassPresence({
-    classId,
-    uid,
-    name,
-    role,
-  });
+  const { partyTracks, connectError, reconnect, isConnected, mic, camera, screenshare, roster } =
+    useLiveClassPresence({
+      classId,
+      uid,
+      name,
+      role,
+    });
 
   const [doubts, setDoubts] = useState<LiveClassDoubt[]>([]);
   const [testPickerOpen, setTestPickerOpen] = useState(false);
@@ -189,10 +190,13 @@ function LiveClassRoomInner({
   if (connectError) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
-        <p className="text-red-600">{connectError}</p>
-        <Button variant="outline" onClick={() => navigate("/admin/live-classes")}>
-          Back
-        </Button>
+        <p className="max-w-md text-red-600">{connectError}</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button onClick={() => reconnect()}>Try again</Button>
+          <Button variant="outline" onClick={() => navigate("/admin/live-classes")}>
+            Back
+          </Button>
+        </div>
       </div>
     );
   }
@@ -218,6 +222,7 @@ function LiveClassRoomInner({
         presence={p}
         partyTracks={partyTracks}
         isLocal={isLocal}
+        mediaReady={isConnected}
         localVideoTrack$={isLocal && isCameraOn ? camera.broadcastTrack$ : undefined}
         localAudioTrack$={isLocal && isMicOn ? mic.broadcastTrack$ : undefined}
         localScreenshareTrack$={isLocal && isScreenOn ? screenshare.video.broadcastTrack$ : undefined}

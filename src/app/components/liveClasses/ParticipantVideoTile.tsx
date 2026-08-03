@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, type ReactNode } from "react";
-import { NEVER, of, type Observable } from "rxjs";
+import { NEVER, catchError, of, timer, type Observable } from "rxjs";
+import { mergeMap } from "rxjs/operators";
 import type { PartyTracks, TrackMetadata } from "partytracks/client";
 import { useObservableAsValue } from "partytracks/react";
 import { Mic, MicOff, Monitor, User } from "lucide-react";
@@ -10,16 +11,36 @@ function toTrackMetadata(t?: PublishedTrack): TrackMetadata | undefined {
   return { sessionId: t.sessionId, trackName: t.trackName, location: "remote" };
 }
 
+function pullSafe(
+  partyTracks: PartyTracks,
+  meta$: Observable<TrackMetadata>,
+  label: string,
+  peerName: string,
+): Observable<MediaStreamTrack> {
+  return partyTracks.pull(meta$).pipe(
+    catchError((err, caught) => {
+      console.warn(`[live-class] ${label} pull failed`, peerName, err);
+      // Brief backoff then resubscribe — recovers after local/remote session rotation.
+      return timer(1500).pipe(mergeMap(() => caught));
+    }),
+  );
+}
+
 /**
  * Renders one participant's tile. For the viewer's own tile, pass `isLocal`
  * plus local track observables sourced from mic/camera/screenshare
  * `broadcastTrack$` only while actually enabled. Remote tiles prefer
  * `screenshareVideoTrack` over camera `videoTrack` when the peer is sharing.
+ *
+ * Remote pulls are gated on `mediaReady` (local PeerConnection connected).
+ * Pulling against a disconnected session is what produced Cloudflare's
+ * tracks/new 410 "Session appears to be disconnected".
  */
 export default function ParticipantVideoTile({
   presence,
   partyTracks,
   isLocal,
+  mediaReady = true,
   localVideoTrack$,
   localAudioTrack$,
   localScreenshareTrack$,
@@ -29,6 +50,8 @@ export default function ParticipantVideoTile({
   presence: LiveClassPresence;
   partyTracks: PartyTracks;
   isLocal?: boolean;
+  /** When false, skip remote SFU pulls (local preview still works). */
+  mediaReady?: boolean;
   localVideoTrack$?: Observable<MediaStreamTrack>;
   localAudioTrack$?: Observable<MediaStreamTrack>;
   localScreenshareTrack$?: Observable<MediaStreamTrack>;
@@ -37,6 +60,8 @@ export default function ParticipantVideoTile({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  const canPull = !isLocal && mediaReady;
 
   const remoteScreenMeta$ = useMemo(() => {
     const meta = toTrackMetadata(presence.screenshareVideoTrack);
@@ -54,16 +79,16 @@ export default function ParticipantVideoTile({
   }, [presence.audioTrack?.sessionId, presence.audioTrack?.trackName]);
 
   const pulledScreen$ = useMemo(
-    () => (isLocal ? NEVER : partyTracks.pull(remoteScreenMeta$)),
-    [isLocal, partyTracks, remoteScreenMeta$],
+    () => (canPull ? pullSafe(partyTracks, remoteScreenMeta$, "screenshare", presence.name) : NEVER),
+    [canPull, partyTracks, remoteScreenMeta$, presence.name],
   );
   const pulledVideo$ = useMemo(
-    () => (isLocal ? NEVER : partyTracks.pull(remoteVideoMeta$)),
-    [isLocal, partyTracks, remoteVideoMeta$],
+    () => (canPull ? pullSafe(partyTracks, remoteVideoMeta$, "video", presence.name) : NEVER),
+    [canPull, partyTracks, remoteVideoMeta$, presence.name],
   );
   const pulledAudio$ = useMemo(
-    () => (isLocal ? NEVER : partyTracks.pull(remoteAudioMeta$)),
-    [isLocal, partyTracks, remoteAudioMeta$],
+    () => (canPull ? pullSafe(partyTracks, remoteAudioMeta$, "audio", presence.name) : NEVER),
+    [canPull, partyTracks, remoteAudioMeta$, presence.name],
   );
 
   const localScreenTrack = useObservableAsValue(localScreenshareTrack$ ?? NEVER);

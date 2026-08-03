@@ -190,6 +190,18 @@ export const realtimeProxy = onRequest(
         return;
       }
 
+      const turnAppId = cfTurnAppId.value()?.trim() || "";
+      const turnAppToken = cfTurnAppToken.value()?.trim() || "";
+      if (!turnAppId || !turnAppToken) {
+        // Without TURN, PeerConnections often never leave "checking" on mobile /
+        // carrier NAT → subsequent tracks/new returns 410 disconnected.
+        logger.warn("realtimeProxy missing Cloudflare TURN secrets — media may fail off-LAN", {
+          path,
+          hasTurnAppId: Boolean(turnAppId),
+          hasTurnAppToken: Boolean(turnAppToken),
+        });
+      }
+
       const { routePartyTracksRequest } = await import("partytracks/server");
 
       const bodyBuf = resolveRequestBody(req);
@@ -237,8 +249,8 @@ export const realtimeProxy = onRequest(
           routePartyTracksRequest({
             appId,
             token: appToken,
-            turnServerAppId: cfTurnAppId.value()?.trim() || undefined,
-            turnServerAppToken: cfTurnAppToken.value()?.trim() || undefined,
+            turnServerAppId: turnAppId || undefined,
+            turnServerAppToken: turnAppToken || undefined,
             prefix: CLIENT_PREFIX,
             lockSessionToInitiator: true,
             request: fetchRequest,

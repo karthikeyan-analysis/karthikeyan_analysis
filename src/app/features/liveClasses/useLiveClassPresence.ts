@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { NEVER } from "rxjs";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { NEVER, Observable, distinctUntilChanged, shareReplay, switchMap } from "rxjs";
 import { PartyTracks, getMic, getCamera, getScreenshare, type TrackMetadata } from "partytracks/client";
 import { useObservableAsValue } from "partytracks/react";
 import { createPartyTracksClient } from "./realtimeClient";
@@ -9,6 +9,27 @@ import type { LiveClassPresence, ParticipantRole, PublishedTrack } from "./types
 function toPublishedTrack(meta: TrackMetadata | undefined): PublishedTrack | null {
   if (!meta?.sessionId || !meta?.trackName) return null;
   return { sessionId: meta.sessionId, trackName: meta.trackName };
+}
+
+/**
+ * partytracks' peerConnectionState$ only emits on connectionstatechange and
+ * skips the initial state — so UI would stay "connecting" forever if we
+ * subscribed after the PC was already connected. Emit current state first.
+ */
+function peerConnectionState$(partyTracks: PartyTracks): Observable<RTCPeerConnectionState> {
+  return partyTracks.peerConnection$.pipe(
+    switchMap(
+      (pc) =>
+        new Observable<RTCPeerConnectionState>((subscriber) => {
+          subscriber.next(pc.connectionState);
+          const onChange = () => subscriber.next(pc.connectionState);
+          pc.addEventListener("connectionstatechange", onChange);
+          return () => pc.removeEventListener("connectionstatechange", onChange);
+        }),
+    ),
+    distinctUntilChanged(),
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
 }
 
 /**
@@ -26,24 +47,59 @@ export function useLiveClassPresence(params: {
 }) {
   const { classId, uid, name, role } = params;
 
+  const [reconnectToken, setReconnectToken] = useState(0);
   const [partyTracks, setPartyTracks] = useState<PartyTracks | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const disposeClientRef = useRef<(() => void) | null>(null);
+  /** Holds session$ so the PeerConnection stays alive and closes on leave. */
+  const sessionHoldRef = useRef<{ unsubscribe: () => void } | null>(null);
+
+  const reconnect = useCallback(() => {
+    setConnectError(null);
+    setReconnectToken((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     setPartyTracks(null);
     setConnectError(null);
+
     createPartyTracksClient(classId)
-      .then((pt) => {
-        if (!cancelled) setPartyTracks(pt);
+      .then((handle) => {
+        if (cancelled) {
+          handle.dispose();
+          return;
+        }
+        disposeClientRef.current = handle.dispose;
+
+        // Keep one subscription on session$ for the lifetime of this join.
+        // shareReplay(refCount) closes the PeerConnection when this unsubscribes
+        // and no push/pull subscribers remain — critical on leave/remount.
+        sessionHoldRef.current = handle.partyTracks.session$.subscribe({
+          error: (err) => {
+            if (cancelled) return;
+            const message =
+              err instanceof Error ? err.message : "Could not establish a media session.";
+            setConnectError(message);
+          },
+        });
+
+        setPartyTracks(handle.partyTracks);
       })
       .catch((err) => {
-        if (!cancelled) setConnectError(err?.message || "Could not connect to the class.");
+        if (!cancelled) {
+          setConnectError(err?.message || "Could not connect to the class.");
+        }
       });
+
     return () => {
       cancelled = true;
+      sessionHoldRef.current?.unsubscribe();
+      sessionHoldRef.current = null;
+      disposeClientRef.current?.();
+      disposeClientRef.current = null;
     };
-  }, [classId]);
+  }, [classId, reconnectToken]);
 
   const mic = useMemo(() => getMic(), []);
   const camera = useMemo(() => getCamera(), []);
@@ -51,6 +107,8 @@ export function useLiveClassPresence(params: {
 
   // Turn mic + camera on when joining so remote peers can see/hear without
   // an extra click (users can still mute from the control bar).
+  // Wait until partyTracks exists so the first push uses live tracks and
+  // completes SDP — that is what brings PeerConnection to "connected".
   useEffect(() => {
     if (!partyTracks) return;
     try {
@@ -73,7 +131,10 @@ export function useLiveClassPresence(params: {
   }, [mic, camera, screenshare]);
 
   const session$ = useMemo(() => partyTracks?.session$ ?? NEVER, [partyTracks]);
-  const sessionError$ = useMemo(() => partyTracks?.sessionError$ ?? NEVER, [partyTracks]);
+  const pcState$ = useMemo(
+    () => (partyTracks ? peerConnectionState$(partyTracks) : NEVER),
+    [partyTracks],
+  );
   const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
 
   const audioMeta$ = useMemo(
@@ -95,23 +156,70 @@ export function useLiveClassPresence(params: {
   );
 
   const session = useObservableAsValue(session$);
-  const sessionError = useObservableAsValue(sessionError$);
+  const connectionState = useObservableAsValue(pcState$, "new" as RTCPeerConnectionState);
   const audioMeta = useObservableAsValue(audioMeta$);
   const videoMeta = useObservableAsValue(videoMeta$);
   const screenMeta = useObservableAsValue(screenMeta$);
 
+  const isPcConnected = connectionState === "connected";
+
+  // Recover automatically if partytracks brings the PC back before we give up.
   useEffect(() => {
-    if (sessionError) {
-      setConnectError(sessionError);
-    }
-  }, [sessionError]);
+    if (isPcConnected) setConnectError(null);
+  }, [isPcConnected]);
+
+  // If ICE dies and partytracks' internal retry keeps thrashing, surface a
+  // recoverable error after a short grace period so the user can hard-reconnect.
+  useEffect(() => {
+    if (!partyTracks) return;
+    if (connectionState !== "failed" && connectionState !== "closed") return;
+    const t = window.setTimeout(() => {
+      setConnectError(
+        "Media connection was lost. Check your network (and that TURN is configured), then try again.",
+      );
+    }, 2500);
+    return () => window.clearTimeout(t);
+  }, [connectionState, partyTracks]);
+
+  // Stuck in "new"/"connecting" usually means ICE/TURN or mic permission never completed.
+  useEffect(() => {
+    if (!partyTracks || isPcConnected || connectError) return;
+    const t = window.setTimeout(() => {
+      setConnectError(
+        "Could not establish a media connection within 25 seconds. Allow camera/mic access, check your network, then try again.",
+      );
+    }, 25000);
+    return () => window.clearTimeout(t);
+  }, [partyTracks, isPcConnected, connectError]);
+
+  // Surface mic/camera permission failures instead of silently never connecting.
+  useEffect(() => {
+    if (!partyTracks) return;
+    const toMessage = (err: Error) => {
+      if (err.name === "NotAllowedError") {
+        return "Camera or microphone permission was blocked. Allow access and try again.";
+      }
+      if (err.name === "NotFoundError") {
+        return "No camera or microphone was found on this device.";
+      }
+      return err.message || "Could not access camera or microphone.";
+    };
+    const micSub = mic.error$.subscribe((err) => setConnectError(toMessage(err)));
+    const camSub = camera.error$.subscribe((err) => setConnectError(toMessage(err)));
+    return () => {
+      micSub.unsubscribe();
+      camSub.unsubscribe();
+    };
+  }, [partyTracks, mic, camera]);
 
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
 
   // Keep our own presence doc in sync with the current session + published tracks.
+  // Wait until the PeerConnection is connected so we never advertise tracks for a
+  // session peers cannot pull from (which produced tracks/new 410 spam).
   useEffect(() => {
-    if (!session?.sessionId) return;
+    if (!session?.sessionId || !isPcConnected) return;
     upsertOwnPresence({
       classId,
       uid,
@@ -128,6 +236,7 @@ export function useLiveClassPresence(params: {
     role,
     name,
     session?.sessionId,
+    isPcConnected,
     isMicOn,
     isCameraOn,
     isScreenOn,
@@ -154,7 +263,10 @@ export function useLiveClassPresence(params: {
   return {
     partyTracks,
     connectError,
-    isConnected: !!session?.sessionId,
+    reconnect,
+    /** True only when WebRTC PeerConnection is actually connected (not merely session created). */
+    isConnected: isPcConnected,
+    connectionState,
     mic,
     camera,
     screenshare,

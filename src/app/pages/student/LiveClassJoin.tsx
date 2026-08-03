@@ -27,12 +27,13 @@ import {
 function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass }) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { partyTracks, connectError, isConnected, mic, camera, roster, myPresence } = useLiveClassPresence({
-    classId,
-    uid: user!.id,
-    name: user!.name,
-    role: "student",
-  });
+  const { partyTracks, connectError, reconnect, isConnected, mic, camera, roster, myPresence } =
+    useLiveClassPresence({
+      classId,
+      uid: user!.id,
+      name: user!.name,
+      role: "student",
+    });
 
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
@@ -129,10 +130,13 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
   if (connectError) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
-        <p className="text-red-600">{connectError}</p>
-        <Button variant="outline" onClick={() => navigate("/student/live-classes")}>
-          Back
-        </Button>
+        <p className="max-w-md text-red-600">{connectError}</p>
+        <div className="flex flex-wrap justify-center gap-2">
+          <Button onClick={() => reconnect()}>Try again</Button>
+          <Button variant="outline" onClick={() => navigate("/student/live-classes")}>
+            Back
+          </Button>
+        </div>
       </div>
     );
   }
@@ -156,6 +160,7 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
         presence={p}
         partyTracks={partyTracks}
         isLocal={isLocal}
+        mediaReady={isConnected}
         localVideoTrack$={isLocal && isCameraOn ? camera.broadcastTrack$ : undefined}
         localAudioTrack$={isLocal && isMicOn ? mic.broadcastTrack$ : undefined}
         spotlighted={spotlighted}
