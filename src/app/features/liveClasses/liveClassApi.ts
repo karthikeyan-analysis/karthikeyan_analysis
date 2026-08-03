@@ -113,17 +113,34 @@ export function subscribeToLiveClassesForStudentBatch(
   batchId: string,
   onChange: (classes: LiveClass[]) => void,
 ): () => void {
-  const seen = new Map<string, LiveClass>();
-  const emit = () => onChange([...seen.values()].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")));
+  // Keep separate maps per query so a doc that stops matching one query is
+  // removed (unless the other query still matches).
+  const legacy = new Map<string, LiveClass>();
+  const multi = new Map<string, LiveClass>();
+  const emit = () => {
+    const merged = new Map<string, LiveClass>([...legacy, ...multi]);
+    onChange(
+      [...merged.values()].sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || "")),
+    );
+  };
 
-  const unsubLegacy = onSnapshot(query(collection(db, LIVE_CLASSES), where("batchId", "==", batchId)), (snap) => {
-    for (const d of snap.docs) seen.set(d.id, { id: d.id, ...(d.data() as any) } as LiveClass);
-    emit();
-  });
+  const unsubLegacy = onSnapshot(
+    query(collection(db, LIVE_CLASSES), where("batchId", "==", batchId)),
+    (snap) => {
+      legacy.clear();
+      for (const d of snap.docs) {
+        legacy.set(d.id, { id: d.id, ...(d.data() as any) } as LiveClass);
+      }
+      emit();
+    },
+  );
   const unsubMulti = onSnapshot(
     query(collection(db, LIVE_CLASSES), where("batchIds", "array-contains", batchId)),
     (snap) => {
-      for (const d of snap.docs) seen.set(d.id, { id: d.id, ...(d.data() as any) } as LiveClass);
+      multi.clear();
+      for (const d of snap.docs) {
+        multi.set(d.id, { id: d.id, ...(d.data() as any) } as LiveClass);
+      }
       emit();
     },
   );

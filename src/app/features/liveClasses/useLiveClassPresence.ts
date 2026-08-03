@@ -59,6 +59,7 @@ export function useLiveClassPresence(params: {
   }, [mic, camera, screenshare]);
 
   const session$ = useMemo(() => partyTracks?.session$ ?? NEVER, [partyTracks]);
+  const sessionError$ = useMemo(() => partyTracks?.sessionError$ ?? NEVER, [partyTracks]);
   const audioMeta$ = useMemo(
     () => (partyTracks ? partyTracks.push(mic.broadcastTrack$) : NEVER),
     [partyTracks, mic],
@@ -73,9 +74,16 @@ export function useLiveClassPresence(params: {
   );
 
   const session = useObservableAsValue(session$);
+  const sessionError = useObservableAsValue(sessionError$);
   const audioMeta = useObservableAsValue(audioMeta$);
   const videoMeta = useObservableAsValue(videoMeta$);
   const screenMeta = useObservableAsValue(screenMeta$);
+
+  useEffect(() => {
+    if (sessionError) {
+      setConnectError(sessionError);
+    }
+  }, [sessionError]);
 
   // broadcastTrack$ always emits *something* (including an empty fallback when
   // off) — only advertise tracks in presence while actually broadcasting so

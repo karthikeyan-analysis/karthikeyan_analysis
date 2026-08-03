@@ -140,10 +140,9 @@ export default function LiveClasses() {
                       <Button
                         size="sm"
                         className="bg-indigo-600 hover:bg-indigo-700"
-                        disabled={cls.status !== "active"}
                         onClick={() => navigate(`/student/live-classes/${cls.id}`)}
                       >
-                        {cls.status === "active" ? "Join class" : "Waiting for host"}
+                        {cls.status === "active" ? "Join class" : "Enter lobby"}
                       </Button>
                     ) : cls.recordingStatus === "ready" ? (
                       <Button

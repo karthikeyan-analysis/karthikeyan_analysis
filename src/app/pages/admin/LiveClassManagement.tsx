@@ -41,6 +41,7 @@ import {
   deleteLiveClass,
   endLiveClass,
   subscribeToLiveClassesForAdmin,
+  updateLiveClass,
 } from "../../features/liveClasses/liveClassApi";
 import { formatLiveClassBatchLabel } from "../../features/liveClasses/liveClassBatchUtils";
 import { isHostOrCoHost, liveClassStatusLabel } from "../../features/liveClasses/liveClassAvailability";
@@ -157,6 +158,11 @@ export default function LiveClassManagement() {
         coHostUids: cleanCoHosts,
         createdBy: user.id,
       });
+      // Activate immediately so students in the lobby can enter while the host connects.
+      await updateLiveClass(id, {
+        status: "active",
+        activeSince: new Date().toISOString(),
+      });
       setCreateOpen(false);
       resetForm();
       navigate(`/admin/live-classes/${id}/room`);
@@ -185,6 +191,21 @@ export default function LiveClassManagement() {
     } catch (e) {
       console.error(e);
       alert("Could not end the class.");
+    }
+  };
+
+  const startOrJoin = async (cls: LiveClass) => {
+    try {
+      if (cls.status !== "active" && cls.status !== "ended") {
+        await updateLiveClass(cls.id, {
+          status: "active",
+          activeSince: new Date().toISOString(),
+        });
+      }
+      navigate(`/admin/live-classes/${cls.id}/room`);
+    } catch (e) {
+      console.error(e);
+      alert("Could not start the class. Please try again.");
     }
   };
 
@@ -350,7 +371,7 @@ export default function LiveClassManagement() {
                             <Button
                               size="sm"
                               className="bg-indigo-600 hover:bg-indigo-700"
-                              onClick={() => navigate(`/admin/live-classes/${cls.id}/room`)}
+                              onClick={() => void startOrJoin(cls)}
                             >
                               <Radio className="mr-1 h-3.5 w-3.5" />
                               {cls.status === "active" ? "Join Room" : "Start"}

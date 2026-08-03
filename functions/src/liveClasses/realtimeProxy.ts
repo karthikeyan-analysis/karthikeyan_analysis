@@ -17,6 +17,22 @@ export const cfTurnAppToken = defineSecret("CF_TURN_APP_TOKEN");
  */
 const CLIENT_PREFIX = "/api/realtime";
 
+function normalizeProxyPath(reqPath: string, reqUrl: string): { path: string; search: string } {
+  let path = reqPath || "/";
+  if (path.startsWith("/realtimeProxy")) {
+    path = path.slice("/realtimeProxy".length) || "/";
+  }
+  if (!path.startsWith(CLIENT_PREFIX)) {
+    path = `${CLIENT_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
+  }
+  const search = reqUrl.includes("?") ? reqUrl.slice(reqUrl.indexOf("?")) : "";
+  return { path, search };
+}
+
+function isIceServersPath(path: string): boolean {
+  return path.endsWith("/generate-ice-servers");
+}
+
 /**
  * The only "video" backend function. Every session/track/renegotiate call from
  * the browser comes through here first: verify Firebase Auth + enrollment/role
@@ -42,47 +58,42 @@ export const realtimeProxy = onRequest(
         return;
       }
 
+      const { path, search } = normalizeProxyPath(req.path || "/", req.url || "");
+
+      // partytracks' built-in ICE fetch omits query params. Allow authenticated
+      // callers to mint ICE/TURN without classId so session setup can proceed.
+      // Session/track routes still require class-scoped authorization below.
       const classId = String(req.query.classId || "");
       if (!classId) {
-        res.status(400).send("classId required");
-        return;
-      }
+        if (!isIceServersPath(path)) {
+          res.status(400).send("classId required");
+          return;
+        }
+      } else {
+        const db = admin.firestore();
+        const classSnap = await db.collection("liveClasses").doc(classId).get();
+        if (!classSnap.exists) {
+          res.status(404).send("Class not found");
+          return;
+        }
+        const cls = classSnap.data() as Record<string, any>;
 
-      const db = admin.firestore();
-      const classSnap = await db.collection("liveClasses").doc(classId).get();
-      if (!classSnap.exists) {
-        res.status(404).send("Class not found");
-        return;
-      }
-      const cls = classSnap.data() as Record<string, any>;
-
-      const access = await resolveCallerAccess(db, uid, cls);
-      if (access.kind === "denied") {
-        res.status(403).send(access.reason);
-        return;
-      }
-      if (access.kind === "admin") {
-        res.status(403).send("You're not assigned as a host or co-host for this class.");
-        return;
-      }
-      if (access.kind === "student" && cls.status !== "active") {
-        res.status(412).send("The host hasn't started this class yet.");
-        return;
+        const access = await resolveCallerAccess(db, uid, cls);
+        if (access.kind === "denied") {
+          res.status(403).send(access.reason);
+          return;
+        }
+        if (access.kind === "admin") {
+          res.status(403).send("You're not assigned as a host or co-host for this class.");
+          return;
+        }
+        if (access.kind === "student" && cls.status !== "active") {
+          res.status(412).send("The host hasn't started this class yet.");
+          return;
+        }
       }
 
       const { routePartyTracksRequest } = await import("partytracks/server");
-
-      // Some runtimes strip the function name from req.path; others leave it.
-      let path = req.path || "/";
-      if (path.startsWith("/realtimeProxy")) {
-        path = path.slice("/realtimeProxy".length) || "/";
-      }
-      // Always present the client-facing prefix to partytracks so cookie Path
-      // and pathname matching stay consistent with the browser URL.
-      if (!path.startsWith(CLIENT_PREFIX)) {
-        path = `${CLIENT_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
-      }
-      const search = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
 
       const headers = new Headers();
       for (const [key, value] of Object.entries(req.headers)) {
@@ -122,9 +133,12 @@ export const realtimeProxy = onRequest(
       const setCookies =
         (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.() ?? [];
       const origin = req.get("origin") || "";
+      const referer = req.get("referer") || "";
       const isLocalHttp =
         /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin) ||
-        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(req.get("referer") || "");
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(referer) ||
+        /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/i.test(origin) ||
+        /^http:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[0-1])\.)/i.test(referer);
       for (const cookie of setCookies) {
         // partytracks always sets Secure; browsers on http://localhost drop it.
         // Strip Secure only for local Vite so session-lock still works in dev.

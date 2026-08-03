@@ -99,9 +99,9 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     }
   }, [cls.liveTestId, navigate]);
 
-  // Host ended the class while we were in it.
+  // Host ended the class, or left and put it back to waiting.
   useEffect(() => {
-    if (cls.status === "ended") {
+    if (cls.status !== "active") {
       navigate("/student/live-classes", { replace: true });
     }
   }, [cls.status, navigate]);
@@ -282,9 +282,15 @@ function WaitingForHost({ cls }: { cls: LiveClass | null }) {
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 p-8 text-center">
       <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
       <p className="text-lg font-semibold text-slate-800">
-        {cls?.status === "ended" ? "This class has ended." : "Waiting for the host to start the class…"}
+        {cls?.status === "ended"
+          ? "This class has ended."
+          : "Waiting for the host to start the class…"}
       </p>
-      <p className="text-sm text-slate-500">{cls?.name}</p>
+      <p className="max-w-md text-sm text-slate-500">
+        {cls?.status === "ended"
+          ? cls.name
+          : `${cls?.name || "This class"} will open automatically when the host starts.`}
+      </p>
       <Button variant="outline" onClick={() => navigate("/student/live-classes")}>
         Back to Live Classes
       </Button>

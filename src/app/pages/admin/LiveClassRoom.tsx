@@ -80,11 +80,27 @@ function LiveClassRoomInner({
 
   useEffect(() => subscribeToDoubts(classId, setDoubts), [classId]);
 
-  // Meeting only counts as "active" (lets students past realtimeProxy) once
-  // a host/co-host is actually connected.
+  // Mark the class live as soon as a host/co-host opens the room so students
+  // are not stuck on "Waiting for host" while WebRTC is still negotiating.
+  useEffect(() => {
+    if (cls.status === "ended" || cls.status === "active") return;
+    void updateLiveClass(classId, {
+      status: "active",
+      activeSince: new Date().toISOString(),
+    }).catch((err) => {
+      console.error("Failed to activate live class", err);
+    });
+  }, [classId, cls.status]);
+
+  // Keep active if we reconnect after a brief drop while still in the room.
   useEffect(() => {
     if (isConnected && cls.status !== "active" && cls.status !== "ended") {
-      void updateLiveClass(classId, { status: "active", activeSince: new Date().toISOString() });
+      void updateLiveClass(classId, {
+        status: "active",
+        activeSince: new Date().toISOString(),
+      }).catch((err) => {
+        console.error("Failed to re-activate live class", err);
+      });
     }
   }, [isConnected, cls.status, classId]);
 
