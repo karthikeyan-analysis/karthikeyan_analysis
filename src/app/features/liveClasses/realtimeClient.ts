@@ -39,8 +39,7 @@ async function fetchIceServers(classId: string, idToken: string): Promise<IceSer
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(
-      body.trim() ||
-        `Could not get connection servers (HTTP ${res.status}). Check that live class credentials are configured.`,
+      body.trim() || `ICE server error (HTTP ${res.status})`,
     );
   }
   const data = (await res.json()) as { iceServers?: IceServer[] };

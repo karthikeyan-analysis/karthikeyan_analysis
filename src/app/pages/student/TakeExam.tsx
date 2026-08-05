@@ -43,14 +43,22 @@ import type {
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import {
   Award,
+  Camera,
   Clock,
+  Eye,
   FileQuestion,
   Flag,
   Layers,
   Loader2,
+  Megaphone,
   Pause,
+  Radio,
   Save,
+  ShieldAlert,
   Timer,
+  Video,
+  Volume2,
+  VolumeX,
   XCircle,
   type LucideIcon,
 } from "lucide-react";
@@ -58,6 +66,12 @@ import { submitAttempt } from "../../features/exams/examApi";
 import { sha256Base64 } from "../../features/exams/password";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
+import {
+  subscribeToActiveLiveTestForTest,
+  upsertLiveTestPresence,
+} from "../../features/liveTests/liveTestApi";
+import { useLiveTestPresence } from "../../features/liveTests/useLiveTestPresence";
+import type { LiveTestSession } from "../../features/liveTests/liveTestTypes";
 import { enrolledStudentsCanAccessTest } from "../../features/exams/settings";
 
 function clamp(n: number, min: number, max: number) {
@@ -145,6 +159,74 @@ export default function TakeExam() {
   const [isPaused, setIsPaused] = useState(false);
 
   const autosaveTimer = useRef<number | null>(null);
+
+  // Live Test & Video Proctoring Integration
+  const [liveSession, setLiveSession] = useState<LiveTestSession | null>(null);
+  const [showAdminStream, setShowAdminStream] = useState(true);
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const [showTabWarningModal, setShowTabWarningModal] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    const unsub = subscribeToActiveLiveTestForTest(id, (session) => {
+      setLiveSession(session);
+    });
+    return unsub;
+  }, [id]);
+
+  const totalAnsweredCount = useMemo(
+    () => Object.values(answers).filter((v) => v !== null && v !== undefined).length,
+    [answers],
+  );
+
+  const { roster, myPresence, cameraStatus } = useLiveTestPresence({
+    sessionId: liveSession?.id || "",
+    uid: user?.id || "",
+    name: user?.name || "Student",
+    role: "student",
+    currentQuestionIndex: currentIndex,
+    totalAnswered: totalAnsweredCount,
+    totalQuestions: questions.length,
+    isSubmitted: attemptStatus === "submitted",
+  });
+
+  // Tab Switch / Focus Loss Proctoring Detector
+  useEffect(() => {
+    if (!liveSession || attemptStatus === "submitted") return;
+
+    const handleBlur = () => {
+      setTabSwitchCount((prev) => {
+        const next = prev + 1;
+        setShowTabWarningModal(true);
+        if (liveSession?.id && user?.id) {
+          void upsertLiveTestPresence(liveSession.id, user.id, {
+            name: user.name || "Student",
+            role: "student",
+            tabSwitchCount: next,
+            isTabActive: false,
+          });
+        }
+        return next;
+      });
+    };
+
+    const handleFocus = () => {
+      if (liveSession?.id && user?.id) {
+        void upsertLiveTestPresence(liveSession.id, user.id, {
+          name: user.name || "Student",
+          role: "student",
+          isTabActive: true,
+        });
+      }
+    };
+
+    window.addEventListener("blur", handleBlur);
+    window.addEventListener("focus", handleFocus);
+    return () => {
+      window.removeEventListener("blur", handleBlur);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [liveSession, attemptStatus, user?.id, user?.name]);
 
   // Prefetch cache: populated as soon as testId+uid are known, before instructions are shown.
   // Using a ref (not state) so reading it inside the main effect never triggers a re-run.
@@ -987,6 +1069,18 @@ export default function TakeExam() {
 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden bg-gradient-to-b from-slate-100 to-slate-50">
+      {/* LIVE PROCTOR ANNOUNCEMENT TICKER BANNER */}
+      {liveSession?.announcement ? (
+        <div className="bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 px-4 py-2 text-slate-950 shadow-md flex items-center justify-between text-xs sm:text-sm font-semibold border-b border-amber-600/30 animate-pulse">
+          <div className="flex items-center gap-2 truncate">
+            <Megaphone className="h-4 w-4 shrink-0 text-slate-950" />
+            <span>PROCTOR ANNOUNCEMENT:</span>
+            <span className="font-bold text-slate-900">{liveSession.announcement}</span>
+          </div>
+          <Badge className="bg-slate-950 text-amber-300 hover:bg-slate-900 text-[10px] shrink-0">LIVE</Badge>
+        </div>
+      ) : null}
+
       <div className="shrink-0 px-3 pt-2 md:px-5 md:pt-3">
         <header className="rounded-xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
           <div className="h-0.5 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500" aria-hidden />
@@ -1235,7 +1329,60 @@ export default function TakeExam() {
         </Card>
 
         <Card className="min-h-0 flex flex-col overflow-hidden">
-          <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-hidden">
+          <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-hidden space-y-3">
+            {/* ELEMENT 1: STUDENT LIVE PROCTORING CAMERA FEED WIDGET */}
+            {liveSession && (
+              <div className="shrink-0 rounded-xl border border-slate-800 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide uppercase text-emerald-400">
+                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                    LIVE PROCTORING ACTIVE
+                  </span>
+                  <Badge variant="outline" className="text-[9px] text-slate-300 border-slate-700 bg-slate-900">
+                    WEBCAM
+                  </Badge>
+                </div>
+                <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
+                  <div className="text-center p-2">
+                    <Camera className="h-6 w-6 text-emerald-400 mx-auto mb-1 animate-pulse" />
+                    <p className="text-[11px] font-semibold text-slate-200">{user?.name || "Student"}</p>
+                    <p className="text-[9px] text-slate-400">Webcam Stream Monitored Live</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ELEMENT 2: ADMIN LIVE VIDEO STREAM & INSTRUCTOR BROADCAST TILE */}
+            {liveSession?.proctoringSettings?.enableAdminVideo && (
+              <div className="shrink-0 rounded-xl border border-indigo-900/80 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide uppercase text-indigo-300">
+                    <Video className="h-3.5 w-3.5 text-indigo-400" />
+                    INSTRUCTOR STREAM
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminStream(!showAdminStream)}
+                    className="text-[10px] text-indigo-300 underline font-medium hover:text-white"
+                  >
+                    {showAdminStream ? "Hide Stream" : "Show Stream"}
+                  </button>
+                </div>
+
+                {showAdminStream && (
+                  <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-indigo-950/60 border border-indigo-900/50 flex items-center justify-center">
+                    <div className="text-center p-2">
+                      <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1" />
+                      <p className="text-[11px] font-semibold text-indigo-200">
+                        {liveSession.adminName || "Proctor / Instructor"}
+                      </p>
+                      <p className="text-[9px] text-indigo-300/80">Live Video Broadcast Active</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -1379,6 +1526,69 @@ export default function TakeExam() {
         </Card>
       </div>
       </div>
+
+      {/* TAB SWITCH WARNING MODAL */}
+      {showTabWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 border border-rose-200">
+            <div className="flex items-center gap-3 text-rose-600">
+              <ShieldAlert className="h-8 w-8 shrink-0" />
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Proctoring Alert: Tab Switched</h3>
+                <p className="text-xs text-rose-700 font-semibold">
+                  Warning #{tabSwitchCount} of {liveSession?.proctoringSettings?.maxTabSwitchWarnings || 3}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              You left the exam window or switched tabs. Live AI &amp; Admin proctors are monitoring your camera feed and browser focus.
+              Continued tab switching may result in immediate test termination.
+            </p>
+            <div className="flex justify-end">
+              <Button
+                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
+                onClick={() => setShowTabWarningModal(false)}
+              >
+                Return to Exam Immediately
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PROCTOR DIRECT WARNING MESSAGE MODAL */}
+      {myPresence?.warningMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 border border-amber-300">
+            <div className="flex items-center gap-3 text-amber-600">
+              <ShieldAlert className="h-8 w-8 shrink-0" />
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Message from Live Proctor</h3>
+                <p className="text-xs text-amber-800 font-medium">Direct Admin Warning</p>
+              </div>
+            </div>
+            <div className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-950 border border-amber-200">
+              &quot;{myPresence.warningMessage}&quot;
+            </div>
+            <div className="flex justify-end">
+              <Button
+                className="bg-slate-900 hover:bg-slate-800 text-white font-semibold"
+                onClick={() => {
+                  if (liveSession?.id && user?.id) {
+                    void upsertLiveTestPresence(liveSession.id, user.id, {
+                      name: user.name || "Student",
+                      role: "student",
+                      warningMessage: "",
+                    });
+                  }
+                }}
+              >
+                I Understand &amp; Acknowledge
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

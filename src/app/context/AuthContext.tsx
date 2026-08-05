@@ -342,13 +342,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    let unsubscribe: (() => void) | undefined;
 
+    // ── Mutable coordination flags (plain vars — no stale-closure risk) ──────
+    // True once getRedirectResult processing (+ any completeStudentGoogleSignIn)
+    // has fully resolved. The onAuthStateChanged handler buffers its first
+    // emission until this flips so we never override a redirect-built user.
+    let redirectProcessingComplete = false;
+    // The auth state payload received while redirect was still in-flight.
+    // `undefined` means onAuthStateChanged hasn't fired yet.
+    let bufferedAuthUser: FirebaseUser | null | undefined = undefined;
+    // Set to true when the redirect path itself built and set the user.
+    // Prevents the subsequent onAuthStateChanged emission from calling
+    // fetchUserData again (which can return null due to write-consistency lag).
+    let userWasSetByRedirect = false;
+
+    const resolveAuthUser = async (firebaseUser: FirebaseUser | null) => {
+      if (firebaseUser) {
+        const userData = await fetchUserData(firebaseUser);
+        if (!cancelled) setUser(userData);
+      } else if (!cancelled) {
+        setUser(null);
+      }
+      if (!cancelled) setLoading(false);
+    };
+
+    // ── 1. Subscribe IMMEDIATELY — never miss the first auth state emission ──
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (cancelled) return;
+
+      if (!redirectProcessingComplete) {
+        // Redirect processing is still in-flight; buffer this emission.
+        // boot()'s finally block will handle it once the result is known.
+        bufferedAuthUser = firebaseUser;
+        return;
+      }
+
+      // The redirect path already built the correct user — skip the extra
+      // fetchUserData round-trip that could race with write-consistency lag.
+      if (userWasSetByRedirect) {
+        userWasSetByRedirect = false; // allow future auth changes to process normally
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      await resolveAuthUser(firebaseUser);
+    });
+
+    // ── 2. Process redirect result in parallel with the listener ─────────────
     const boot = async () => {
-      // Complete redirect Google login BEFORE listening to auth state,
-      // so older devices that use redirect get a fully provisioned student session.
       try {
         const redirectResult = await getRedirectResult(auth);
+
         if (redirectResult?.user && !cancelled) {
           const completed = await completeStudentGoogleSignIn(redirectResult.user);
           if (!cancelled) {
@@ -357,32 +401,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(null);
             } else {
               setUser(completed.user || null);
+              userWasSetByRedirect = true;
             }
+            // Explicitly resolve loading here — don't wait for onAuthStateChanged.
+            setLoading(false);
           }
         }
       } catch (error) {
         console.error("Google redirect login error:", error);
-        storeGoogleLoginError("Google sign-in failed. Please try again.");
-      }
-
-      if (cancelled) return;
-
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        if (firebaseUser) {
-          const userData = await fetchUserData(firebaseUser);
-          if (!cancelled) setUser(userData);
-        } else if (!cancelled) {
+        if (!cancelled) {
+          storeGoogleLoginError("Google sign-in failed. Please try again.");
           setUser(null);
         }
-        if (!cancelled) setLoading(false);
-      });
+      } finally {
+        if (cancelled) return;
+
+        // Unlock the auth state handler for all future emissions.
+        redirectProcessingComplete = true;
+
+        if (!userWasSetByRedirect) {
+          if (bufferedAuthUser !== undefined) {
+            // An auth state arrived while we were processing the redirect;
+            // handle it now that we know there was no (or a failed) redirect.
+            await resolveAuthUser(bufferedAuthUser);
+          }
+          // If bufferedAuthUser is still undefined, onAuthStateChanged hasn't
+          // fired yet. It will fire naturally now that the flag is true and
+          // will call resolveAuthUser directly.
+        }
+        // If userWasSetByRedirect=true, loading was already set above.
+      }
     };
 
     boot();
 
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribe();
     };
   }, []);
 
@@ -434,11 +489,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       writeStoredActiveBatch(studentRecordId, activeBatchId);
     }
 
+    const userName =
+      studentRecord.name?.trim() || firebaseUser.displayName || "Student";
+    const photoURL: string | undefined =
+      (typeof studentRecord.photoURL === "string" && studentRecord.photoURL.trim()
+        ? studentRecord.photoURL.trim()
+        : undefined) ??
+      firebaseUser.photoURL ??
+      undefined;
+
     await setDoc(
       doc(db, "users", firebaseUser.uid),
       {
         role: "student",
-        name: studentRecord.name || firebaseUser.displayName || "Student",
+        name: userName,
         email: signedInEmail,
         studentId: studentRecord.studentId,
         batchId: activeBatchId ?? null,
@@ -446,14 +510,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         studentRecordId,
         isGuestExamParticipant: false,
         guestExamTestId: null,
-        ...(studentRecord.photoURL ? { photoURL: studentRecord.photoURL } : {}),
+        ...(photoURL ? { photoURL } : {}),
         updatedAt: new Date().toISOString(),
       },
       { merge: true },
     );
 
     await writeStudentSession(studentRecordId);
-    const studentUser = await fetchUserData(firebaseUser);
+
+    // Build the User object directly from the data we already hold in memory.
+    // Calling fetchUserData here would add an extra Firestore read that can
+    // return null due to write-consistency lag on the doc we just wrote —
+    // which was the root cause of "success: true but user: null" after redirects.
+    const studentUser: User = {
+      id: firebaseUser.uid,
+      email: signedInEmail,
+      name: userName,
+      role: "student",
+      studentId: studentRecord.studentId,
+      batchId: activeBatchId ?? undefined,
+      batchIds: batchIds.length ? batchIds : undefined,
+      studentRecordId,
+      photoURL,
+      isGuestExamParticipant: false,
+    };
+
     return { success: true, user: studentUser };
   }
 

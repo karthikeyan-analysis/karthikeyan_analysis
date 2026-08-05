@@ -312,10 +312,6 @@ function LiveClassRoomInner({
                 {isRecording ? <Square className="mr-1 h-4 w-4" /> : <Circle className="mr-1 h-4 w-4" />}
                 {isUploading ? "Uploading…" : isRecording ? "Stop Recording" : "Record"}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => void openTestPicker()}>
-                <ClipboardList className="mr-1 h-4 w-4" />
-                Live Test
-              </Button>
               <Button size="sm" variant="outline" onClick={() => void leaveRoom()}>
                 Leave
               </Button>
@@ -325,15 +321,6 @@ function LiveClassRoomInner({
               </Button>
             </div>
           </div>
-
-          {cls.liveTestId ? (
-            <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              <span>Live test in progress — students are being redirected to take it.</span>
-              <Button size="sm" variant="outline" onClick={() => void stopLiveTest(classId)}>
-                Stop Test
-              </Button>
-            </div>
-          ) : null}
 
           {spotlightPresence ? (
             <div className="space-y-2">
@@ -393,40 +380,6 @@ function LiveClassRoomInner({
           </div>
         </div>
       </div>
-
-      <Dialog open={testPickerOpen} onOpenChange={setTestPickerOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Launch a Live Test</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-80 space-y-2 overflow-y-auto">
-            {availableTests.length === 0 ? (
-              <p className="text-sm text-slate-500">
-                No published tests found for this class&apos;s batch(es). Publish one under Test Management first.
-              </p>
-            ) : (
-              availableTests.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  className="w-full rounded-lg border border-slate-200 p-3 text-left text-sm hover:border-indigo-300 hover:bg-indigo-50/40"
-                  onClick={() => void launchTest(t.id)}
-                >
-                  <p className="font-medium text-slate-800">{t.title}</p>
-                  <p className="text-xs text-slate-500">
-                    {t.subject} · {t.totalQuestions} questions
-                  </p>
-                </button>
-              ))
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setTestPickerOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

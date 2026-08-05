@@ -30,6 +30,10 @@ import { useNavigate } from "react-router";
 import StudentAvatar from "../../components/StudentAvatar";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 
+import { subscribeAllActiveLiveTestSessions } from "../../features/liveTests/liveTestApi";
+import type { LiveTestSession } from "../../features/liveTests/liveTestTypes";
+import { Radio } from "lucide-react";
+
 export default function TestSchedule() {
   const { user } = useAuth();
   const { photoURL } = useStudentPhoto();
@@ -42,6 +46,14 @@ export default function TestSchedule() {
   const [examLoading, setExamLoading] = useState(false);
   const [attemptByExamId, setAttemptByExamId] = useState<Record<string, ExamAttempt | null>>({});
   const [attemptLoading, setAttemptLoading] = useState(false);
+  const [activeLiveSessions, setActiveLiveSessions] = useState<LiveTestSession[]>([]);
+
+  useEffect(() => {
+    const unsub = subscribeAllActiveLiveTestSessions((sessions) => {
+      setActiveLiveSessions(sessions);
+    });
+    return unsub;
+  }, []);
 
   useEffect(() => {
     if (user?.isGuestExamParticipant && user.guestExamTestId) {
@@ -242,6 +254,10 @@ export default function TestSchedule() {
                       {isExam ? (
                           visibleAttemptByExamId[test.id]?.status === "submitted" ? (
                             <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
+                          ) : activeLiveSessions.some((s) => s.testId === test.id) ? (
+                            <Badge className="bg-emerald-600 text-white font-bold animate-pulse">
+                              <Radio className="w-3 h-3 mr-1 inline" /> LIVE TEST NOW
+                            </Badge>
                           ) : getExamWindowStatus(test, now) === "active" ? (
                             <Badge className="bg-green-100 text-green-800">START NOW</Badge>
                           ) : getExamWindowStatus(test, now) === "upcoming" ? (
@@ -258,6 +274,14 @@ export default function TestSchedule() {
                           visibleAttemptByExamId[test.id]?.status === "submitted" ? (
                             <Button disabled variant="outline" size="sm" className="text-xs">
                               Completed
+                            </Button>
+                          ) : activeLiveSessions.some((s) => s.testId === test.id) ? (
+                            <Button
+                              onClick={() => navigate(`/student/tests/${test.id}`)}
+                              className="bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md"
+                              size="sm"
+                            >
+                              <Radio className="w-3.5 h-3.5 mr-1.5 animate-pulse" /> Join Live Test
                             </Button>
                           ) : getExamWindowStatus(test, now) === "closed" ? (
                             <Button disabled variant="outline" size="sm" className="text-xs">

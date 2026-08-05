@@ -93,13 +93,6 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     }
   }, [myPresence?.kicked, navigate]);
 
-  // Live test → existing exam runtime (attendance leave fires via unmount).
-  useEffect(() => {
-    if (cls.liveTestId) {
-      navigate(`/student/tests/${cls.liveTestId}`);
-    }
-  }, [cls.liveTestId, navigate]);
-
   // Host ended the class, or left and put it back to waiting.
   useEffect(() => {
     if (cls.status !== "active") {

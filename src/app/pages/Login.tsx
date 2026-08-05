@@ -133,16 +133,20 @@ export default function Login({ role = "student" }: LoginProps) {
     setLoading(true);
     try {
       const result = await loginStudentWithGoogle();
-      if (result.success) {
-        // Popup path: AuthContext has user; redirect effect / navigate below.
-        // Prefer select-batch when multi-enrolled without an active choice.
-        navigate("/student");
-      } else {
+      if (!result.success) {
         setError(result.error || "Google sign-in failed.");
-        setLoading(false);
       }
+      // On popup success: setLoading(false) fires in `finally` below, then the
+      // useEffect watching [authLoading, loading, user] handles navigation once
+      // AuthContext has set the user. Having navigate() here AND in the effect
+      // created a race that left `loading` stuck true and blocked the effect gate.
+      //
+      // On redirect initiation: the browser replaces this page immediately;
+      // the finally runs before unload but it doesn't matter — component unmounts.
     } catch (err: any) {
       setError(err?.message || "Google sign-in failed. Please try again.");
+    } finally {
+      // Always clear local loading so the navigation useEffect can fire.
       setLoading(false);
     }
   };

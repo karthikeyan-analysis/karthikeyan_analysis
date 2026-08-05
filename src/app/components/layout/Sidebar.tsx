@@ -60,6 +60,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Learning",
       items: [
         { to: "/admin/live-classes", icon: Video, label: "Live Classes", end: true },
+        { to: "/admin/live-tests", icon: Radio, label: "Conduct Live Test", end: true },
         { to: "/admin/media", icon: Upload, label: "Media", end: true },
         { to: "/admin/tests", icon: ClipboardList, label: "Tests", end: true },
       ],
@@ -93,7 +94,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
   const cohostGroups: NavGroup[] = [
     {
-      items: [{ to: "/admin/live-classes", icon: Video, label: "Live Classes", end: true }],
+      items: [
+        { to: "/admin/live-classes", icon: Video, label: "Live Classes", end: true },
+        { to: "/admin/live-tests", icon: Radio, label: "Conduct Live Test", end: true },
+      ],
     },
   ];
 

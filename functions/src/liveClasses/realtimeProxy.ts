@@ -160,25 +160,44 @@ export const realtimeProxy = onRequest(
         }
       } else {
         const db = admin.firestore();
-        const classSnap = await db.collection("liveClasses").doc(classId).get();
+        let classSnap = await db.collection("liveClasses").doc(classId).get();
+        let isLiveTestSession = false;
         if (!classSnap.exists) {
-          res.status(404).send("Class not found");
+          classSnap = await db.collection("liveTestSessions").doc(classId).get();
+          if (classSnap.exists) {
+            isLiveTestSession = true;
+          }
+        }
+        if (!classSnap.exists) {
+          res.status(404).send("Class or live test session not found");
           return;
         }
         const cls = classSnap.data() as Record<string, any>;
 
-        const access = await resolveCallerAccess(db, uid, cls);
-        if (access.kind === "denied") {
-          res.status(403).send(access.reason);
-          return;
-        }
-        if (access.kind === "admin") {
-          res.status(403).send("You're not assigned as a host or co-host for this class.");
-          return;
-        }
-        if (access.kind === "student" && cls.status !== "active") {
-          res.status(412).send("The host hasn't started this class yet.");
-          return;
+        if (isLiveTestSession) {
+          const userSnap = await db.collection("users").doc(uid).get();
+          const adminSnap = await db.collection("admins").doc(uid).get();
+          const userDoc = userSnap.data();
+          const adminDoc = adminSnap.data();
+          const isAdminCaller = userDoc?.role === "admin" || adminDoc?.role === "admin";
+          if (!isAdminCaller && cls.status !== "active") {
+            res.status(412).send("The live test session is not active.");
+            return;
+          }
+        } else {
+          const access = await resolveCallerAccess(db, uid, cls);
+          if (access.kind === "denied") {
+            res.status(403).send(access.reason);
+            return;
+          }
+          if (access.kind === "admin") {
+            res.status(403).send("You're not assigned as a host or co-host for this class.");
+            return;
+          }
+          if (access.kind === "student" && cls.status !== "active") {
+            res.status(412).send("The host hasn't started this class yet.");
+            return;
+          }
         }
       }
 

@@ -49,6 +49,7 @@ import CoHostManagement from "./pages/admin/CoHostManagement";
 import LiveClasses from "./pages/student/LiveClasses";
 import LiveClassJoin from "./pages/student/LiveClassJoin";
 import LiveClassRecording from "./pages/student/LiveClassRecording";
+import ConductLiveTest from "./pages/admin/ConductLiveTest";
 
 function studentNeedsBatchPicker(user: {
   role: string;
@@ -135,12 +136,14 @@ function AdminOnlyRoute({ children }: { children: ReactElement }) {
   if (!user) return <Navigate to="/admin/login" replace />;
   if (user.role !== "admin") return <Navigate to="/student" replace />;
 
-  // Co-hosts may only use Live Classes (list / room / attendance / recording).
+  // Co-hosts may use Live Classes and Live Tests modules.
   if (user.adminKind === "cohost") {
     const path = location.pathname;
     const allowed =
       path === "/admin/live-classes" ||
-      path.startsWith("/admin/live-classes/");
+      path.startsWith("/admin/live-classes/") ||
+      path === "/admin/live-tests" ||
+      path.startsWith("/admin/live-tests/");
     if (!allowed) return <Navigate to="/admin/live-classes" replace />;
   }
 
@@ -225,6 +228,7 @@ export const router = createBrowserRouter([
       { path: "portal-settings", element: <PortalSettingsPage /> },
       { path: "co-hosts", element: <CoHostManagement /> },
       { path: "live-classes", element: <LiveClassManagement /> },
+      { path: "live-tests", element: <ConductLiveTest /> },
       { path: "live-classes/:id/attendance", element: <LiveClassAttendance /> },
       { path: "live-classes/:id/recording", element: <LiveClassRecording /> },
       { path: "tests/new", element: <ExamCreatePage /> },

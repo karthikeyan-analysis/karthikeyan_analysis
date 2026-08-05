@@ -189,6 +189,17 @@ service cloud.firestore {
       }
     }
 
+    match /liveTestSessions/{id} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+
+      match /presence/{uid} {
+        allow read: if isSignedIn();
+        allow create, delete: if isOwner(uid);
+        allow update: if isOwner(uid) || isAdmin();
+      }
+    }
+
     match /{document=**} {
       allow read, write: if isAdmin();
     }
