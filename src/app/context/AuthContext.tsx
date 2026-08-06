@@ -105,17 +105,22 @@ function getDeviceInfo(): string {
   return `${browser} on ${os}`;
 }
 
-async function writeStudentSession(studentRecordId: string): Promise<void> {
+async function writeStudentSession(studentRecordId: string): Promise<string> {
   const sessionToken = generateSessionToken();
-  await updateDoc(doc(db, "students", studentRecordId), {
-    activeSessionToken: sessionToken,
-    activeDevice: getDeviceInfo(),
-    activeDeviceLoginAt: new Date().toISOString(),
-  });
   localStorage.setItem(
     STUDENT_SESSION_KEY,
     JSON.stringify({ studentRecordId, sessionToken }),
   );
+  try {
+    await updateDoc(doc(db, "students", studentRecordId), {
+      activeSessionToken: sessionToken,
+      activeDevice: getDeviceInfo(),
+      activeDeviceLoginAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error("Error updating active session in Firestore:", err);
+  }
+  return sessionToken;
 }
 
 /** Admin utility: clears the active device lock so the student can log in fresh. */
@@ -180,9 +185,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const isLoggingInRef = React.useRef(false);
 
   const fetchUserData = async (
     firebaseUser: FirebaseUser,
+    options?: { isFreshLogin?: boolean },
   ): Promise<User | null> => {
     try {
       const userDocRef = doc(db, "users", firebaseUser.uid);
@@ -276,8 +283,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             );
           }
 
-          // ── Single-device enforcement (skip for anonymous/guest users) ──
-          if (studentRecordId && !firebaseUser.isAnonymous) {
+          // ── Single-device enforcement (skip for anonymous/guest users and fresh login flows) ──
+          if (
+            studentRecordId &&
+            !firebaseUser.isAnonymous &&
+            !options?.isFreshLogin &&
+            !isLoggingInRef.current
+          ) {
             const localRaw = localStorage.getItem(STUDENT_SESSION_KEY);
             if (localRaw) {
               try {
@@ -550,9 +562,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
     role: UserRole,
   ): Promise<boolean> => {
+    isLoggingInRef.current = true;
     try {
       const result = await signInWithEmailAndPassword(auth, email, password);
-      const userData = await fetchUserData(result.user);
+      const userData = await fetchUserData(result.user, { isFreshLogin: true });
       if (userData && userData.role === role) {
         // Register this device as the active session for students
         if (role === "student" && userData.studentRecordId) {
@@ -567,6 +580,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Login error:", error);
       return false;
+    } finally {
+      isLoggingInRef.current = false;
     }
   };
 
@@ -574,6 +589,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     success: boolean;
     error?: string;
   }> => {
+    isLoggingInRef.current = true;
     const provider = new GoogleAuthProvider();
     // Force account-picker even when the user already has a session.
     provider.setCustomParameters({ prompt: "select_account" });
@@ -630,6 +646,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         success: false,
         error: error?.message || "Could not sign in with Google. Please try again.",
       };
+    } finally {
+      isLoggingInRef.current = false;
     }
   };
 
@@ -642,6 +660,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     username: string,
     password: string,
   ): Promise<{ success: boolean; error?: string }> => {
+    isLoggingInRef.current = true;
     try {
       const functions = getFunctions();
       const studentPortalLogin = httpsCallable<
@@ -660,8 +679,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const credential = await signInWithCustomToken(auth, customToken);
-      const userData = await fetchUserData(credential.user);
+      const userData = await fetchUserData(credential.user, { isFreshLogin: true });
       if (userData && userData.role === "student") {
+        // Write session BEFORE setUser so any concurrent onAuthStateChanged
+        // call that also runs fetchUserData sees a valid localStorage token.
         if (userData.studentRecordId) {
           await writeStudentSession(userData.studentRecordId);
         }
@@ -693,8 +714,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         success: false,
         error: error?.message || "Login failed. Please try again.",
       };
+    } finally {
+      isLoggingInRef.current = false;
     }
   };
+
 
   const loginGuestForExam = async (params: {
     name: string;

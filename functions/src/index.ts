@@ -65,21 +65,19 @@ export const studentPortalLogin = onCall(
       role: "student",
     });
 
-    // Ensure a users/{uid} doc exists so fetchUserData can hydrate the student profile.
+    // Always write/refresh the users/{uid} doc so fetchUserData always has
+    // up-to-date role, name, email, and studentRecordId — even on repeated logins.
     const userDocRef = db.collection("users").doc(customUid);
-    const userSnap = await userDocRef.get();
-    if (!userSnap.exists) {
-      await userDocRef.set(
-        {
-          role: "student",
-          name: studentData.name || "",
-          email: (studentDoc.data().email as string | undefined) || "",
-          studentRecordId: studentDoc.id,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true },
-      );
-    }
+    await userDocRef.set(
+      {
+        role: "student",
+        name: studentData.name || "",
+        email: (studentDoc.data().email as string | undefined) || "",
+        studentRecordId: studentDoc.id,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true },
+    );
 
     return { customToken };
   },
