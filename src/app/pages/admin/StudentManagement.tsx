@@ -34,7 +34,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet, X, Monitor, RotateCcw } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet, X, Monitor, RotateCcw, KeyRound, Copy, CheckCheck, Eye, EyeOff } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -57,6 +57,8 @@ import {
   studentBelongsToBatch,
   studentHasNoBatch,
 } from "../../features/students/studentBatchUtils";
+import { db } from "../../../config/firebase";
+import { doc, updateDoc } from "firebase/firestore";
 
 type StudentSortKey = "name" | "studentId" | "email" | "batch" | "enrolledNewest" | "enrolledOldest" | "status";
 
@@ -138,10 +140,222 @@ function StudentPhotoFields({
   );
 }
 
+// ── Portal Credentials Dialog ─────────────────────────────────────────────────
+
+function generatePortalUsername(studentId: string, name: string): string {
+  // Build a short, memorable username from the student ID or name
+  const base = studentId
+    ? studentId.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 8)
+    : name.split(" ")[0]?.replace(/[^a-z]/gi, "").toLowerCase().slice(0, 6) || "student";
+  return `ka-${base}`;
+}
+
+function generatePortalPassword(): string {
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
+
+function PortalCredentialsDialog({
+  student,
+  open,
+  onClose,
+}: {
+  student: Student;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const [username, setUsername] = useState(student.portalUsername || "");
+  const [password, setPassword] = useState(student.portalPassword || "");
+  const [showPassword, setShowPassword] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [copiedField, setCopiedField] = useState<"username" | "password" | "all" | null>(null);
+
+
+  // Reset state when a different student is opened
+  useEffect(() => {
+    setUsername(student.portalUsername || "");
+    setPassword(student.portalPassword || "");
+    setSaved(false);
+    setShowPassword(false);
+    setCopiedField(null);
+  }, [student.id, student.portalUsername, student.portalPassword]);
+
+  const handleGenerate = () => {
+    setUsername(generatePortalUsername(student.studentId, student.name));
+    setPassword(generatePortalPassword());
+    setSaved(false);
+  };
+
+  const handleSave = async () => {
+    if (!username.trim() || !password.trim()) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, "students", student.id), {
+        portalUsername: username.trim().toLowerCase(),
+        portalPassword: password.trim(),
+      });
+      setSaved(true);
+    } catch (e) {
+      console.error("Failed to save credentials:", e);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCopy = (field: "username" | "password" | "all") => {
+    let text = "";
+    if (field === "username") text = username;
+    else if (field === "password") text = password;
+    else {
+      const portalUrl = window.location.origin + "/login";
+      text = `Portal Login Details:\nURL: ${portalUrl}\nUsername: ${username}\nPassword: ${password}\n\nShare this with the student: ${student.name}`;
+    }
+    navigator.clipboard.writeText(text).catch(() => {});
+    setCopiedField(field);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const hasCredentials = username.trim() && password.trim();
+  const portalUrl = window.location.origin + "/login";
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <KeyRound className="w-4 h-4 text-indigo-600" />
+            Portal Credentials
+          </DialogTitle>
+          <DialogDescription>
+            Generate and share a username + password so {student.name} can log in without Google.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Generate button */}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full border-indigo-200 hover:bg-indigo-50 text-indigo-700"
+            onClick={handleGenerate}
+          >
+            <KeyRound className="w-4 h-4 mr-2" />
+            Generate New Credentials
+          </Button>
+
+          {/* Username field */}
+          <div className="space-y-1.5">
+            <Label htmlFor={`pcred-username-${student.id}`} className="text-xs">Username</Label>
+            <div className="flex gap-2">
+              <Input
+                id={`pcred-username-${student.id}`}
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setSaved(false); }}
+                placeholder="e.g. ka-stu001"
+                className="font-mono text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={!username}
+                onClick={() => handleCopy("username")}
+                title="Copy username"
+              >
+                {copiedField === "username" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+
+          {/* Password field */}
+          <div className="space-y-1.5">
+            <Label htmlFor={`pcred-password-${student.id}`} className="text-xs">Password</Label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Input
+                  id={`pcred-password-${student.id}`}
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setSaved(false); }}
+                  placeholder="Enter or generate password"
+                  className="font-mono text-sm pr-9"
+                />
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                  onClick={() => setShowPassword((v) => !v)}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                disabled={!password}
+                onClick={() => handleCopy("password")}
+                title="Copy password"
+              >
+                {copiedField === "password" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+              </Button>
+            </div>
+          </div>
+
+          {/* Share summary */}
+          {hasCredentials && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
+              <p className="text-xs text-slate-500 font-medium">Share with student</p>
+              <p className="text-xs text-slate-700 font-mono whitespace-pre-line leading-relaxed">
+                {`URL: ${portalUrl}\nUsername: ${username}\nPassword: ${showPassword ? password : "•".repeat(password.length)}`}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full text-xs border-indigo-200 hover:bg-indigo-50 text-indigo-700"
+                onClick={() => handleCopy("all")}
+              >
+                {copiedField === "all" ? (
+                  <><CheckCheck className="w-3.5 h-3.5 mr-1.5 text-green-600" />Copied!</>
+                ) : (
+                  <><Copy className="w-3.5 h-3.5 mr-1.5" />Copy all details to share</>  
+                )}
+              </Button>
+            </div>
+          )}
+
+          {saved && (
+            <p className="text-xs text-emerald-700 flex items-center gap-1">
+              <CheckCheck className="w-3.5 h-3.5" />
+              Credentials saved successfully.
+            </p>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+          <Button
+            type="button"
+            className="bg-indigo-600 hover:bg-indigo-700"
+            onClick={() => void handleSave()}
+            disabled={saving || !hasCredentials}
+          >
+            {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save Credentials"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function StudentManagement() {
   const { students, batches, addStudent, enrollStudentInBatch, updateStudent, deleteStudent, clearStudentPhoto, clearStudentDevice } =
     useData();
   const [resettingDeviceIds, setResettingDeviceIds] = useState<Set<string>>(new Set());
+  // Portal credentials dialog state
+  const [credDialogStudent, setCredDialogStudent] = useState<Student | null>(null);
 
   const handleResetDevice = async (studentId: string) => {
     if (!confirm("Reset this student's device? They will be able to log in from any device again.")) return;
@@ -1234,6 +1448,7 @@ export default function StudentManagement() {
                         }
                         onResetDevice={() => handleResetDevice(student.id)}
                         isResettingDevice={resettingDeviceIds.has(student.id)}
+                        onPortalCredentials={setCredDialogStudent}
                       />
                     ))
                   ) : (
@@ -1299,6 +1514,7 @@ export default function StudentManagement() {
                           }
                           onResetDevice={() => handleResetDevice(student.id)}
                           isResettingDevice={resettingDeviceIds.has(student.id)}
+                          onPortalCredentials={setCredDialogStudent}
                         />
                       ))
                     ) : (
@@ -1367,6 +1583,7 @@ export default function StudentManagement() {
                           }
                           onResetDevice={() => handleResetDevice(student.id)}
                           isResettingDevice={resettingDeviceIds.has(student.id)}
+                          onPortalCredentials={setCredDialogStudent}
                         />
                       ))
                     ) : (
@@ -1385,9 +1602,19 @@ export default function StudentManagement() {
           )}
         </Tabs>
       </div>
+
+      {/* Portal credentials dialog */}
+      {credDialogStudent && (
+        <PortalCredentialsDialog
+          student={credDialogStudent}
+          open={!!credDialogStudent}
+          onClose={() => setCredDialogStudent(null)}
+        />
+      )}
     </div>
   );
 }
+
 
 // Student Row Component
 interface StudentRowProps {
@@ -1412,9 +1639,11 @@ interface StudentRowProps {
   canRemovePhoto: boolean;
   onResetDevice: () => Promise<void>;
   isResettingDevice: boolean;
+  onPortalCredentials: (student: Student) => void;
 }
 
 function StudentRow({
+
   student,
   editingStudent,
   formData,
@@ -1436,6 +1665,7 @@ function StudentRow({
   canRemovePhoto,
   onResetDevice,
   isResettingDevice,
+  onPortalCredentials,
 }: StudentRowProps) {
   const formatLoginTime = (iso?: string) => {
     if (!iso) return "";
@@ -1654,6 +1884,16 @@ function StudentRow({
                 : <RotateCcw className="w-4 h-4" />}
             </Button>
           )}
+          {/* Portal credentials button */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onPortalCredentials(student)}
+            title={student.portalUsername ? `Portal credentials: ${student.portalUsername}` : "Generate portal credentials"}
+            className={student.portalUsername ? "text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"}
+          >
+            <KeyRound className="w-4 h-4" />
+          </Button>
           <Button
             variant="ghost"
             size="icon"

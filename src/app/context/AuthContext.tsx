@@ -16,8 +16,10 @@ import {
   signInWithRedirect,
   getRedirectResult,
   signInAnonymously,
+  signInWithCustomToken,
   User as FirebaseUser,
 } from "firebase/auth";
+import { getFunctions, httpsCallable } from "firebase/functions";
 import { auth, db } from "../../config/firebase";
 import { saveGuestProfile } from "../features/exams/examApi";
 import {
@@ -151,6 +153,11 @@ interface AuthContextType {
   user: User | null;
   login: (email: string, password: string, role: UserRole) => Promise<boolean>;
   loginStudentWithGoogle: () => Promise<{ success: boolean; error?: string }>;
+  /** Username + password login for students who cannot use Google Sign-In. */
+  loginStudentWithUsername: (
+    username: string,
+    password: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   loginGuestForExam: (params: {
     name: string;
     email: string;
@@ -626,6 +633,69 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  /**
+   * Sign in a student using an admin-generated username + password.
+   * Calls the `studentPortalLogin` Cloud Function, receives a custom token,
+   * then signs into Firebase Auth with signInWithCustomToken.
+   */
+  const loginStudentWithUsername = async (
+    username: string,
+    password: string,
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const functions = getFunctions();
+      const studentPortalLogin = httpsCallable<
+        { username: string; password: string },
+        { customToken: string }
+      >(functions, "studentPortalLogin");
+
+      const result = await studentPortalLogin({
+        username: username.trim().toLowerCase(),
+        password: password.trim(),
+      });
+
+      const { customToken } = result.data;
+      if (!customToken) {
+        return { success: false, error: "Login failed. Please try again." };
+      }
+
+      const credential = await signInWithCustomToken(auth, customToken);
+      const userData = await fetchUserData(credential.user);
+      if (userData && userData.role === "student") {
+        if (userData.studentRecordId) {
+          await writeStudentSession(userData.studentRecordId);
+        }
+        setUser(userData);
+        return { success: true };
+      }
+      await signOut(auth);
+      setUser(null);
+      return {
+        success: false,
+        error: "Account not found. Contact your admin.",
+      };
+    } catch (error: any) {
+      console.error("Username login error:", error);
+      const code = error?.code || "";
+      if (
+        code === "functions/not-found" ||
+        code === "functions/invalid-argument"
+      ) {
+        return { success: false, error: "Invalid username or password." };
+      }
+      if (code === "functions/permission-denied") {
+        return {
+          success: false,
+          error: "Your account is inactive. Contact your admin.",
+        };
+      }
+      return {
+        success: false,
+        error: error?.message || "Login failed. Please try again.",
+      };
+    }
+  };
+
   const loginGuestForExam = async (params: {
     name: string;
     email: string;
@@ -802,6 +872,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         login,
         loginStudentWithGoogle,
+        loginStudentWithUsername,
         loginGuestForExam,
         signupAdmin,
         setActiveBatch,

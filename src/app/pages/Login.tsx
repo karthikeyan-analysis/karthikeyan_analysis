@@ -11,7 +11,7 @@ import {
   CardDescription,
   CardHeader,
 } from "../components/ui/card";
-import { AlertCircle, KeyRound, Smartphone } from "lucide-react";
+import { AlertCircle, KeyRound, Smartphone, User, Lock, ChevronDown } from "lucide-react";
 import type { UserRole } from "../context/AuthContext";
 import {
   DEFAULT_PORTAL_LOGIN_SETTINGS,
@@ -54,7 +54,12 @@ export default function Login({ role = "student" }: LoginProps) {
   const [showGuestLoginButton, setShowGuestLoginButton] = useState(
     DEFAULT_PORTAL_LOGIN_SETTINGS.showGuestLoginButton,
   );
-  const { user, login, loginStudentWithGoogle, loading: authLoading } = useAuth();
+  // Student login mode: "google" (default) or "username"
+  const [studentLoginMode, setStudentLoginMode] = useState<"google" | "username">("google");
+  const [portalUsername, setPortalUsername] = useState("");
+  const [portalPassword, setPortalPassword] = useState("");
+
+  const { user, login, loginStudentWithGoogle, loginStudentWithUsername, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -151,6 +156,27 @@ export default function Login({ role = "student" }: LoginProps) {
     }
   };
 
+  const handlePortalUsernameLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!portalUsername.trim() || !portalPassword.trim()) {
+      setError("Please enter both username and password.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+    try {
+      const result = await loginStudentWithUsername(portalUsername, portalPassword);
+      if (!result.success) {
+        setError(result.error || "Invalid username or password.");
+      }
+      // Navigation handled by the useEffect above once user state is set.
+    } catch (err: any) {
+      setError(err?.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 to-slate-100 p-4">
       <Card className="w-full max-w-md shadow-xl border-indigo-100 overflow-hidden">
@@ -229,24 +255,108 @@ export default function Login({ role = "student" }: LoginProps) {
               </Button>
             ) : (
               <div className="space-y-3">
-                {/* Always render Google login — never hide behind feature checks */}
-                <Button
-                  type="button"
-                  className="w-full h-12 text-base font-semibold bg-white text-slate-900 border-2 border-slate-300 hover:bg-slate-50 hover:border-slate-400 shadow-sm"
-                  onClick={handleStudentGoogleLogin}
-                  disabled={loading || authLoading}
-                  aria-label="Continue with Google"
-                >
-                  <GoogleMark className="w-5 h-5 mr-3 shrink-0" />
-                  {loading ? "Connecting to Google..." : "Continue with Google"}
-                </Button>
+                {/* ── Google Login (always shown first) ── */}
+                {studentLoginMode === "google" && (
+                  <>
+                    <Button
+                      id="student-google-login-btn"
+                      type="button"
+                      className="w-full h-12 text-base font-semibold bg-white text-slate-900 border-2 border-slate-300 hover:bg-slate-50 hover:border-slate-400 shadow-sm"
+                      onClick={handleStudentGoogleLogin}
+                      disabled={loading || authLoading}
+                      aria-label="Continue with Google"
+                    >
+                      <GoogleMark className="w-5 h-5 mr-3 shrink-0" />
+                      {loading ? "Connecting to Google..." : "Continue with Google"}
+                    </Button>
 
-                <p className="text-xs text-center text-slate-500">
-                  Use the Google account registered by your admin. Works on all browsers and devices.
-                </p>
+                    <p className="text-xs text-center text-slate-500">
+                      Use the Google account registered by your admin. Works on all browsers and devices.
+                    </p>
+
+                    {/* Toggle to username/password */}
+                    <button
+                      id="student-username-toggle-btn"
+                      type="button"
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors pt-1"
+                      onClick={() => { setStudentLoginMode("username"); setError(""); }}
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      Can't use Google? Sign in with username &amp; password
+                    </button>
+                  </>
+                )}
+
+                {/* ── Username + Password Login ── */}
+                {studentLoginMode === "username" && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 space-y-3">
+                      <p className="text-xs font-semibold text-indigo-800 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5" />
+                        Sign in with portal credentials
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Use the username and password provided by your admin.
+                      </p>
+                      <form onSubmit={handlePortalUsernameLogin} className="space-y-3">
+                        <div className="space-y-1.5">
+                          <Label htmlFor="portal-username" className="text-xs">Username</Label>
+                          <div className="relative">
+                            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                              id="portal-username"
+                              type="text"
+                              placeholder="e.g. ka-0042"
+                              value={portalUsername}
+                              onChange={(e) => setPortalUsername(e.target.value)}
+                              required
+                              autoComplete="username"
+                              className="bg-white pl-9"
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="portal-password" className="text-xs">Password</Label>
+                          <div className="relative">
+                            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                              id="portal-password"
+                              type="password"
+                              placeholder="Enter your password"
+                              value={portalPassword}
+                              onChange={(e) => setPortalPassword(e.target.value)}
+                              required
+                              autoComplete="current-password"
+                              className="bg-white pl-9"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          id="portal-username-login-btn"
+                          type="submit"
+                          className="w-full bg-indigo-600 hover:bg-indigo-700"
+                          disabled={loading || authLoading}
+                        >
+                          {loading ? "Signing in..." : "Sign In"}
+                        </Button>
+                      </form>
+                    </div>
+
+                    {/* Back to Google button */}
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors"
+                      onClick={() => { setStudentLoginMode("google"); setError(""); }}
+                    >
+                      <GoogleMark className="w-3.5 h-3.5" />
+                      Back to Google sign-in
+                    </button>
+                  </div>
+                )}
 
                 {showGuestLoginButton ? (
                   <Button
+                    id="student-guest-login-btn"
                     type="button"
                     variant="outline"
                     className="w-full border-indigo-200 hover:bg-indigo-50"
@@ -264,7 +374,7 @@ export default function Login({ role = "student" }: LoginProps) {
               <p className="text-xs text-center text-slate-500">
                 {role === "admin"
                   ? "Admins and co-hosts sign in here with the email and password shared with them."
-                  : "Students can sign in only with their admin-registered Google account."}
+                  : "Students sign in with their Google account or admin-provided credentials."}
               </p>
               {role === "admin" && (
                 <p className="text-sm text-center text-slate-600 mt-2">

@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.submitExamAttempt = exports.resetCoHostPassword = exports.deleteCoHost = exports.createCoHost = exports.getRecordingPlaybackUrl = exports.getRecordingUploadUrl = exports.realtimeProxy = void 0;
+exports.submitExamAttempt = exports.studentPortalLogin = exports.resetCoHostPassword = exports.deleteCoHost = exports.createCoHost = exports.getRecordingPlaybackUrl = exports.getRecordingUploadUrl = exports.realtimeProxy = void 0;
 const admin = __importStar(require("firebase-admin"));
 const https_1 = require("firebase-functions/v2/https");
 admin.initializeApp();
@@ -47,6 +47,62 @@ var coHostAccounts_1 = require("./liveClasses/coHostAccounts");
 Object.defineProperty(exports, "createCoHost", { enumerable: true, get: function () { return coHostAccounts_1.createCoHost; } });
 Object.defineProperty(exports, "deleteCoHost", { enumerable: true, get: function () { return coHostAccounts_1.deleteCoHost; } });
 Object.defineProperty(exports, "resetCoHostPassword", { enumerable: true, get: function () { return coHostAccounts_1.resetCoHostPassword; } });
+/**
+ * studentPortalLogin — username + password sign-in for students who cannot use Google.
+ *
+ * Accepts { username, password } from the client.
+ * Looks up the student record in Firestore by portalUsername, validates the password,
+ * then mints a custom Firebase Auth token signed with the student's Firestore doc ID as uid.
+ * The client signs in with signInWithCustomToken() which triggers onAuthStateChanged.
+ */
+exports.studentPortalLogin = (0, https_1.onCall)({ cors: true }, async (request) => {
+    const username = (request.data?.username || "").trim().toLowerCase();
+    const password = (request.data?.password || "").trim();
+    if (!username || !password) {
+        throw new https_1.HttpsError("invalid-argument", "Username and password are required.");
+    }
+    const db = admin.firestore();
+    // Find student by portalUsername (case-insensitive — stored lowercase)
+    const snap = await db
+        .collection("students")
+        .where("portalUsername", "==", username)
+        .limit(1)
+        .get();
+    if (snap.empty) {
+        throw new https_1.HttpsError("not-found", "Invalid username or password.");
+    }
+    const studentDoc = snap.docs[0];
+    const studentData = studentDoc.data();
+    // Check status
+    if (studentData.status === "inactive") {
+        throw new https_1.HttpsError("permission-denied", "Your account is inactive. Contact your admin.");
+    }
+    // Validate password (stored as plaintext admin-generated code)
+    const storedPassword = (studentData.portalPassword || "").trim();
+    if (!storedPassword || storedPassword !== password) {
+        throw new https_1.HttpsError("not-found", "Invalid username or password.");
+    }
+    // Mint a custom token. Use the student Firestore doc ID as the Firebase Auth UID.
+    // The onAuthStateChanged handler → fetchUserData will then load the full student profile.
+    const customUid = `portal_${studentDoc.id}`;
+    const customToken = await admin.auth().createCustomToken(customUid, {
+        studentRecordId: studentDoc.id,
+        role: "student",
+    });
+    // Ensure a users/{uid} doc exists so fetchUserData can hydrate the student profile.
+    const userDocRef = db.collection("users").doc(customUid);
+    const userSnap = await userDocRef.get();
+    if (!userSnap.exists) {
+        await userDocRef.set({
+            role: "student",
+            name: studentData.name || "",
+            email: studentDoc.data().email || "",
+            studentRecordId: studentDoc.id,
+            updatedAt: new Date().toISOString(),
+        }, { merge: true });
+    }
+    return { customToken };
+});
 exports.submitExamAttempt = (0, https_1.onCall)({
     // Allow callable invocation from browsers (local dev + production).
     cors: true,
