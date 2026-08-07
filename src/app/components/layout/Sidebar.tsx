@@ -22,7 +22,10 @@ import {
   ArrowLeft,
   PlusCircle,
   Shield,
-  Sparkles,
+  Sliders,
+  Download,
+  Award,
+  Activity,
 } from "lucide-react";
 import { cn } from "../ui/utils";
 
@@ -53,7 +56,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const isAdmin = user?.role === "admin";
   const isCohost = user?.adminKind === "cohost";
 
-  // Drill-down Category Definitions
+  const fullPath = location.pathname + location.search;
+
+  // Category Definitions with all sub-pages & tabs in side drawer
   const adminCategories: PrimaryCategory[] = [
     {
       id: "dashboard",
@@ -67,21 +72,44 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       icon: Video,
       items: [
         {
-          to: "/admin/live-classes",
+          to: "/admin/live-classes?tab=overview",
+          icon: Activity,
+          label: "Overview",
+        },
+        {
+          to: "/admin/live-classes?tab=meetings",
           icon: Video,
-          label: "Video Classes Suite",
-          end: true,
+          label: "Meeting Links & Scheduler",
+        },
+        {
+          to: "/admin/live-classes?tab=controls",
+          icon: Sliders,
+          label: "Host Studio Control Panel",
+        },
+        {
+          to: "/admin/live-classes?tab=recordings",
+          icon: Download,
+          label: "Recordings & Downloads",
+        },
+        {
+          to: "/admin/live-classes?tab=attendance",
+          icon: FileText,
+          label: "Attendance Reports",
+        },
+        {
+          to: "/admin/live-classes?tab=live_tests",
+          icon: Award,
+          label: "Live Test Integration",
+        },
+        {
+          to: "/admin/live-classes?tab=settings",
+          icon: Settings2,
+          label: "Settings",
         },
         {
           to: "/admin/co-hosts",
           icon: UserPlus,
           label: "Co-Host Management",
-          end: true,
-        },
-        {
-          to: "/admin/live-tests",
-          icon: Radio,
-          label: "Conduct Live Test",
           end: true,
         },
       ],
@@ -182,8 +210,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Live Classes Studio",
       icon: Video,
       items: [
-        { to: "/admin/live-classes", icon: Video, label: "Live Classes Suite", end: true },
-        { to: "/admin/live-tests", icon: Radio, label: "Conduct Live Test", end: true },
+        { to: "/admin/live-classes?tab=overview", icon: Activity, label: "Overview" },
+        { to: "/admin/live-classes?tab=meetings", icon: Video, label: "Meeting Links" },
+        { to: "/admin/live-classes?tab=controls", icon: Sliders, label: "Studio Controls" },
+        { to: "/admin/live-classes?tab=recordings", icon: Download, label: "Recordings" },
+        { to: "/admin/live-classes?tab=attendance", icon: FileText, label: "Attendance" },
       ],
     },
   ];
@@ -205,13 +236,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   // Active category state for Level 2 view
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  // Auto-detect active category based on current URL path
+  // Auto-detect active category based on current URL path and query string
   useEffect(() => {
     const matched = categories.find((cat) =>
       cat.items?.some(
         (item) =>
-          location.pathname === item.to ||
-          (item.to !== "/admin" && location.pathname.startsWith(item.to)),
+          fullPath === item.to ||
+          location.pathname === item.to.split("?")[0],
       ),
     );
     if (matched) {
@@ -219,7 +250,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     } else {
       setActiveCategory(null);
     }
-  }, [location.pathname]);
+  }, [fullPath, location.pathname]);
 
   const selectedCategoryObj = categories.find((c) => c.id === activeCategory);
 
@@ -287,39 +318,39 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                 <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Category Options
                 </p>
-                {selectedCategoryObj.items.map((sub) => (
-                  <NavLink
-                    key={sub.to}
-                    to={sub.to}
-                    end={sub.end}
-                    onClick={onClose}
-                    className={({ isActive }) =>
-                      cn(
-                        "group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium transition-all",
-                        isActive
+                {selectedCategoryObj.items.map((sub) => {
+                  const isItemActive =
+                    sub.to.includes("?")
+                      ? fullPath === sub.to || (location.pathname === "/admin/live-classes" && !location.search && sub.to.endsWith("tab=overview"))
+                      : location.pathname === sub.to;
+
+                  return (
+                    <NavLink
+                      key={sub.to}
+                      to={sub.to}
+                      onClick={onClose}
+                      className={cn(
+                        "group flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-all",
+                        isItemActive
                           ? "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-900/40"
                           : "text-slate-300 hover:bg-white/10 hover:text-white",
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <div className="flex items-center gap-2.5">
-                          <sub.icon
-                            className={cn(
-                              "h-4 w-4",
-                              isActive ? "text-white" : "text-indigo-400 group-hover:text-white",
-                            )}
-                          />
-                          <span>{sub.label}</span>
-                        </div>
-                        {isActive ? (
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                        ) : null}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <sub.icon
+                          className={cn(
+                            "h-4 w-4",
+                            isItemActive ? "text-white" : "text-indigo-400 group-hover:text-white",
+                          )}
+                        />
+                        <span>{sub.label}</span>
+                      </div>
+                      {isItemActive ? (
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      ) : null}
+                    </NavLink>
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -335,8 +366,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                     ? location.pathname === cat.to || (cat.to !== "/admin" && location.pathname.startsWith(cat.to))
                     : cat.items?.some(
                         (item) =>
-                          location.pathname === item.to ||
-                          (item.to !== "/admin" && location.pathname.startsWith(item.to)),
+                          fullPath === item.to ||
+                          location.pathname === item.to.split("?")[0],
                       );
 
                   // Direct link items (Dashboard / Settings / Student routes)

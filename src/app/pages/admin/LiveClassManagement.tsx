@@ -85,11 +85,24 @@ export default function LiveClassManagement() {
   const { user } = useAuth();
   const { batches, exams } = useData();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as SuiteTab | null;
 
   const [classes, setClasses] = useState<LiveClass[]>([]);
   const [loading, setLoading] = useState(true);
   const [admins, setAdmins] = useState<AdminProfile[]>([]);
-  const [activeTab, setActiveTab] = useState<SuiteTab>("overview");
+  const [activeTab, setActiveTab] = useState<SuiteTab>(tabParam || "overview");
+
+  useEffect(() => {
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
+
+  const handleTabChange = (newTab: SuiteTab) => {
+    setActiveTab(newTab);
+    setSearchParams({ tab: newTab });
+  };
 
   // Filters
   const [listFilter, setListFilter] = useState<ListFilter>("all");
@@ -430,7 +443,7 @@ export default function LiveClassManagement() {
       <div className="flex overflow-x-auto rounded-xl bg-slate-100 p-1 text-xs font-semibold text-slate-600">
         <button
           type="button"
-          onClick={() => setActiveTab("overview")}
+          onClick={() => handleTabChange("overview")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "overview" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
@@ -440,7 +453,7 @@ export default function LiveClassManagement() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("meetings")}
+          onClick={() => handleTabChange("meetings")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "meetings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
@@ -450,7 +463,7 @@ export default function LiveClassManagement() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("controls")}
+          onClick={() => handleTabChange("controls")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "controls" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
@@ -460,7 +473,7 @@ export default function LiveClassManagement() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("recordings")}
+          onClick={() => handleTabChange("recordings")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "recordings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
@@ -470,7 +483,7 @@ export default function LiveClassManagement() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("attendance")}
+          onClick={() => handleTabChange("attendance")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "attendance" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
@@ -480,7 +493,7 @@ export default function LiveClassManagement() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("live_tests")}
+          onClick={() => handleTabChange("live_tests")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "live_tests" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
@@ -490,7 +503,7 @@ export default function LiveClassManagement() {
         </button>
         <button
           type="button"
-          onClick={() => setActiveTab("settings")}
+          onClick={() => handleTabChange("settings")}
           className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "settings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
