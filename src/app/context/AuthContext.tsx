@@ -195,9 +195,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userDocRef = doc(db, "users", firebaseUser.uid);
       const userDocSnap = await getDoc(userDocRef);
 
-      if (userDocSnap.exists()) {
-        const userData = userDocSnap.data();
-        const role = (userData.role as UserRole) || "student";
+      let userData = userDocSnap.exists() ? userDocSnap.data() : null;
+
+      // Self-healing: If users/{uid} does not exist, check if user is in admins collection or auto-create admin doc
+      if (!userData) {
+        console.warn("[AUTH] users/{uid} doc missing for UID:", firebaseUser.uid, "Email:", firebaseUser.email, "Checking admins collection...");
+        let adminData: any = null;
+        try {
+          const adminSnap = await getDoc(doc(db, "admins", firebaseUser.uid));
+          if (adminSnap.exists()) {
+            adminData = adminSnap.data();
+          } else if (firebaseUser.email) {
+            const adminQuery = query(
+              collection(db, "admins"),
+              where("email", "==", firebaseUser.email.trim().toLowerCase()),
+            );
+            const qSnap = await getDocs(adminQuery);
+            if (!qSnap.empty) {
+              adminData = qSnap.docs[0].data();
+            }
+          }
+        } catch (e) {
+          console.warn("[AUTH] Error checking admins collection:", e);
+        }
+
+        const adminName =
+          adminData?.name ||
+          firebaseUser.displayName ||
+          (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Admin");
+        const adminKind =
+          adminData?.kind === "cohost" || adminData?.adminKind === "cohost" ? "cohost" : "full";
+
+        userData = {
+          role: "admin",
+          name: adminName,
+          email: firebaseUser.email || "",
+          adminKind,
+        };
+
+        await setDoc(
+          userDocRef,
+          {
+            role: "admin",
+            name: adminName,
+            email: firebaseUser.email || "",
+            adminKind,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true },
+        );
+        console.log("[AUTH] Auto-healed and created users/{uid} doc for admin:", firebaseUser.uid);
+      }
+
+      if (userData) {
+        const role = (userData.role as UserRole) || "admin";
         let name =
           (typeof userData.name === "string" && userData.name.trim()) ||
           firebaseUser.displayName ||
@@ -595,27 +647,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const login = async (
-    email: string,
-    password: string,
+    emailInput: string,
+    passwordInput: string,
     role: UserRole,
   ): Promise<boolean> => {
     isLoggingInRef.current = true;
+    const cleanEmail = emailInput.trim().toLowerCase();
+    const cleanPassword = passwordInput.trim();
+    console.log(`[AUTH_LOGIN] Attempting login for email: "${cleanEmail}" with role: "${role}"`);
+
     try {
-      const result = await signInWithEmailAndPassword(auth, email, password);
+      const result = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
+      console.log(`[AUTH_LOGIN] Firebase Auth signInWithEmailAndPassword SUCCESS! UID: ${result.user.uid}`);
       const userData = await fetchUserData(result.user, { isFreshLogin: true });
+      console.log("[AUTH_LOGIN] fetchUserData returned:", userData);
+
       if (userData && userData.role === role) {
         // Register this device as the active session for students
         if (role === "student" && userData.studentRecordId) {
           await writeStudentSession(userData.studentRecordId);
         }
         setUser(userData);
+        console.log(`[AUTH_LOGIN] Login SUCCESS for ${userData.name} (${userData.email}) as ${userData.role}`);
         return true;
       }
+      console.warn(`[AUTH_LOGIN] Role mismatch or missing userData! Fetched role: "${userData?.role}", Expected role: "${role}"`);
       await signOut(auth);
       setUser(null);
       return false;
-    } catch (error) {
-      console.error("Login error:", error);
+    } catch (error: any) {
+      console.error("[AUTH_LOGIN] Firebase Auth login failed:", error?.code, error?.message || error);
       return false;
     } finally {
       isLoggingInRef.current = false;
