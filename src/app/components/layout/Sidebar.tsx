@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { NavLink, useLocation } from "react-router";
+import { NavLink, useLocation, useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import bannerImage from "../../../banner.jpeg";
 import {
@@ -18,10 +18,9 @@ import {
   Video,
   UserPlus,
   Layers3,
-  ChevronDown,
   ChevronRight,
+  ArrowLeft,
   PlusCircle,
-  Award,
   Sparkles,
 } from "lucide-react";
 import { cn } from "../ui/utils";
@@ -35,12 +34,14 @@ type SubItem = {
   to: string;
   label: string;
   icon: React.ElementType;
+  description?: string;
   end?: boolean;
 };
 
 type PrimaryCategory = {
   id: string;
   label: string;
+  description?: string;
   icon: React.ElementType;
   to?: string;
   items?: SubItem[];
@@ -49,61 +50,146 @@ type PrimaryCategory = {
 export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const { user } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
   const isCohost = user?.adminKind === "cohost";
 
-  // Categories definition for full Admin
+  // Drill-down Category Definitions
   const adminCategories: PrimaryCategory[] = [
     {
       id: "dashboard",
       label: "Dashboard",
+      description: "Overview metrics & quick stats",
       icon: LayoutDashboard,
       to: "/admin",
     },
     {
       id: "live_classes",
       label: "Live Video Classes",
+      description: "Zoom platform, co-hosts & links",
       icon: Video,
       items: [
-        { to: "/admin/live-classes", icon: Video, label: "Video Classes Suite", end: true },
-        { to: "/admin/co-hosts", icon: UserPlus, label: "Co-Host Accounts", end: true },
-        { to: "/admin/live-tests", icon: Radio, label: "Conduct Live Test", end: true },
+        {
+          to: "/admin/live-classes",
+          icon: Video,
+          label: "Video Classes Suite",
+          description: "Subject-wise links, meeting studio & radar",
+          end: true,
+        },
+        {
+          to: "/admin/co-hosts",
+          icon: UserPlus,
+          label: "Co-Host Management",
+          description: "Manage co-host accounts & passwords",
+          end: true,
+        },
+        {
+          to: "/admin/live-tests",
+          icon: Radio,
+          label: "Conduct Live Test",
+          description: "Trigger live exams during active classes",
+          end: true,
+        },
       ],
     },
     {
       id: "tests",
       label: "Tests & Exam Engine",
+      description: "CBT tests, live monitor & reports",
       icon: ClipboardList,
       items: [
-        { to: "/admin/tests", icon: ClipboardList, label: "All Tests & Exams", end: true },
-        { to: "/admin/tests/create", icon: PlusCircle, label: "Create New Test", end: true },
-        { to: "/admin/tests/live-monitor", icon: Radio, label: "Live Exam Monitor", end: true },
-        { to: "/admin/tests/analytics", icon: BarChart3, label: "Analytics & Results", end: true },
-        { to: "/admin/reports/student-tests", icon: FileSpreadsheet, label: "Student Test Reports", end: true },
+        {
+          to: "/admin/tests",
+          icon: ClipboardList,
+          label: "All Tests & Exams",
+          description: "Manage CBT exams & question banks",
+          end: true,
+        },
+        {
+          to: "/admin/tests/create",
+          icon: PlusCircle,
+          label: "Create New Test",
+          description: "Build new exam paper with questions",
+          end: true,
+        },
+        {
+          to: "/admin/tests/live-monitor",
+          icon: Radio,
+          label: "Live Exam Monitor",
+          description: "Real-time student progress tracking",
+          end: true,
+        },
+        {
+          to: "/admin/tests/analytics",
+          icon: BarChart3,
+          label: "Analytics & Results",
+          description: "Scorecards, ranks & test performance",
+          end: true,
+        },
+        {
+          to: "/admin/reports/student-tests",
+          icon: FileSpreadsheet,
+          label: "Student Test Reports",
+          description: "Export individual test report sheets",
+          end: true,
+        },
       ],
     },
     {
       id: "people",
       label: "Students & Batches",
+      description: "Profiles, enrollments & batches",
       icon: Users,
       items: [
-        { to: "/admin/students", icon: Users, label: "Student Management", end: true },
-        { to: "/admin/batches", icon: Layers3, label: "Batch Management", end: true },
-        { to: "/admin/enrollments", icon: FileText, label: "Enrollment Requests", end: true },
-        { to: "/admin/public-registrations", icon: Globe, label: "Public Registrations", end: true },
+        {
+          to: "/admin/students",
+          icon: Users,
+          label: "Student Management",
+          description: "Student profiles, credentials & access",
+          end: true,
+        },
+        {
+          to: "/admin/batches",
+          icon: Layers3,
+          label: "Batch Management",
+          description: "Course batches & subject mapping",
+          end: true,
+        },
+        {
+          to: "/admin/enrollments",
+          icon: FileText,
+          label: "Enrollment Requests",
+          description: "Review and approve student course joins",
+          end: true,
+        },
+        {
+          to: "/admin/public-registrations",
+          icon: Globe,
+          label: "Public Registrations",
+          description: "Web registration submissions & leads",
+          end: true,
+        },
       ],
     },
     {
       id: "media",
       label: "Media & Library",
+      description: "PDFs, study notes & video lectures",
       icon: Upload,
       items: [
-        { to: "/admin/media", icon: Upload, label: "Content Upload & Library", end: true },
+        {
+          to: "/admin/media",
+          icon: Upload,
+          label: "Content Upload & Library",
+          description: "Manage PDFs, docs & study material",
+          end: true,
+        },
       ],
     },
     {
       id: "settings",
       label: "Portal Settings",
+      description: "System config & site preferences",
       icon: Settings2,
       to: "/admin/portal-settings",
     },
@@ -136,29 +222,26 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       : adminCategories
     : studentCategories;
 
-  // Track expanded categories in state
-  const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({});
+  // Active category state for Level 2 view
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  // Auto-expand the category containing the current active path
+  // Auto-detect active category based on current URL path
   useEffect(() => {
-    const activeCat = categories.find((cat) =>
+    const matched = categories.find((cat) =>
       cat.items?.some(
         (item) =>
           location.pathname === item.to ||
           (item.to !== "/admin" && location.pathname.startsWith(item.to)),
       ),
     );
-    if (activeCat && !openCategories[activeCat.id]) {
-      setOpenCategories((prev) => ({ ...prev, [activeCat.id]: true }));
+    if (matched) {
+      setActiveCategory(matched.id);
+    } else {
+      setActiveCategory(null);
     }
-  }, [location.pathname, categories]);
+  }, [location.pathname]);
 
-  const toggleCategory = (id: string) => {
-    setOpenCategories((prev) => ({
-      ...prev,
-      [id]: !prev[id],
-    }));
-  };
+  const selectedCategoryObj = categories.find((c) => c.id === activeCategory);
 
   return (
     <>
@@ -168,7 +251,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-950 text-white transition-transform duration-300 lg:static",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-950 text-white transition-all duration-300 lg:static",
           !isOpen && "-translate-x-full lg:translate-x-0",
         )}
       >
@@ -179,6 +262,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           <X className="h-5 w-5" />
         </button>
 
+        {/* Header Banner */}
         <div className="border-b border-white/5 p-3">
           <img
             src={bannerImage}
@@ -187,116 +271,192 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           />
         </div>
 
-        <nav className="flex-1 space-y-2 overflow-y-auto px-3 py-4">
-          {categories.map((cat) => {
-            const hasSubItems = Boolean(cat.items && cat.items.length > 0);
-            const isExpanded = Boolean(openCategories[cat.id]);
-            const isCategoryActive = cat.to
-              ? location.pathname === cat.to || (cat.to !== "/admin" && location.pathname.startsWith(cat.to))
-              : cat.items?.some(
-                  (item) =>
-                    location.pathname === item.to ||
-                    (item.to !== "/admin" && location.pathname.startsWith(item.to)),
-                );
+        {/* Navigation Content Area */}
+        <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+          {/* LEVEL 2: DRILL-DOWN SUB-OPTIONS VIEW */}
+          {activeCategory && selectedCategoryObj && selectedCategoryObj.items ? (
+            <div className="space-y-4">
+              {/* Back Button to Level 1 */}
+              <button
+                type="button"
+                onClick={() => setActiveCategory(null)}
+                className="group flex w-full items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold text-indigo-300 transition-all hover:bg-indigo-600 hover:text-white"
+              >
+                <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
+                <span>Back to Main Categories</span>
+              </button>
 
-            if (!hasSubItems && cat.to) {
-              return (
-                <NavLink
-                  key={cat.id}
-                  to={cat.to}
-                  end={cat.to === "/admin" || cat.to === "/student"}
-                  onClick={onClose}
-                  className={({ isActive }) =>
-                    cn(
-                      "flex items-center justify-between rounded-xl px-3 py-2.5 text-sm transition-all",
-                      isActive
-                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 font-semibold"
-                        : "text-slate-300 hover:bg-white/5 hover:text-white font-medium",
-                    )
-                  }
-                >
-                  {({ isActive }) => (
-                    <div className="flex items-center gap-3">
-                      <cat.icon className={cn("h-4 w-4", isActive ? "text-white" : "text-indigo-400")} />
-                      <span>{cat.label}</span>
-                    </div>
-                  )}
-                </NavLink>
-              );
-            }
-
-            return (
-              <div key={cat.id} className="rounded-xl bg-white/[0.02] ring-1 ring-white/5">
-                <button
-                  type="button"
-                  onClick={() => toggleCategory(cat.id)}
-                  className={cn(
-                    "flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold transition-all",
-                    isCategoryActive
-                      ? "bg-indigo-950/80 text-indigo-300 ring-1 ring-indigo-500/30"
-                      : "text-slate-200 hover:bg-white/5 hover:text-white",
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <cat.icon
-                      className={cn(
-                        "h-4 w-4",
-                        isCategoryActive ? "text-indigo-400" : "text-slate-400",
-                      )}
-                    />
-                    <span>{cat.label}</span>
+              {/* Active Category Header */}
+              <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/60 to-slate-900/60 p-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
+                    <selectedCategoryObj.icon className="h-4 w-4" />
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {cat.items ? (
-                      <span className="rounded-full bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-slate-300">
-                        {cat.items.length}
-                      </span>
-                    ) : null}
-                    {isExpanded ? (
-                      <ChevronDown className="h-4 w-4 text-slate-400" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                  <div>
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                      {selectedCategoryObj.label}
+                    </h3>
+                    <p className="text-[10px] text-slate-400">
+                      {selectedCategoryObj.items.length} sub-options available
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-Options List */}
+              <div className="space-y-1.5">
+                <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                  Category Options
+                </p>
+                {selectedCategoryObj.items.map((sub) => (
+                  <NavLink
+                    key={sub.to}
+                    to={sub.to}
+                    end={sub.end}
+                    onClick={onClose}
+                    className={({ isActive }) =>
+                      cn(
+                        "group flex flex-col rounded-xl px-3 py-2.5 transition-all",
+                        isActive
+                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40 ring-1 ring-indigo-400/30"
+                          : "bg-white/[0.03] text-slate-300 hover:bg-white/10 hover:text-white",
+                      )
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5 font-semibold text-sm">
+                            <sub.icon
+                              className={cn(
+                                "h-4 w-4",
+                                isActive ? "text-white" : "text-indigo-400 group-hover:text-white",
+                              )}
+                            />
+                            <span>{sub.label}</span>
+                          </div>
+                          {isActive ? (
+                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+                          ) : null}
+                        </div>
+                        {sub.description ? (
+                          <p
+                            className={cn(
+                              "mt-1 text-[11px] leading-tight",
+                              isActive ? "text-indigo-100" : "text-slate-500 group-hover:text-slate-400",
+                            )}
+                          >
+                            {sub.description}
+                          </p>
+                        ) : null}
+                      </>
                     )}
-                  </div>
-                </button>
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          ) : (
+            /* LEVEL 1: MAIN PRIMARY CATEGORIES MENU */
+            <div className="space-y-3">
+              <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                Primary Categories
+              </p>
+              <div className="space-y-2">
+                {categories.map((cat) => {
+                  const hasSubItems = Boolean(cat.items && cat.items.length > 0);
+                  const isCategoryActive = cat.to
+                    ? location.pathname === cat.to || (cat.to !== "/admin" && location.pathname.startsWith(cat.to))
+                    : cat.items?.some(
+                        (item) =>
+                          location.pathname === item.to ||
+                          (item.to !== "/admin" && location.pathname.startsWith(item.to)),
+                      );
 
-                {isExpanded && cat.items ? (
-                  <div className="space-y-1 pb-2 pt-1 pl-4 pr-1.5">
-                    {cat.items.map((sub) => (
+                  // Direct link items (Dashboard / Settings / Student routes)
+                  if (!hasSubItems && cat.to) {
+                    return (
                       <NavLink
-                        key={sub.to}
-                        to={sub.to}
-                        end={sub.end}
+                        key={cat.id}
+                        to={cat.to}
+                        end={cat.to === "/admin" || cat.to === "/student"}
                         onClick={onClose}
                         className={({ isActive }) =>
                           cn(
-                            "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-all",
+                            "flex items-center justify-between rounded-xl px-3 py-3 text-sm transition-all",
                             isActive
-                              ? "bg-indigo-600 text-white font-medium shadow-md"
-                              : "text-slate-400 hover:bg-white/5 hover:text-slate-200 font-medium",
+                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 font-semibold"
+                              : "bg-white/[0.03] text-slate-300 hover:bg-white/10 hover:text-white font-medium",
                           )
                         }
                       >
                         {({ isActive }) => (
-                          <>
-                            <sub.icon
-                              className={cn(
-                                "h-3.5 w-3.5",
-                                isActive ? "text-white" : "text-slate-400",
-                              )}
-                            />
-                            <span className="truncate">{sub.label}</span>
-                          </>
+                          <div className="flex items-center gap-3">
+                            <cat.icon className={cn("h-4 w-4", isActive ? "text-white" : "text-indigo-400")} />
+                            <span>{cat.label}</span>
+                          </div>
                         )}
                       </NavLink>
-                    ))}
-                  </div>
-                ) : null}
+                    );
+                  }
+
+                  // Primary Category Drill-Down Button
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        if (hasSubItems) {
+                          setActiveCategory(cat.id);
+                        } else if (cat.to) {
+                          navigate(cat.to);
+                          if (onClose) onClose();
+                        }
+                      }}
+                      className={cn(
+                        "group flex w-full items-center justify-between rounded-xl p-3 text-left transition-all",
+                        isCategoryActive
+                          ? "bg-indigo-950/80 text-white ring-1 ring-indigo-500/40 shadow-md"
+                          : "bg-white/[0.03] text-slate-200 hover:bg-white/10 hover:text-white",
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            "flex h-9 w-9 items-center justify-center rounded-xl transition-all",
+                            isCategoryActive
+                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/40"
+                              : "bg-white/5 text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-300",
+                          )}
+                        >
+                          <cat.icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-sm font-semibold">{cat.label}</div>
+                          {cat.description ? (
+                            <div className="text-[11px] text-slate-500 group-hover:text-slate-400">
+                              {cat.description}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-slate-400 group-hover:text-white">
+                        {cat.items ? (
+                          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
+                            {cat.items.length}
+                          </span>
+                        ) : null}
+                        <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
         </nav>
 
+        {/* User Footer */}
         <div className="border-t border-white/5 p-3">
           <div className="rounded-xl bg-white/5 px-3 py-2.5 ring-1 ring-white/5">
             <p className="text-[10px] uppercase tracking-wide text-slate-500">Signed in</p>
