@@ -90,13 +90,6 @@ export default function LiveClassManagement() {
   const [admins, setAdmins] = useState<AdminProfile[]>([]);
   const [activeTab, setActiveTab] = useState<SuiteTab>("overview");
 
-  // Safe fallback arrays to prevent undefined.map / undefined.find crashes
-  const safeBatches = useMemo(() => batches || [], [batches]);
-  const safeExams = useMemo(() => exams || [], [exams]);
-  const safeClasses = useMemo(() => classes || [], [classes]);
-  const safeAdmins = useMemo(() => admins || [], [admins]);
-  const safeAttendanceRecords = useMemo(() => attendanceRecords || [], [attendanceRecords]);
-
   // Filters
   const [listFilter, setListFilter] = useState<ListFilter>("all");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -106,6 +99,13 @@ export default function LiveClassManagement() {
   const [selectedAttendanceClassId, setSelectedAttendanceClassId] = useState<string>("");
   const [attendanceRecords, setAttendanceRecords] = useState<LiveClassAttendance[]>([]);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
+
+  // Safe fallback arrays to prevent undefined.map / undefined.find crashes
+  const safeBatches = useMemo(() => batches || [], [batches]);
+  const safeExams = useMemo(() => exams || [], [exams]);
+  const safeClasses = useMemo(() => classes || [], [classes]);
+  const safeAdmins = useMemo(() => admins || [], [admins]);
+  const safeAttendanceRecords = useMemo(() => attendanceRecords || [], [attendanceRecords]);
 
   // Create Dialog
   const [createOpen, setCreateOpen] = useState(false);
