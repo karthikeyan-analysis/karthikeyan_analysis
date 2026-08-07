@@ -17,7 +17,7 @@ export { createCoHost, deleteCoHost, resetCoHostPassword } from "./liveClasses/c
  * The client signs in with signInWithCustomToken() which triggers onAuthStateChanged.
  */
 export const studentPortalLogin = onCall(
-  { cors: true },
+  { cors: true, invoker: "public" },
   async (request) => {
     const rawInput = ((request.data?.username as string) || "").trim();
     const username = rawInput.toLowerCase();

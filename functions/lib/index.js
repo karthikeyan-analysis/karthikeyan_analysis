@@ -55,7 +55,7 @@ Object.defineProperty(exports, "resetCoHostPassword", { enumerable: true, get: f
  * then mints a custom Firebase Auth token signed with the student's Firestore doc ID as uid.
  * The client signs in with signInWithCustomToken() which triggers onAuthStateChanged.
  */
-exports.studentPortalLogin = (0, https_1.onCall)({ cors: true }, async (request) => {
+exports.studentPortalLogin = (0, https_1.onCall)({ cors: true, invoker: "public" }, async (request) => {
     const rawInput = (request.data?.username || "").trim();
     const username = rawInput.toLowerCase();
     const password = (request.data?.password || "").trim();
