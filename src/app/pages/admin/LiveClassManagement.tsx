@@ -353,91 +353,94 @@ export default function LiveClassManagement() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-12">
-      {/* Streamlined Executive Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 p-5 text-white shadow-xl ring-1 ring-white/10">
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="flex h-2.5 w-2.5 items-center justify-center">
-                <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-              </span>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
-                Live Video Classes Suite
-              </span>
+      {/* Overview Top Executive Banner & KPI Metrics (Shown exclusively on Overview Tab) */}
+      {activeTab === "overview" && (
+        <>
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 p-5 text-white shadow-xl ring-1 ring-white/10">
+            <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 items-center justify-center">
+                    <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                  </span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                    Live Video Classes Suite
+                  </span>
+                </div>
+                <h1 className="mt-1 text-xl font-extrabold tracking-tight text-white sm:text-2xl">
+                  Video Classes & Meeting Dashboard
+                </h1>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500"
+                  onClick={() => {
+                    resetForm();
+                    setCreateOpen(true);
+                  }}
+                >
+                  <Plus className="mr-1.5 h-4 w-4" />
+                  New Meeting Link
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-slate-700 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
+                  onClick={() => navigate("/admin/co-hosts")}
+                >
+                  <Shield className="mr-1.5 h-3.5 w-3.5 text-indigo-400" />
+                  Co-Hosts ({coHostCount})
+                </Button>
+              </div>
             </div>
-            <h1 className="mt-1 text-xl font-extrabold tracking-tight text-white sm:text-2xl">
-              Video Classes & Meeting Dashboard
-            </h1>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500"
-              onClick={() => {
-                resetForm();
-                setCreateOpen(true);
-              }}
-            >
-              <Plus className="mr-1.5 h-4 w-4" />
-              New Meeting Link
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-slate-700 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
-              onClick={() => navigate("/admin/co-hosts")}
-            >
-              <Shield className="mr-1.5 h-3.5 w-3.5 text-indigo-400" />
-              Co-Hosts ({coHostCount})
-            </Button>
-          </div>
-        </div>
-      </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500">Active Live</span>
+                <Radio className="h-4 w-4 text-emerald-600 animate-pulse" />
+              </div>
+              <p className="mt-1 text-xl font-bold text-slate-900">{liveClassesList.length}</p>
+            </div>
 
-      {/* Thin Compact KPI Metrics Bar */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">Active Live</span>
-            <Radio className="h-4 w-4 text-emerald-600 animate-pulse" />
-          </div>
-          <p className="mt-1 text-xl font-bold text-slate-900">{liveClassesList.length}</p>
-        </div>
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500">Scheduled</span>
+                <Calendar className="h-4 w-4 text-amber-600" />
+              </div>
+              <p className="mt-1 text-xl font-bold text-slate-900">{scheduledClassesList.length}</p>
+            </div>
 
-        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">Scheduled</span>
-            <Calendar className="h-4 w-4 text-amber-600" />
-          </div>
-          <p className="mt-1 text-xl font-bold text-slate-900">{scheduledClassesList.length}</p>
-        </div>
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500">R2 Recordings</span>
+                <PlayCircle className="h-4 w-4 text-indigo-600" />
+              </div>
+              <p className="mt-1 text-xl font-bold text-slate-900">{readyRecordingsList.length}</p>
+            </div>
 
-        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">R2 Recordings</span>
-            <PlayCircle className="h-4 w-4 text-indigo-600" />
-          </div>
-          <p className="mt-1 text-xl font-bold text-slate-900">{readyRecordingsList.length}</p>
-        </div>
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500">Co-Hosts</span>
+                <Shield className="h-4 w-4 text-purple-600" />
+              </div>
+              <p className="mt-1 text-xl font-bold text-slate-900">{coHostCount}</p>
+            </div>
 
-        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">Co-Hosts</span>
-            <Shield className="h-4 w-4 text-purple-600" />
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs col-span-2 sm:col-span-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-slate-500">Total Classes</span>
+                <Activity className="h-4 w-4 text-blue-600" />
+              </div>
+              <p className="mt-1 text-xl font-bold text-slate-900">{safeClasses.length}</p>
+            </div>
           </div>
-          <p className="mt-1 text-xl font-bold text-slate-900">{coHostCount}</p>
-        </div>
-
-        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs col-span-2 sm:col-span-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">Total Classes</span>
-            <Activity className="h-4 w-4 text-blue-600" />
-          </div>
-          <p className="mt-1 text-xl font-bold text-slate-900">{safeClasses.length}</p>
-        </div>
-      </div>
+        </>
+      )}
 
       {/* Dynamic Sub-Page Header for Non-Overview Tabs */}
       {activeTab !== "overview" && (
