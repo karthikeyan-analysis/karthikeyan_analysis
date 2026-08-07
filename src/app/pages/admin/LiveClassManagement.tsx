@@ -474,27 +474,54 @@ export default function LiveClassManagement() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500 text-xs"
-              onClick={() => {
-                resetForm();
-                setCreateOpen(true);
-              }}
-            >
-              <Plus className="mr-1 h-3.5 w-3.5" />
-              New Meeting Link
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs border-slate-200"
-              onClick={() => handleTabChange("overview")}
-            >
-              <Activity className="mr-1 h-3.5 w-3.5 text-indigo-600" />
-              Suite Overview
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {activeTab === "meetings" && (
+              <Button
+                size="sm"
+                className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500 text-xs"
+                onClick={() => {
+                  resetForm();
+                  setCreateOpen(true);
+                }}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                New Meeting Link
+              </Button>
+            )}
+
+            {activeTab === "attendance" && (
+              <Button
+                size="sm"
+                className="bg-emerald-600 font-semibold shadow-md hover:bg-emerald-500 text-xs"
+                onClick={exportAttendanceExcel}
+                disabled={safeAttendanceRecords.length === 0}
+              >
+                <Download className="mr-1 h-3.5 w-3.5" />
+                Export Excel
+              </Button>
+            )}
+
+            {activeTab === "live_tests" && (
+              <Button
+                size="sm"
+                className="bg-rose-600 font-semibold shadow-md hover:bg-rose-500 text-xs"
+                onClick={() => navigate("/admin/tests/create")}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" />
+                Create CBT Exam
+              </Button>
+            )}
+
+            {activeTab === "controls" && (
+              <Button
+                size="sm"
+                className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500 text-xs"
+                onClick={() => navigate("/admin/co-hosts")}
+              >
+                <Shield className="mr-1 h-3.5 w-3.5" />
+                Manage Co-Hosts
+              </Button>
+            )}
           </div>
         </div>
       )}
