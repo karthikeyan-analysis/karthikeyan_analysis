@@ -90,6 +90,13 @@ export default function LiveClassManagement() {
   const [admins, setAdmins] = useState<AdminProfile[]>([]);
   const [activeTab, setActiveTab] = useState<SuiteTab>("overview");
 
+  // Safe fallback arrays to prevent undefined.map / undefined.find crashes
+  const safeBatches = useMemo(() => batches || [], [batches]);
+  const safeExams = useMemo(() => exams || [], [exams]);
+  const safeClasses = useMemo(() => classes || [], [classes]);
+  const safeAdmins = useMemo(() => admins || [], [admins]);
+  const safeAttendanceRecords = useMemo(() => attendanceRecords || [], [attendanceRecords]);
+
   // Filters
   const [listFilter, setListFilter] = useState<ListFilter>("all");
   const [subjectFilter, setSubjectFilter] = useState<string>("all");
@@ -145,27 +152,27 @@ export default function LiveClassManagement() {
 
   const allSubjects = useMemo(() => {
     const names = new Set<string>();
-    for (const cls of classes) {
+    for (const cls of safeClasses) {
       const s = cls.subject?.trim();
       if (s) names.add(s);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [classes]);
+  }, [safeClasses]);
 
   const subjectOptions = useMemo(() => {
     const names = new Set<string>();
     for (const id of batchIds) {
-      const batch = batches.find((b) => b.id === id);
+      const batch = safeBatches.find((b) => b.id === id);
       for (const s of batch?.subjects || []) {
         const t = s.trim();
         if (t) names.add(t);
       }
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [batchIds, batches]);
+  }, [batchIds, safeBatches]);
 
   const filteredClasses = useMemo(() => {
-    return classes.filter((cls) => {
+    return safeClasses.filter((cls) => {
       if (subjectFilter !== "all" && cls.subject !== subjectFilter) return false;
       if (listFilter === "live") return cls.status === "active";
       if (listFilter === "scheduled") return cls.status === "scheduled";
@@ -173,19 +180,19 @@ export default function LiveClassManagement() {
       if (listFilter === "recordings") return cls.recordingStatus === "ready";
       return true;
     });
-  }, [classes, listFilter, subjectFilter]);
+  }, [safeClasses, listFilter, subjectFilter]);
 
   // Metrics
-  const liveClassesList = useMemo(() => classes.filter((c) => c.status === "active"), [classes]);
-  const scheduledClassesList = useMemo(() => classes.filter((c) => c.status === "scheduled"), [classes]);
-  const readyRecordingsList = useMemo(() => classes.filter((c) => c.recordingStatus === "ready"), [classes]);
-  const coHostCount = useMemo(() => admins.filter((a) => a.kind === "cohost").length, [admins]);
+  const liveClassesList = useMemo(() => safeClasses.filter((c) => c.status === "active"), [safeClasses]);
+  const scheduledClassesList = useMemo(() => safeClasses.filter((c) => c.status === "scheduled"), [safeClasses]);
+  const readyRecordingsList = useMemo(() => safeClasses.filter((c) => c.recordingStatus === "ready"), [safeClasses]);
+  const coHostCount = useMemo(() => safeAdmins.filter((a) => a.kind === "cohost").length, [safeAdmins]);
 
   const resetForm = () => {
     setName("");
     setSubject("");
     setBatchMode("single");
-    setBatchIds(batches[0]?.id ? [batches[0].id] : []);
+    setBatchIds(safeBatches[0]?.id ? [safeBatches[0].id] : []);
     setHostUids(user?.id ? [user.id] : []);
     setCoHostUids([]);
     setSelectedExamId("");
@@ -970,7 +977,7 @@ export default function LiveClassManagement() {
                     <SelectValue placeholder="Select class session" />
                   </SelectTrigger>
                   <SelectContent>
-                    {classes.map((c) => (
+                    {safeClasses.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name} ({c.subject})
                       </SelectItem>
@@ -982,7 +989,7 @@ export default function LiveClassManagement() {
                   size="sm"
                   className="bg-emerald-600 hover:bg-emerald-700"
                   onClick={exportAttendanceExcel}
-                  disabled={attendanceRecords.length === 0}
+                  disabled={safeAttendanceRecords.length === 0}
                 >
                   <Download className="mr-1.5 h-4 w-4" />
                   Export Excel
@@ -993,7 +1000,7 @@ export default function LiveClassManagement() {
           <CardContent>
             {loadingAttendance ? (
               <div className="py-12 text-center text-sm text-slate-500">Loading attendance records…</div>
-            ) : attendanceRecords.length === 0 ? (
+            ) : safeAttendanceRecords.length === 0 ? (
               <div className="py-12 text-center text-sm text-slate-500">
                 No attendance records recorded for this class session yet.
               </div>
@@ -1010,7 +1017,7 @@ export default function LiveClassManagement() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {attendanceRecords.map((att) => (
+                    {safeAttendanceRecords.map((att) => (
                       <TableRow key={att.uid} className="hover:bg-slate-50/60">
                         <TableCell className="font-medium text-slate-900">{att.name}</TableCell>
                         <TableCell className="text-xs text-slate-600">
@@ -1067,8 +1074,8 @@ export default function LiveClassManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {classes.map((cls) => {
-                    const currentTest = exams.find((e) => e.id === cls.liveTestId);
+                  {safeClasses.map((cls) => {
+                    const currentTest = safeExams.find((e) => e.id === cls.liveTestId);
                     return (
                       <TableRow key={cls.id}>
                         <TableCell className="font-medium text-slate-900">{cls.name}</TableCell>
@@ -1085,7 +1092,7 @@ export default function LiveClassManagement() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="none">No Live Test Linked</SelectItem>
-                              {exams.map((ex) => (
+                              {safeExams.map((ex) => (
                                 <SelectItem key={ex.id} value={ex.id}>
                                   {ex.title}
                                 </SelectItem>
@@ -1176,7 +1183,7 @@ export default function LiveClassManagement() {
             </div>
 
             <ExamBatchAssignmentFields
-              batches={batches.map((b) => ({ id: b.id, name: b.name }))}
+              batches={safeBatches.map((b) => ({ id: b.id, name: b.name }))}
               mode={batchMode}
               batchIds={batchIds}
               onModeChange={setBatchMode}
@@ -1219,7 +1226,7 @@ export default function LiveClassManagement() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None (Standard Live Class)</SelectItem>
-                  {exams.map((ex) => (
+                  {safeExams.map((ex) => (
                     <SelectItem key={ex.id} value={ex.id}>
                       {ex.title}
                     </SelectItem>
@@ -1240,7 +1247,7 @@ export default function LiveClassManagement() {
                 </button>
               </div>
               <div className="max-h-28 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-2.5">
-                {admins.map((a) => (
+                {safeAdmins.map((a) => (
                   <label key={a.uid} className="flex items-center gap-2 text-sm">
                     <Checkbox
                       checked={hostUids.includes(a.uid)}
