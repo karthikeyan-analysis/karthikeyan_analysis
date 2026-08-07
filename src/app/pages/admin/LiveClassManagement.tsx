@@ -439,79 +439,62 @@ export default function LiveClassManagement() {
         </div>
       </div>
 
-      {/* Navigation Tabs Bar */}
-      <div className="flex overflow-x-auto rounded-xl bg-slate-100 p-1 text-xs font-semibold text-slate-600">
-        <button
-          type="button"
-          onClick={() => handleTabChange("overview")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "overview" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <Activity className="h-3.5 w-3.5 text-indigo-600" />
-          Overview
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("meetings")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "meetings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <Video className="h-3.5 w-3.5 text-emerald-600" />
-          Meeting Links & Scheduler
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("controls")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "controls" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <Sliders className="h-3.5 w-3.5 text-amber-600" />
-          Host Studio Control Panel
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("recordings")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "recordings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <Download className="h-3.5 w-3.5 text-purple-600" />
-          Recordings & Downloads
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("attendance")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "attendance" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <FileText className="h-3.5 w-3.5 text-blue-600" />
-          Attendance Reports
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("live_tests")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "live_tests" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <Award className="h-3.5 w-3.5 text-rose-600" />
-          Live Test Integration
-        </button>
-        <button
-          type="button"
-          onClick={() => handleTabChange("settings")}
-          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
-            activeTab === "settings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
-          }`}
-        >
-          <Settings className="h-3.5 w-3.5 text-slate-600" />
-          Settings
-        </button>
-      </div>
+      {/* Dynamic Sub-Page Header for Non-Overview Tabs */}
+      {activeTab !== "overview" && (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-xl bg-white border border-slate-200/80 p-4 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
+              {activeTab === "meetings" && <Video className="h-5 w-5" />}
+              {activeTab === "controls" && <Sliders className="h-5 w-5 text-amber-300" />}
+              {activeTab === "recordings" && <Download className="h-5 w-5 text-purple-300" />}
+              {activeTab === "attendance" && <FileText className="h-5 w-5 text-blue-300" />}
+              {activeTab === "live_tests" && <Award className="h-5 w-5 text-rose-300" />}
+              {activeTab === "settings" && <Settings className="h-5 w-5" />}
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-slate-900">
+                {activeTab === "meetings" && "Subject Meeting Links & Scheduler"}
+                {activeTab === "controls" && "Host Studio Control Panel"}
+                {activeTab === "recordings" && "Recordings & Cloud Downloads"}
+                {activeTab === "attendance" && "Attendance Reports & Exporter"}
+                {activeTab === "live_tests" && "Live Exam Integration"}
+                {activeTab === "settings" && "Platform Security & Settings"}
+              </h2>
+              <p className="text-xs text-slate-500">
+                {activeTab === "meetings" && "Manage subject-wise links, active sessions & batch access"}
+                {activeTab === "controls" && "WebRTC studio control features for hosts & co-hosts"}
+                {activeTab === "recordings" && "Cloudflare R2 recording storage & instant download links"}
+                {activeTab === "attendance" && "View student join logs and export official attendance spreadsheets"}
+                {activeTab === "live_tests" && "Attach CBT tests directly to live video class sessions"}
+                {activeTab === "settings" && "Cloudflare SFU, R2 bucket & security enforcement"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500 text-xs"
+              onClick={() => {
+                resetForm();
+                setCreateOpen(true);
+              }}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" />
+              New Meeting Link
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-slate-200"
+              onClick={() => handleTabChange("overview")}
+            >
+              <Activity className="mr-1 h-3.5 w-3.5 text-indigo-600" />
+              Suite Overview
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === "overview" && (
