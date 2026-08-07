@@ -189,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (
     firebaseUser: FirebaseUser,
-    options?: { isFreshLogin?: boolean },
+    options?: { isFreshLogin?: boolean; targetRole?: UserRole },
   ): Promise<User | null> => {
     try {
       const userDocRef = doc(db, "users", firebaseUser.uid);
@@ -197,36 +197,58 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let userData = userDocSnap.exists() ? userDocSnap.data() : null;
 
-      // Self-healing: If users/{uid} does not exist, check if user is in admins collection or auto-create admin doc
-      if (!userData) {
-        console.warn("[AUTH] users/{uid} doc missing for UID:", firebaseUser.uid, "Email:", firebaseUser.email, "Checking admins collection...");
-        let adminData: any = null;
+      // Check if user is registered in admins collection
+      let isDocInAdmins = false;
+      let adminDocData: any = null;
+      if (firebaseUser.email) {
         try {
           const adminSnap = await getDoc(doc(db, "admins", firebaseUser.uid));
           if (adminSnap.exists()) {
-            adminData = adminSnap.data();
-          } else if (firebaseUser.email) {
+            isDocInAdmins = true;
+            adminDocData = adminSnap.data();
+          } else {
             const adminQuery = query(
               collection(db, "admins"),
               where("email", "==", firebaseUser.email.trim().toLowerCase()),
             );
             const qSnap = await getDocs(adminQuery);
             if (!qSnap.empty) {
-              adminData = qSnap.docs[0].data();
+              isDocInAdmins = true;
+              adminDocData = qSnap.docs[0].data();
             }
           }
         } catch (e) {
           console.warn("[AUTH] Error checking admins collection:", e);
         }
+      }
 
+      // Determine active role based on targetRole login intent or presence in admins collection
+      let role: UserRole = "student";
+      if (options?.targetRole === "admin" || isDocInAdmins) {
+        role = "admin";
+      } else if (userData?.role === "admin") {
+        role = "admin";
+      } else {
+        role = (userData?.role as UserRole) || "student";
+      }
+
+      // Self-healing / Promotion: If users/{uid} does not exist OR had role "student" but logging in as admin
+      if (!userData || (role === "admin" && userData.role !== "admin")) {
+        console.warn("[AUTH] Auto-provisioning/healing admin doc for UID:", firebaseUser.uid, "Email:", firebaseUser.email);
         const adminName =
-          adminData?.name ||
+          userData?.name ||
+          adminDocData?.name ||
           firebaseUser.displayName ||
           (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Admin");
         const adminKind =
-          adminData?.kind === "cohost" || adminData?.adminKind === "cohost" ? "cohost" : "full";
+          adminDocData?.kind === "cohost" ||
+          adminDocData?.adminKind === "cohost" ||
+          userData?.adminKind === "cohost"
+            ? "cohost"
+            : "full";
 
         userData = {
+          ...userData,
           role: "admin",
           name: adminName,
           email: firebaseUser.email || "",
@@ -240,16 +262,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             name: adminName,
             email: firebaseUser.email || "",
             adminKind,
-            createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
           { merge: true },
         );
-        console.log("[AUTH] Auto-healed and created users/{uid} doc for admin:", firebaseUser.uid);
+        console.log("[AUTH] Auto-healed and saved users/{uid} doc with role 'admin' for:", firebaseUser.uid);
       }
 
       if (userData) {
-        const role = (userData.role as UserRole) || "admin";
         let name =
           (typeof userData.name === "string" && userData.name.trim()) ||
           firebaseUser.displayName ||
@@ -659,7 +679,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const result = await signInWithEmailAndPassword(auth, cleanEmail, cleanPassword);
       console.log(`[AUTH_LOGIN] Firebase Auth signInWithEmailAndPassword SUCCESS! UID: ${result.user.uid}`);
-      const userData = await fetchUserData(result.user, { isFreshLogin: true });
+      const userData = await fetchUserData(result.user, { isFreshLogin: true, targetRole: role });
       console.log("[AUTH_LOGIN] fetchUserData returned:", userData);
 
       if (userData && userData.role === role) {
