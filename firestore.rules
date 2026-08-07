@@ -105,8 +105,8 @@ service cloud.firestore {
     }
 
     match /students/{id} {
-      // Needed for student Google login and guest matching by email.
-      allow read: if isSignedIn();
+      // Needed for student username/password login, Google login, and guest matching.
+      allow read: if true;
       allow write: if isAdmin();
     }
 

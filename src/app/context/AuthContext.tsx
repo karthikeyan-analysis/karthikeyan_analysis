@@ -697,82 +697,158 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   /**
-   * Sign in a student using an admin-generated username + password.
-   * Calls the `studentPortalLogin` Cloud Function, receives a custom token,
-   * then signs into Firebase Auth with signInWithCustomToken.
+   * Sign in a student using an admin-generated username + password or email + password.
+   * Performs direct client-side authentication against Firestore (No Cloud Functions required!).
    */
   const loginStudentWithUsername = async (
-    username: string,
-    password: string,
+    usernameInput: string,
+    passwordInput: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoggingInRef.current = true;
-    const cleanUsername = username.trim().toLowerCase();
-    console.log("[STUDENT_AUTH] loginStudentWithUsername triggered for input:", cleanUsername);
+    const rawInput = usernameInput.trim();
+    const cleanInput = rawInput.toLowerCase();
+    const password = passwordInput.trim();
+
+    if (!rawInput || !password) {
+      return { success: false, error: "Please enter both username and password." };
+    }
+
     try {
-      const functions = getFunctions();
-      console.log("[STUDENT_AUTH] Calling Cloud Function 'studentPortalLogin'...");
-      const studentPortalLogin = httpsCallable<
-        { username: string; password: string },
-        { customToken: string }
-      >(functions, "studentPortalLogin");
+      console.log("[STUDENT_AUTH] Direct client-side student login attempt for input:", cleanInput);
 
-      const result = await studentPortalLogin({
-        username: cleanUsername,
-        password: password.trim(),
-      });
+      // 1. Try finding student doc by portalUsername
+      let studentSnap = await getDocs(
+        query(collection(db, "students"), where("portalUsername", "==", cleanInput)),
+      );
 
-      const { customToken } = result.data;
-      console.log("[STUDENT_AUTH] Cloud Function returned response. Token present:", Boolean(customToken));
-      if (!customToken) {
-        return { success: false, error: "Login failed. Please try again." };
+      // 2. If not found by portalUsername, try matching email
+      if (studentSnap.empty) {
+        studentSnap = await getDocs(
+          query(collection(db, "students"), where("email", "==", cleanInput)),
+        );
       }
 
-      console.log("[STUDENT_AUTH] Signing in with custom token via Firebase Auth...");
-      const credential = await signInWithCustomToken(auth, customToken);
-      console.log("[STUDENT_AUTH] Custom token sign-in success. Auth UID:", credential.user.uid);
-      const userData = await fetchUserData(credential.user, { isFreshLogin: true });
-      if (userData && userData.role === "student") {
-        console.log("[STUDENT_AUTH] Student user profile hydrated successfully:", userData.name);
-        // Write session BEFORE setUser so any concurrent onAuthStateChanged
-        // call that also runs fetchUserData sees a valid localStorage token.
-        if (userData.studentRecordId) {
-          await writeStudentSession(userData.studentRecordId);
+      // 3. If not found by email, try matching studentId
+      if (studentSnap.empty) {
+        studentSnap = await getDocs(
+          query(collection(db, "students"), where("studentId", "==", rawInput)),
+        );
+      }
+
+      // 4. Fallback search over all student docs for trimmed email / portalUsername
+      if (studentSnap.empty) {
+        try {
+          const allStudentsSnap = await getDocs(collection(db, "students"));
+          const matchDoc = allStudentsSnap.docs.find((docSnap) => {
+            const data = docSnap.data();
+            const em = String(data.email || "").trim().toLowerCase();
+            const pu = String(data.portalUsername || "").trim().toLowerCase();
+            const si = String(data.studentId || "").trim();
+            return em === cleanInput || pu === cleanInput || si === rawInput;
+          });
+          if (matchDoc) {
+            studentSnap = { empty: false, docs: [matchDoc] } as any;
+          }
+        } catch (e) {
+          console.warn("[STUDENT_AUTH] Fallback search error:", e);
         }
-        setUser(userData);
-        return { success: true };
       }
-      console.error("[STUDENT_AUTH] fetchUserData returned null or non-student role:", userData);
-      await signOut(auth);
-      setUser(null);
-      return {
-        success: false,
-        error: "Account not found. Contact your admin.",
-      };
-    } catch (error: any) {
-      console.error("[STUDENT_AUTH] Username login exception. Code:", error?.code, "Message:", error?.message, "Full error:", error);
-      const code = error?.code || "";
-      if (
-        code === "functions/unauthenticated" ||
-        code === "functions/invalid-argument"
-      ) {
+
+      if (studentSnap.empty) {
+        console.error("[STUDENT_AUTH] Student record not found for input:", cleanInput);
         return { success: false, error: "Invalid username or password." };
       }
-      if (code === "functions/permission-denied") {
-        return {
-          success: false,
-          error: "Your account is inactive. Contact your admin.",
-        };
+
+      const studentDocRef = studentSnap.docs[0];
+      const studentRecordId = studentDocRef.id;
+      const studentData = studentDocRef.data() as {
+        name?: string;
+        email?: string;
+        studentId?: string;
+        portalUsername?: string;
+        portalPassword?: string;
+        status?: string;
+        batchId?: string;
+        batchIds?: string[];
+        photoURL?: string;
+      };
+
+      console.log("[STUDENT_AUTH] Matched student doc ID:", studentRecordId, "Name:", studentData.name);
+
+      if (studentData.status === "inactive") {
+        return { success: false, error: "Your account is inactive. Contact your admin." };
       }
-      if (
-        code === "functions/not-found" ||
-        code === "functions/unavailable" ||
-        code === "functions/internal"
-      ) {
-        return {
-          success: false,
-          error: "Username login service is not deployed or unreachable on Firebase. Please deploy Cloud Functions or use Google sign-in.",
-        };
+
+      const storedPassword = String(studentData.portalPassword || "").trim();
+      if (!storedPassword || storedPassword !== password) {
+        console.error("[STUDENT_AUTH] Password mismatch for student:", studentRecordId);
+        return { success: false, error: "Invalid username or password." };
       }
+
+      // Password verified! Authenticate with Firebase Auth (or sign in anonymously)
+      let currentAuthUser = auth.currentUser;
+      if (!currentAuthUser) {
+        const cred = await signInAnonymously(auth);
+        currentAuthUser = cred.user;
+      }
+
+      const signedInEmail = (studentData.email || "").trim().toLowerCase();
+      const batchIds = normalizeStudentBatchIds(studentData);
+      const activeBatchId = resolveActiveBatchId({
+        batchIds,
+        studentRecordId,
+        preferredFromUserDoc: studentData.batchId,
+      });
+
+      if (activeBatchId) {
+        writeStoredActiveBatch(studentRecordId, activeBatchId);
+      }
+
+      const userName = studentData.name?.trim() || "Student";
+      const photoURL =
+        typeof studentData.photoURL === "string" && studentData.photoURL.trim()
+          ? studentData.photoURL.trim()
+          : undefined;
+
+      // Write user profile to users/{uid}
+      await setDoc(
+        doc(db, "users", currentAuthUser.uid),
+        {
+          role: "student",
+          name: userName,
+          email: signedInEmail,
+          studentId: studentData.studentId,
+          batchId: activeBatchId ?? null,
+          batchIds,
+          studentRecordId,
+          isGuestExamParticipant: false,
+          guestExamTestId: null,
+          ...(photoURL ? { photoURL } : {}),
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true },
+      );
+
+      await writeStudentSession(studentRecordId);
+
+      const studentUser: User = {
+        id: currentAuthUser.uid,
+        email: signedInEmail,
+        name: userName,
+        role: "student",
+        studentId: studentData.studentId,
+        batchId: activeBatchId ?? undefined,
+        batchIds: batchIds.length ? batchIds : undefined,
+        studentRecordId,
+        photoURL,
+        isGuestExamParticipant: false,
+      };
+
+      console.log("[STUDENT_AUTH] Client-side username login SUCCESS! Logged in as:", studentUser.name);
+      setUser(studentUser);
+      return { success: true };
+    } catch (error: any) {
+      console.error("[STUDENT_AUTH] Direct username login error:", error);
       return {
         success: false,
         error: error?.message || "Login failed. Please try again.",
