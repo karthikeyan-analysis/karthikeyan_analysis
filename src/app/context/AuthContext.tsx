@@ -463,9 +463,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function completeStudentGoogleSignIn(
     firebaseUser: FirebaseUser,
   ): Promise<{ success: boolean; error?: string; user?: User | null }> {
-    const signedInEmail = (firebaseUser.email || "").toLowerCase();
+    const signedInEmail = (firebaseUser.email || "").trim().toLowerCase();
+
+    console.log("[STUDENT_AUTH] completeStudentGoogleSignIn called for email:", signedInEmail, "UID:", firebaseUser.uid);
 
     if (!signedInEmail) {
+      console.error("[STUDENT_AUTH] No email associated with Google Account!");
       await signOut(auth);
       return {
         success: false,
@@ -473,30 +476,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
-    const studentQuery = query(
-      collection(db, "students"),
-      where("email", "==", signedInEmail),
+    let studentSnap = await getDocs(
+      query(collection(db, "students"), where("email", "==", signedInEmail)),
     );
-    const studentSnap = await getDocs(studentQuery);
+    console.log("[STUDENT_AUTH] Direct Firestore student query result count:", studentSnap.docs.length);
+
+    // Fallback: search for legacy records with un-trimmed or un-lowercased email
+    if (studentSnap.empty) {
+      console.warn("[STUDENT_AUTH] Direct email query returned 0 matches. Executing fallback scan over 'students' collection...");
+      try {
+        const allStudentsSnap = await getDocs(collection(db, "students"));
+        const matchDoc = allStudentsSnap.docs.find(
+          (docSnap) =>
+            String(docSnap.data().email || "")
+              .trim()
+              .toLowerCase() === signedInEmail,
+        );
+        if (matchDoc) {
+          console.log("[STUDENT_AUTH] Fallback search matched student doc ID:", matchDoc.id);
+          studentSnap = {
+            empty: false,
+            docs: [matchDoc],
+          } as any;
+        } else {
+          console.error("[STUDENT_AUTH] Fallback search found no student with email matching:", signedInEmail);
+        }
+      } catch (fallbackErr) {
+        console.error("[STUDENT_AUTH] Fallback search error:", fallbackErr);
+      }
+    }
 
     if (studentSnap.empty) {
+      console.error("[STUDENT_AUTH] Google sign-in REJECTED: No student record found in Firestore for email:", signedInEmail);
       await signOut(auth);
       return {
         success: false,
-        error:
-          "This Google account is not registered as a student. Contact admin.",
+        error: `This Google account (${signedInEmail}) is not registered as a student. Contact your admin or try username & password.`,
       };
     }
 
-    const studentRecord = studentSnap.docs[0].data() as {
+    const studentDocRef = studentSnap.docs[0];
+    const studentRecord = studentDocRef.data() as {
       name?: string;
       email?: string;
       studentId?: string;
       batchId?: string;
       batchIds?: string[];
       photoURL?: string;
+      status?: string;
     };
-    const studentRecordId = studentSnap.docs[0].id;
+    const studentRecordId = studentDocRef.id;
+
+    if (studentRecord.status === "inactive") {
+      await signOut(auth);
+      return {
+        success: false,
+        error: "Your student account is inactive. Please contact your admin.",
+      };
+    }
     const batchIds = normalizeStudentBatchIds(studentRecord);
     const activeBatchId = resolveActiveBatchId({
       batchIds,
@@ -590,11 +627,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     error?: string;
   }> => {
     isLoggingInRef.current = true;
+    console.log("[STUDENT_AUTH] loginStudentWithGoogle triggered");
     const provider = new GoogleAuthProvider();
     // Force account-picker even when the user already has a session.
     provider.setCustomParameters({ prompt: "select_account" });
 
     const startRedirect = async () => {
+      console.log("[STUDENT_AUTH] Starting Google Redirect sign-in flow...");
       await signInWithRedirect(auth, provider);
       // Navigation leaves this page; callers should keep a "redirecting" state.
       return { success: true as const };
@@ -602,13 +641,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       if (shouldPreferGoogleRedirect()) {
+        console.log("[STUDENT_AUTH] Device prefers redirect. Initiating redirect...");
         return await startRedirect();
       }
 
       let result;
       try {
+        console.log("[STUDENT_AUTH] Attempting signInWithPopup...");
         result = await signInWithPopup(auth, provider);
+        console.log("[STUDENT_AUTH] signInWithPopup succeeded. User:", result.user.email, "UID:", result.user.uid);
       } catch (popupError: any) {
+        console.warn("[STUDENT_AUTH] Popup failed. Code:", popupError?.code, "Error:", popupError);
         // Popups fail often on older browsers, Safari, and in-app webviews.
         if (
           popupError?.code === "auth/popup-blocked" ||
@@ -636,12 +679,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       const completed = await completeStudentGoogleSignIn(result.user);
       if (!completed.success) {
+        console.error("[STUDENT_AUTH] completeStudentGoogleSignIn returned error:", completed.error);
         return { success: false, error: completed.error };
       }
+      console.log("[STUDENT_AUTH] Student Google login SUCCESS! Setting user state.");
       setUser(completed.user || null);
       return { success: true };
     } catch (error: any) {
-      console.error("Student Google login error:", error);
+      console.error("[STUDENT_AUTH] Student Google login caught exception:", error);
       return {
         success: false,
         error: error?.message || "Could not sign in with Google. Please try again.",
@@ -661,26 +706,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     password: string,
   ): Promise<{ success: boolean; error?: string }> => {
     isLoggingInRef.current = true;
+    const cleanUsername = username.trim().toLowerCase();
+    console.log("[STUDENT_AUTH] loginStudentWithUsername triggered for input:", cleanUsername);
     try {
       const functions = getFunctions();
+      console.log("[STUDENT_AUTH] Calling Cloud Function 'studentPortalLogin'...");
       const studentPortalLogin = httpsCallable<
         { username: string; password: string },
         { customToken: string }
       >(functions, "studentPortalLogin");
 
       const result = await studentPortalLogin({
-        username: username.trim().toLowerCase(),
+        username: cleanUsername,
         password: password.trim(),
       });
 
       const { customToken } = result.data;
+      console.log("[STUDENT_AUTH] Cloud Function returned response. Token present:", Boolean(customToken));
       if (!customToken) {
         return { success: false, error: "Login failed. Please try again." };
       }
 
+      console.log("[STUDENT_AUTH] Signing in with custom token via Firebase Auth...");
       const credential = await signInWithCustomToken(auth, customToken);
+      console.log("[STUDENT_AUTH] Custom token sign-in success. Auth UID:", credential.user.uid);
       const userData = await fetchUserData(credential.user, { isFreshLogin: true });
       if (userData && userData.role === "student") {
+        console.log("[STUDENT_AUTH] Student user profile hydrated successfully:", userData.name);
         // Write session BEFORE setUser so any concurrent onAuthStateChanged
         // call that also runs fetchUserData sees a valid localStorage token.
         if (userData.studentRecordId) {
@@ -689,6 +741,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userData);
         return { success: true };
       }
+      console.error("[STUDENT_AUTH] fetchUserData returned null or non-student role:", userData);
       await signOut(auth);
       setUser(null);
       return {
@@ -696,10 +749,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: "Account not found. Contact your admin.",
       };
     } catch (error: any) {
-      console.error("Username login error:", error);
+      console.error("[STUDENT_AUTH] Username login exception. Code:", error?.code, "Message:", error?.message, "Full error:", error);
       const code = error?.code || "";
       if (
-        code === "functions/not-found" ||
+        code === "functions/unauthenticated" ||
         code === "functions/invalid-argument"
       ) {
         return { success: false, error: "Invalid username or password." };
@@ -708,6 +761,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return {
           success: false,
           error: "Your account is inactive. Contact your admin.",
+        };
+      }
+      if (
+        code === "functions/not-found" ||
+        code === "functions/unavailable" ||
+        code === "functions/internal"
+      ) {
+        return {
+          success: false,
+          error: "Username login service is not deployed or unreachable on Firebase. Please deploy Cloud Functions or use Google sign-in.",
         };
       }
       return {

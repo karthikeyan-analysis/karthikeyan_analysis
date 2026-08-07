@@ -364,7 +364,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       );
       const newStudent: Omit<Student, "id"> = {
         ...student,
-        email: student.email.toLowerCase(),
+        email: student.email.trim().toLowerCase(),
         enrolledDate:
           student.enrolledDate || new Date().toISOString().split("T")[0],
         batchId: batchFields.batchId || undefined,

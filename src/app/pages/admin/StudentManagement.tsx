@@ -209,7 +209,7 @@ function PortalCredentialsDialog({
     else if (field === "password") text = password;
     else {
       const portalUrl = window.location.origin + "/login";
-      text = `Portal Login Details:\nURL: ${portalUrl}\nUsername: ${username}\nPassword: ${password}\n\nShare this with the student: ${student.name}`;
+      text = `Portal Login Details:\nURL: ${portalUrl}\nUsername: ${username} (or email: ${student.email})\nPassword: ${password}\n\nShare this with student: ${student.name}`;
     }
     navigator.clipboard.writeText(text).catch(() => {});
     setCopiedField(field);
@@ -306,9 +306,9 @@ function PortalCredentialsDialog({
           {/* Share summary */}
           {hasCredentials && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-              <p className="text-xs text-slate-500 font-medium">Share with student</p>
+              <p className="text-xs text-slate-500 font-medium">Share with student (Can log in with Username or Email)</p>
               <p className="text-xs text-slate-700 font-mono whitespace-pre-line leading-relaxed">
-                {`URL: ${portalUrl}\nUsername: ${username}\nPassword: ${showPassword ? password : "•".repeat(password.length)}`}
+                {`URL: ${portalUrl}\nUsername: ${username} (or Email: ${student.email})\nPassword: ${showPassword ? password : "•".repeat(password.length)}`}
               </p>
               <Button
                 type="button"

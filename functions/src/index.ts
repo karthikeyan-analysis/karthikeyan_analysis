@@ -19,24 +19,50 @@ export { createCoHost, deleteCoHost, resetCoHostPassword } from "./liveClasses/c
 export const studentPortalLogin = onCall(
   { cors: true },
   async (request) => {
-    const username = ((request.data?.username as string) || "").trim().toLowerCase();
+    const rawInput = ((request.data?.username as string) || "").trim();
+    const username = rawInput.toLowerCase();
     const password = ((request.data?.password as string) || "").trim();
 
-    if (!username || !password) {
+    console.log(`[FUNCTION_AUTH] studentPortalLogin triggered with input: '${rawInput}'`);
+
+    if (!rawInput || !password) {
+      console.warn("[FUNCTION_AUTH] Missing username or password in request");
       throw new HttpsError("invalid-argument", "Username and password are required.");
     }
 
     const db = admin.firestore();
 
-    // Find student by portalUsername (case-insensitive — stored lowercase)
-    const snap = await db
+    // 1. Try finding student by portalUsername
+    console.log(`[FUNCTION_AUTH] 1. Searching students where portalUsername == '${username}'`);
+    let snap = await db
       .collection("students")
       .where("portalUsername", "==", username)
       .limit(1)
       .get();
 
+    // 2. If not found by portalUsername, try matching email
     if (snap.empty) {
-      throw new HttpsError("not-found", "Invalid username or password.");
+      console.log(`[FUNCTION_AUTH] 2. Searching students where email == '${username}'`);
+      snap = await db
+        .collection("students")
+        .where("email", "==", username)
+        .limit(1)
+        .get();
+    }
+
+    // 3. If not found by email, try matching studentId
+    if (snap.empty) {
+      console.log(`[FUNCTION_AUTH] 3. Searching students where studentId == '${rawInput}'`);
+      snap = await db
+        .collection("students")
+        .where("studentId", "==", rawInput)
+        .limit(1)
+        .get();
+    }
+
+    if (snap.empty) {
+      console.error(`[FUNCTION_AUTH] Student record NOT FOUND for input: '${rawInput}'`);
+      throw new HttpsError("unauthenticated", "Invalid username or password.");
     }
 
     const studentDoc = snap.docs[0];
@@ -44,18 +70,26 @@ export const studentPortalLogin = onCall(
       portalPassword?: string;
       status?: string;
       name?: string;
+      email?: string;
+      portalUsername?: string;
     };
+
+    console.log(`[FUNCTION_AUTH] Found student record. DocId: ${studentDoc.id}, Name: '${studentData.name}', Email: '${studentData.email}', PortalUsername: '${studentData.portalUsername}', Status: '${studentData.status}'`);
 
     // Check status
     if (studentData.status === "inactive") {
+      console.warn(`[FUNCTION_AUTH] Account is INACTIVE for student: ${studentDoc.id}`);
       throw new HttpsError("permission-denied", "Your account is inactive. Contact your admin.");
     }
 
     // Validate password (stored as plaintext admin-generated code)
     const storedPassword = (studentData.portalPassword || "").trim();
     if (!storedPassword || storedPassword !== password) {
-      throw new HttpsError("not-found", "Invalid username or password.");
+      console.error(`[FUNCTION_AUTH] Password mismatch for student: ${studentDoc.id}. Provided length: ${password.length}, Stored exists: ${Boolean(storedPassword)}`);
+      throw new HttpsError("unauthenticated", "Invalid username or password.");
     }
+
+    console.log(`[FUNCTION_AUTH] Password verified! Minting custom token for docId: ${studentDoc.id}`);
 
     // Mint a custom token. Use the student Firestore doc ID as the Firebase Auth UID.
     // The onAuthStateChanged handler → fetchUserData will then load the full student profile.

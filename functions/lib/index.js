@@ -56,32 +56,59 @@ Object.defineProperty(exports, "resetCoHostPassword", { enumerable: true, get: f
  * The client signs in with signInWithCustomToken() which triggers onAuthStateChanged.
  */
 exports.studentPortalLogin = (0, https_1.onCall)({ cors: true }, async (request) => {
-    const username = (request.data?.username || "").trim().toLowerCase();
+    const rawInput = (request.data?.username || "").trim();
+    const username = rawInput.toLowerCase();
     const password = (request.data?.password || "").trim();
-    if (!username || !password) {
+    console.log(`[FUNCTION_AUTH] studentPortalLogin triggered with input: '${rawInput}'`);
+    if (!rawInput || !password) {
+        console.warn("[FUNCTION_AUTH] Missing username or password in request");
         throw new https_1.HttpsError("invalid-argument", "Username and password are required.");
     }
     const db = admin.firestore();
-    // Find student by portalUsername (case-insensitive — stored lowercase)
-    const snap = await db
+    // 1. Try finding student by portalUsername
+    console.log(`[FUNCTION_AUTH] 1. Searching students where portalUsername == '${username}'`);
+    let snap = await db
         .collection("students")
         .where("portalUsername", "==", username)
         .limit(1)
         .get();
+    // 2. If not found by portalUsername, try matching email
     if (snap.empty) {
-        throw new https_1.HttpsError("not-found", "Invalid username or password.");
+        console.log(`[FUNCTION_AUTH] 2. Searching students where email == '${username}'`);
+        snap = await db
+            .collection("students")
+            .where("email", "==", username)
+            .limit(1)
+            .get();
+    }
+    // 3. If not found by email, try matching studentId
+    if (snap.empty) {
+        console.log(`[FUNCTION_AUTH] 3. Searching students where studentId == '${rawInput}'`);
+        snap = await db
+            .collection("students")
+            .where("studentId", "==", rawInput)
+            .limit(1)
+            .get();
+    }
+    if (snap.empty) {
+        console.error(`[FUNCTION_AUTH] Student record NOT FOUND for input: '${rawInput}'`);
+        throw new https_1.HttpsError("unauthenticated", "Invalid username or password.");
     }
     const studentDoc = snap.docs[0];
     const studentData = studentDoc.data();
+    console.log(`[FUNCTION_AUTH] Found student record. DocId: ${studentDoc.id}, Name: '${studentData.name}', Email: '${studentData.email}', PortalUsername: '${studentData.portalUsername}', Status: '${studentData.status}'`);
     // Check status
     if (studentData.status === "inactive") {
+        console.warn(`[FUNCTION_AUTH] Account is INACTIVE for student: ${studentDoc.id}`);
         throw new https_1.HttpsError("permission-denied", "Your account is inactive. Contact your admin.");
     }
     // Validate password (stored as plaintext admin-generated code)
     const storedPassword = (studentData.portalPassword || "").trim();
     if (!storedPassword || storedPassword !== password) {
-        throw new https_1.HttpsError("not-found", "Invalid username or password.");
+        console.error(`[FUNCTION_AUTH] Password mismatch for student: ${studentDoc.id}. Provided length: ${password.length}, Stored exists: ${Boolean(storedPassword)}`);
+        throw new https_1.HttpsError("unauthenticated", "Invalid username or password.");
     }
+    console.log(`[FUNCTION_AUTH] Password verified! Minting custom token for docId: ${studentDoc.id}`);
     // Mint a custom token. Use the student Firestore doc ID as the Firebase Auth UID.
     // The onAuthStateChanged handler → fetchUserData will then load the full student profile.
     const customUid = `portal_${studentDoc.id}`;
@@ -89,18 +116,16 @@ exports.studentPortalLogin = (0, https_1.onCall)({ cors: true }, async (request)
         studentRecordId: studentDoc.id,
         role: "student",
     });
-    // Ensure a users/{uid} doc exists so fetchUserData can hydrate the student profile.
+    // Always write/refresh the users/{uid} doc so fetchUserData always has
+    // up-to-date role, name, email, and studentRecordId — even on repeated logins.
     const userDocRef = db.collection("users").doc(customUid);
-    const userSnap = await userDocRef.get();
-    if (!userSnap.exists) {
-        await userDocRef.set({
-            role: "student",
-            name: studentData.name || "",
-            email: studentDoc.data().email || "",
-            studentRecordId: studentDoc.id,
-            updatedAt: new Date().toISOString(),
-        }, { merge: true });
-    }
+    await userDocRef.set({
+        role: "student",
+        name: studentData.name || "",
+        email: studentDoc.data().email || "",
+        studentRecordId: studentDoc.id,
+        updatedAt: new Date().toISOString(),
+    }, { merge: true });
     return { customToken };
 });
 exports.submitExamAttempt = (0, https_1.onCall)({

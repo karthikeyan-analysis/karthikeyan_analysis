@@ -134,30 +134,26 @@ export default function Login({ role = "student" }: LoginProps) {
   };
 
   const handleStudentGoogleLogin = async () => {
+    console.log("[LOGIN_PAGE] Student clicked Google login button.");
     setError("");
     setLoading(true);
     try {
       const result = await loginStudentWithGoogle();
+      console.log("[LOGIN_PAGE] loginStudentWithGoogle result:", result);
       if (!result.success) {
         setError(result.error || "Google sign-in failed.");
       }
-      // On popup success: setLoading(false) fires in `finally` below, then the
-      // useEffect watching [authLoading, loading, user] handles navigation once
-      // AuthContext has set the user. Having navigate() here AND in the effect
-      // created a race that left `loading` stuck true and blocked the effect gate.
-      //
-      // On redirect initiation: the browser replaces this page immediately;
-      // the finally runs before unload but it doesn't matter — component unmounts.
     } catch (err: any) {
+      console.error("[LOGIN_PAGE] handleStudentGoogleLogin caught error:", err);
       setError(err?.message || "Google sign-in failed. Please try again.");
     } finally {
-      // Always clear local loading so the navigation useEffect can fire.
       setLoading(false);
     }
   };
 
   const handlePortalUsernameLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("[LOGIN_PAGE] Student submitted username login form. Username:", portalUsername.trim());
     if (!portalUsername.trim() || !portalPassword.trim()) {
       setError("Please enter both username and password.");
       return;
@@ -166,11 +162,12 @@ export default function Login({ role = "student" }: LoginProps) {
     setLoading(true);
     try {
       const result = await loginStudentWithUsername(portalUsername, portalPassword);
+      console.log("[LOGIN_PAGE] loginStudentWithUsername result:", result);
       if (!result.success) {
         setError(result.error || "Invalid username or password.");
       }
-      // Navigation handled by the useEffect above once user state is set.
     } catch (err: any) {
+      console.error("[LOGIN_PAGE] handlePortalUsernameLogin caught error:", err);
       setError(err?.message || "Login failed. Please try again.");
     } finally {
       setLoading(false);
@@ -194,58 +191,51 @@ export default function Login({ role = "student" }: LoginProps) {
               : "Secure Student Portal Access"}
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={role === "admin" ? handleSubmit : (e) => e.preventDefault()}
-            className="space-y-5"
-          >
-            {role === "admin" && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="your.email@edu.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="bg-white"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="bg-white"
-                  />
-                </div>
-              </>
-            )}
-
-            {kickedNotice && (
-              <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                <Smartphone className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800">
-                  You were signed out because your account was logged in on another device. Contact your admin if this wasn't you.
-                </p>
+        <CardContent className="space-y-5">
+          {role === "admin" ? (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email Address</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="your.email@edu.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="bg-white"
+                />
               </div>
-            )}
 
-            {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
-                <p className="text-sm text-red-800">{error}</p>
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="bg-white"
+                />
               </div>
-            )}
 
-            {role === "admin" ? (
+              {kickedNotice && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <Smartphone className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">
+                    You were signed out because your account was logged in on another device. Contact your admin if this wasn't you.
+                  </p>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
               <Button
                 type="submit"
                 className="w-full bg-indigo-600 hover:bg-indigo-700"
@@ -253,7 +243,25 @@ export default function Login({ role = "student" }: LoginProps) {
               >
                 {loading ? "Signing in..." : "Sign In"}
               </Button>
-            ) : (
+            </form>
+          ) : (
+            <div className="space-y-4">
+              {kickedNotice && (
+                <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <Smartphone className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm text-amber-800">
+                    You were signed out because your account was logged in on another device. Contact your admin if this wasn't you.
+                  </p>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0" />
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+
               <div className="space-y-3">
                 {/* ── Google Login (always shown first) ── */}
                 {studentLoginMode === "google" && (
@@ -368,9 +376,10 @@ export default function Login({ role = "student" }: LoginProps) {
                   </Button>
                 ) : null}
               </div>
-            )}
+            </div>
+          )}
 
-            <div className="pt-4 border-t">
+          <div className="pt-4 border-t">
               <p className="text-xs text-center text-slate-500">
                 {role === "admin"
                   ? "Admins and co-hosts sign in here with the email and password shared with them."
@@ -389,7 +398,6 @@ export default function Login({ role = "student" }: LoginProps) {
                 </p>
               )}
             </div>
-          </form>
         </CardContent>
       </Card>
     </div>
