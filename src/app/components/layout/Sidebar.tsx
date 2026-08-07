@@ -21,6 +21,7 @@ import {
   ChevronRight,
   ArrowLeft,
   PlusCircle,
+  Shield,
   Sparkles,
 } from "lucide-react";
 import { cn } from "../ui/utils";
@@ -34,14 +35,12 @@ type SubItem = {
   to: string;
   label: string;
   icon: React.ElementType;
-  description?: string;
   end?: boolean;
 };
 
 type PrimaryCategory = {
   id: string;
   label: string;
-  description?: string;
   icon: React.ElementType;
   to?: string;
   items?: SubItem[];
@@ -59,35 +58,30 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     {
       id: "dashboard",
       label: "Dashboard",
-      description: "Overview metrics & quick stats",
       icon: LayoutDashboard,
       to: "/admin",
     },
     {
       id: "live_classes",
       label: "Live Video Classes",
-      description: "Zoom platform, co-hosts & links",
       icon: Video,
       items: [
         {
           to: "/admin/live-classes",
           icon: Video,
           label: "Video Classes Suite",
-          description: "Subject-wise links, meeting studio & radar",
           end: true,
         },
         {
           to: "/admin/co-hosts",
           icon: UserPlus,
           label: "Co-Host Management",
-          description: "Manage co-host accounts & passwords",
           end: true,
         },
         {
           to: "/admin/live-tests",
           icon: Radio,
           label: "Conduct Live Test",
-          description: "Trigger live exams during active classes",
           end: true,
         },
       ],
@@ -95,42 +89,36 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     {
       id: "tests",
       label: "Tests & Exam Engine",
-      description: "CBT tests, live monitor & reports",
       icon: ClipboardList,
       items: [
         {
           to: "/admin/tests",
           icon: ClipboardList,
           label: "All Tests & Exams",
-          description: "Manage CBT exams & question banks",
           end: true,
         },
         {
           to: "/admin/tests/create",
           icon: PlusCircle,
           label: "Create New Test",
-          description: "Build new exam paper with questions",
           end: true,
         },
         {
           to: "/admin/tests/live-monitor",
           icon: Radio,
           label: "Live Exam Monitor",
-          description: "Real-time student progress tracking",
           end: true,
         },
         {
           to: "/admin/tests/analytics",
           icon: BarChart3,
           label: "Analytics & Results",
-          description: "Scorecards, ranks & test performance",
           end: true,
         },
         {
           to: "/admin/reports/student-tests",
           icon: FileSpreadsheet,
           label: "Student Test Reports",
-          description: "Export individual test report sheets",
           end: true,
         },
       ],
@@ -138,35 +126,30 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     {
       id: "people",
       label: "Students & Batches",
-      description: "Profiles, enrollments & batches",
       icon: Users,
       items: [
         {
           to: "/admin/students",
           icon: Users,
           label: "Student Management",
-          description: "Student profiles, credentials & access",
           end: true,
         },
         {
           to: "/admin/batches",
           icon: Layers3,
           label: "Batch Management",
-          description: "Course batches & subject mapping",
           end: true,
         },
         {
           to: "/admin/enrollments",
           icon: FileText,
           label: "Enrollment Requests",
-          description: "Review and approve student course joins",
           end: true,
         },
         {
           to: "/admin/public-registrations",
           icon: Globe,
           label: "Public Registrations",
-          description: "Web registration submissions & leads",
           end: true,
         },
       ],
@@ -174,14 +157,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     {
       id: "media",
       label: "Media & Library",
-      description: "PDFs, study notes & video lectures",
       icon: Upload,
       items: [
         {
           to: "/admin/media",
           icon: Upload,
           label: "Content Upload & Library",
-          description: "Manage PDFs, docs & study material",
           end: true,
         },
       ],
@@ -189,7 +170,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     {
       id: "settings",
       label: "Portal Settings",
-      description: "System config & site preferences",
       icon: Settings2,
       to: "/admin/portal-settings",
     },
@@ -246,66 +226,65 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onClose} />
+        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden" onClick={onClose} />
       )}
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-950 text-white transition-all duration-300 lg:static",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col bg-slate-950 text-white shadow-2xl transition-all duration-300 border-r border-white/10 lg:static",
           !isOpen && "-translate-x-full lg:translate-x-0",
         )}
       >
+        {/* Mobile Close Button */}
         <button
           onClick={onClose}
-          className="absolute right-3 top-3 rounded-lg p-2 text-white hover:bg-slate-800 lg:hidden"
+          className="absolute right-3 top-3 rounded-lg p-2 text-slate-400 hover:bg-white/10 hover:text-white lg:hidden"
         >
           <X className="h-5 w-5" />
         </button>
 
-        {/* Header Banner */}
-        <div className="border-b border-white/5 p-3">
+        {/* Header Logo Banner */}
+        <div className="border-b border-white/10 p-3 bg-slate-900/50">
           <img
             src={bannerImage}
-            alt="KASC"
-            className="h-16 w-full rounded-lg bg-slate-900 object-contain"
+            alt="KASC Study Circle"
+            className="h-14 w-full rounded-xl bg-slate-900 object-contain p-1 shadow-inner"
           />
         </div>
 
         {/* Navigation Content Area */}
-        <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-4 scrollbar-thin scrollbar-thumb-slate-800">
           {/* LEVEL 2: DRILL-DOWN SUB-OPTIONS VIEW */}
           {activeCategory && selectedCategoryObj && selectedCategoryObj.items ? (
-            <div className="space-y-4">
-              {/* Back Button to Level 1 */}
+            <div className="space-y-3">
+              {/* Sleek Back Button to Level 1 */}
               <button
                 type="button"
                 onClick={() => setActiveCategory(null)}
-                className="group flex w-full items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs font-semibold text-indigo-300 transition-all hover:bg-indigo-600 hover:text-white"
+                className="group flex w-full items-center gap-2 rounded-xl border border-indigo-500/20 bg-indigo-950/40 px-3 py-2 text-xs font-semibold text-indigo-300 transition-all hover:border-indigo-500/50 hover:bg-indigo-600 hover:text-white shadow-sm"
               >
                 <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-1" />
-                <span>Back to Main Categories</span>
+                <span>Back to Categories</span>
               </button>
 
-              {/* Active Category Header */}
-              <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/60 to-slate-900/60 p-3">
+              {/* Active Category Banner */}
+              <div className="flex items-center justify-between rounded-xl bg-slate-900/80 px-3 py-2 border border-white/5">
                 <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white">
-                    <selectedCategoryObj.icon className="h-4 w-4" />
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-sm">
+                    <selectedCategoryObj.icon className="h-3.5 w-3.5" />
                   </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">
-                      {selectedCategoryObj.label}
-                    </h3>
-                    <p className="text-[10px] text-slate-400">
-                      {selectedCategoryObj.items.length} sub-options available
-                    </p>
-                  </div>
+                  <span className="text-xs font-bold text-slate-200">
+                    {selectedCategoryObj.label}
+                  </span>
                 </div>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-indigo-300">
+                  {selectedCategoryObj.items.length}
+                </span>
               </div>
 
               {/* Sub-Options List */}
-              <div className="space-y-1.5">
-                <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+              <div className="space-y-1 pt-1">
+                <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                   Category Options
                 </p>
                 {selectedCategoryObj.items.map((sub) => (
@@ -316,38 +295,26 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                     onClick={onClose}
                     className={({ isActive }) =>
                       cn(
-                        "group flex flex-col rounded-xl px-3 py-2.5 transition-all",
+                        "group flex items-center justify-between rounded-xl px-3 py-2.5 text-xs font-medium transition-all",
                         isActive
-                          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/40 ring-1 ring-indigo-400/30"
-                          : "bg-white/[0.03] text-slate-300 hover:bg-white/10 hover:text-white",
+                          ? "bg-indigo-600 text-white font-semibold shadow-md shadow-indigo-900/40"
+                          : "text-slate-300 hover:bg-white/10 hover:text-white",
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5 font-semibold text-sm">
-                            <sub.icon
-                              className={cn(
-                                "h-4 w-4",
-                                isActive ? "text-white" : "text-indigo-400 group-hover:text-white",
-                              )}
-                            />
-                            <span>{sub.label}</span>
-                          </div>
-                          {isActive ? (
-                            <span className="h-2 w-2 rounded-full bg-emerald-400" />
-                          ) : null}
-                        </div>
-                        {sub.description ? (
-                          <p
+                        <div className="flex items-center gap-2.5">
+                          <sub.icon
                             className={cn(
-                              "mt-1 text-[11px] leading-tight",
-                              isActive ? "text-indigo-100" : "text-slate-500 group-hover:text-slate-400",
+                              "h-4 w-4",
+                              isActive ? "text-white" : "text-indigo-400 group-hover:text-white",
                             )}
-                          >
-                            {sub.description}
-                          </p>
+                          />
+                          <span>{sub.label}</span>
+                        </div>
+                        {isActive ? (
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                         ) : null}
                       </>
                     )}
@@ -357,11 +324,11 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
             </div>
           ) : (
             /* LEVEL 1: MAIN PRIMARY CATEGORIES MENU */
-            <div className="space-y-3">
-              <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+            <div className="space-y-2.5">
+              <p className="px-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
                 Primary Categories
               </p>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {categories.map((cat) => {
                   const hasSubItems = Boolean(cat.items && cat.items.length > 0);
                   const isCategoryActive = cat.to
@@ -382,10 +349,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                         onClick={onClose}
                         className={({ isActive }) =>
                           cn(
-                            "flex items-center justify-between rounded-xl px-3 py-3 text-sm transition-all",
+                            "flex items-center justify-between rounded-xl px-3 py-2.5 text-xs transition-all",
                             isActive
                               ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 font-semibold"
-                              : "bg-white/[0.03] text-slate-300 hover:bg-white/10 hover:text-white font-medium",
+                              : "text-slate-300 hover:bg-white/10 hover:text-white font-medium",
                           )
                         }
                       >
@@ -413,31 +380,24 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                         }
                       }}
                       className={cn(
-                        "group flex w-full items-center justify-between rounded-xl p-3 text-left transition-all",
+                        "group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition-all border",
                         isCategoryActive
-                          ? "bg-indigo-950/80 text-white ring-1 ring-indigo-500/40 shadow-md"
-                          : "bg-white/[0.03] text-slate-200 hover:bg-white/10 hover:text-white",
+                          ? "border-indigo-500/40 bg-indigo-950/80 text-white shadow-sm"
+                          : "border-white/5 bg-white/[0.02] text-slate-300 hover:border-white/10 hover:bg-white/10 hover:text-white",
                       )}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5">
                         <div
                           className={cn(
-                            "flex h-9 w-9 items-center justify-center rounded-xl transition-all",
+                            "flex h-7 w-7 items-center justify-center rounded-lg transition-all",
                             isCategoryActive
-                              ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/40"
-                              : "bg-white/5 text-slate-400 group-hover:bg-indigo-600/20 group-hover:text-indigo-300",
+                              ? "bg-indigo-600 text-white shadow-sm"
+                              : "bg-white/5 text-slate-400 group-hover:bg-indigo-600/30 group-hover:text-indigo-300",
                           )}
                         >
-                          <cat.icon className="h-4 w-4" />
+                          <cat.icon className="h-3.5 w-3.5" />
                         </div>
-                        <div>
-                          <div className="text-sm font-semibold">{cat.label}</div>
-                          {cat.description ? (
-                            <div className="text-[11px] text-slate-500 group-hover:text-slate-400">
-                              {cat.description}
-                            </div>
-                          ) : null}
-                        </div>
+                        <span>{cat.label}</span>
                       </div>
 
                       <div className="flex items-center gap-1 text-slate-400 group-hover:text-white">
@@ -446,7 +406,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                             {cat.items.length}
                           </span>
                         ) : null}
-                        <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                        <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
                       </div>
                     </button>
                   );
@@ -456,18 +416,23 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           )}
         </nav>
 
-        {/* User Footer */}
-        <div className="border-t border-white/5 p-3">
-          <div className="rounded-xl bg-white/5 px-3 py-2.5 ring-1 ring-white/5">
-            <p className="text-[10px] uppercase tracking-wide text-slate-500">Signed in</p>
-            <p className="mt-0.5 truncate text-sm font-medium text-slate-100" title={user?.email}>
-              {user?.name || user?.email}
-            </p>
-            {user?.email && user?.name ? (
-              <p className="truncate text-xs text-slate-500" title={user.email}>
-                {user.email}
+        {/* Signed In User Footer */}
+        <div className="border-t border-white/10 p-3 bg-slate-900/60">
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 p-2.5 ring-1 ring-white/5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 font-bold text-white shadow-sm">
+              {(user?.name || user?.email || "A").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-white" title={user?.name || user?.email}>
+                {user?.name || user?.email}
               </p>
-            ) : null}
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">
+                  {isAdmin ? (isCohost ? "Co-Host" : "Admin") : "Student"}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       </aside>

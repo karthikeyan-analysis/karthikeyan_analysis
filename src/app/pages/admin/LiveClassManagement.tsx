@@ -55,6 +55,7 @@ import {
   Monitor,
   HelpCircle,
   Sliders,
+  Sparkles,
 } from "lucide-react";
 import { listAdmins, type AdminProfile } from "../../features/liveClasses/adminDirectory";
 import {
@@ -113,7 +114,7 @@ export default function LiveClassManagement() {
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("");
   const [batchMode, setBatchMode] = useState<ExamBatchMode>("single");
-  const [batchIds, setBatchIds] = useState<string[]>(() => (batches[0]?.id ? [batches[0].id] : []));
+  const [batchIds, setBatchIds] = useState<string[]>(() => (safeBatches[0]?.id ? [safeBatches[0].id] : []));
   const [hostUids, setHostUids] = useState<string[]>([]);
   const [coHostUids, setCoHostUids] = useState<string[]>([]);
   const [selectedExamId, setSelectedExamId] = useState<string>("");
@@ -300,12 +301,12 @@ export default function LiveClassManagement() {
   };
 
   const exportAttendanceExcel = () => {
-    if (!selectedAttendanceClassId || attendanceRecords.length === 0) {
+    if (!selectedAttendanceClassId || safeAttendanceRecords.length === 0) {
       alert("No attendance data to export.");
       return;
     }
-    const targetClass = classes.find((c) => c.id === selectedAttendanceClassId);
-    const exportData = attendanceRecords.map((att, idx) => ({
+    const targetClass = safeClasses.find((c) => c.id === selectedAttendanceClassId);
+    const exportData = safeAttendanceRecords.map((att, idx) => ({
       "S.No": idx + 1,
       "Student ID": att.studentId || "N/A",
       "Student Name": att.name || "Student",
@@ -338,31 +339,29 @@ export default function LiveClassManagement() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 pb-12">
-      {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl">
-        <div className="relative z-10 flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+    <div className="mx-auto max-w-7xl space-y-5 pb-12">
+      {/* Streamlined Executive Header Banner */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 p-5 text-white shadow-xl ring-1 ring-white/10">
+        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <span className="flex h-3 w-3 items-center justify-center">
-                <span className="absolute inline-flex h-3 w-3 animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+              <span className="flex h-2.5 w-2.5 items-center justify-center">
+                <span className="absolute inline-flex h-2.5 w-2.5 animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
-              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-                Zoom-Style Live Platform Suite
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400">
+                Live Video Classes Suite
               </span>
             </div>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <h1 className="mt-1 text-xl font-extrabold tracking-tight text-white sm:text-2xl">
               Video Classes & Meeting Dashboard
             </h1>
-            <p className="mt-1 text-sm text-slate-300">
-              Manage subject-wise meeting links, live sessions, Cloudflare R2 recordings, attendance logs, and live test triggers.
-            </p>
           </div>
 
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
-              className="bg-indigo-600 shadow-md hover:bg-indigo-500 font-medium"
+              size="sm"
+              className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500"
               onClick={() => {
                 resetForm();
                 setCreateOpen(true);
@@ -372,234 +371,144 @@ export default function LiveClassManagement() {
               New Meeting Link
             </Button>
             <Button
+              size="sm"
               variant="outline"
-              className="border-slate-700 bg-slate-800/80 text-slate-200 hover:bg-slate-700"
+              className="border-slate-700 bg-slate-900/80 text-slate-200 hover:bg-slate-800"
               onClick={() => navigate("/admin/co-hosts")}
             >
-              <Users className="mr-1.5 h-4 w-4 text-indigo-400" />
+              <Shield className="mr-1.5 h-3.5 w-3.5 text-indigo-400" />
               Co-Hosts ({coHostCount})
             </Button>
           </div>
         </div>
       </div>
 
-      {/* KPI Metrics Dashboard Bar */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-        <Card className="border-slate-200/80 bg-white shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Active Live</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-                <Radio className="h-4 w-4 animate-pulse" />
-              </div>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{liveClassesList.length}</p>
-            <p className="text-xs text-emerald-600 font-medium mt-0.5">Classes running now</p>
-          </CardContent>
-        </Card>
+      {/* Thin Compact KPI Metrics Bar */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Active Live</span>
+            <Radio className="h-4 w-4 text-emerald-600 animate-pulse" />
+          </div>
+          <p className="mt-1 text-xl font-bold text-slate-900">{liveClassesList.length}</p>
+        </div>
 
-        <Card className="border-slate-200/80 bg-white shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Scheduled</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
-                <Calendar className="h-4 w-4" />
-              </div>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{scheduledClassesList.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Ready for host join</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Scheduled</span>
+            <Calendar className="h-4 w-4 text-amber-600" />
+          </div>
+          <p className="mt-1 text-xl font-bold text-slate-900">{scheduledClassesList.length}</p>
+        </div>
 
-        <Card className="border-slate-200/80 bg-white shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Recordings</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
-                <PlayCircle className="h-4 w-4" />
-              </div>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{readyRecordingsList.length}</p>
-            <p className="text-xs text-indigo-600 font-medium mt-0.5">Saved in R2 Cloud</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">R2 Recordings</span>
+            <PlayCircle className="h-4 w-4 text-indigo-600" />
+          </div>
+          <p className="mt-1 text-xl font-bold text-slate-900">{readyRecordingsList.length}</p>
+        </div>
 
-        <Card className="border-slate-200/80 bg-white shadow-sm">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Co-Hosts</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
-                <Shield className="h-4 w-4" />
-              </div>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{coHostCount}</p>
-            <p className="text-xs text-purple-600 font-medium mt-0.5">Host accounts active</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Co-Hosts</span>
+            <Shield className="h-4 w-4 text-purple-600" />
+          </div>
+          <p className="mt-1 text-xl font-bold text-slate-900">{coHostCount}</p>
+        </div>
 
-        <Card className="border-slate-200/80 bg-white shadow-sm col-span-2 sm:col-span-1">
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Total Classes</span>
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                <Activity className="h-4 w-4" />
-              </div>
-            </div>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{classes.length}</p>
-            <p className="text-xs text-slate-500 mt-0.5">Across all subjects</p>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs col-span-2 sm:col-span-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-semibold text-slate-500">Total Classes</span>
+            <Activity className="h-4 w-4 text-blue-600" />
+          </div>
+          <p className="mt-1 text-xl font-bold text-slate-900">{safeClasses.length}</p>
+        </div>
       </div>
 
       {/* Navigation Tabs Bar */}
-      <div className="flex overflow-x-auto rounded-xl bg-slate-100 p-1.5 text-sm font-medium text-slate-600">
+      <div className="flex overflow-x-auto rounded-xl bg-slate-100 p-1 text-xs font-semibold text-slate-600">
         <button
           type="button"
           onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "overview" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <Activity className="h-4 w-4 text-indigo-600" />
-          Dashboard Overview
+          <Activity className="h-3.5 w-3.5 text-indigo-600" />
+          Overview
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("meetings")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "meetings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <Video className="h-4 w-4 text-emerald-600" />
+          <Video className="h-3.5 w-3.5 text-emerald-600" />
           Meeting Links & Scheduler
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("controls")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "controls" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <Sliders className="h-4 w-4 text-amber-600" />
+          <Sliders className="h-3.5 w-3.5 text-amber-600" />
           Host Studio Control Panel
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("recordings")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "recordings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <Download className="h-4 w-4 text-purple-600" />
+          <Download className="h-3.5 w-3.5 text-purple-600" />
           Recordings & Downloads
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("attendance")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "attendance" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <FileText className="h-4 w-4 text-blue-600" />
+          <FileText className="h-3.5 w-3.5 text-blue-600" />
           Attendance Reports
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("live_tests")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "live_tests" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <Award className="h-4 w-4 text-rose-600" />
+          <Award className="h-3.5 w-3.5 text-rose-600" />
           Live Test Integration
         </button>
         <button
           type="button"
           onClick={() => setActiveTab("settings")}
-          className={`flex items-center gap-2 rounded-lg px-4 py-2 transition-all whitespace-nowrap ${
+          className={`flex items-center gap-1.5 rounded-lg px-3.5 py-2 transition-all whitespace-nowrap ${
             activeTab === "settings" ? "bg-white text-slate-900 shadow-sm" : "hover:text-slate-900"
           }`}
         >
-          <Settings className="h-4 w-4 text-slate-600" />
+          <Settings className="h-3.5 w-3.5 text-slate-600" />
           Settings
         </button>
       </div>
 
       {/* TAB 1: OVERVIEW */}
       {activeTab === "overview" && (
-        <div className="space-y-6">
-          {/* Quick Action Launchpad */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card
-              className="cursor-pointer border-slate-200 bg-white transition hover:border-indigo-300 hover:shadow-md"
-              onClick={() => {
-                resetForm();
-                setCreateOpen(true);
-              }}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
-                  <Plus className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Create Subject Link</h3>
-                  <p className="text-xs text-slate-500">Generate meeting link for batch</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer border-slate-200 bg-white transition hover:border-emerald-300 hover:shadow-md"
-              onClick={() => setActiveTab("meetings")}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
-                  <Radio className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Start Live Meeting</h3>
-                  <p className="text-xs text-slate-500">Launch Host WebRTC Studio</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer border-slate-200 bg-white transition hover:border-purple-300 hover:shadow-md"
-              onClick={() => navigate("/admin/co-hosts")}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-purple-50 text-purple-600">
-                  <Shield className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Manage Co-Hosts</h3>
-                  <p className="text-xs text-slate-500">Create credentials & passwords</p>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card
-              className="cursor-pointer border-slate-200 bg-white transition hover:border-rose-300 hover:shadow-md"
-              onClick={() => setActiveTab("live_tests")}
-            >
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
-                  <Award className="h-6 w-6" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-slate-900">Trigger Live Test</h3>
-                  <p className="text-xs text-slate-500">Conduct exam during live class</p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
+        <div className="space-y-5">
           {/* Active Classes Radar */}
           <Card className="border-slate-200/80 shadow-none">
-            <CardHeader className="border-b border-slate-100 bg-slate-50/50 pb-3">
+            <CardHeader className="border-b border-slate-100 pb-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-base font-semibold text-slate-900">
+                  <CardTitle className="text-sm font-bold text-slate-900">
                     Live Meetings Radar
                   </CardTitle>
                   <CardDescription className="text-xs">
@@ -613,28 +522,28 @@ export default function LiveClassManagement() {
             </CardHeader>
             <CardContent className="pt-4">
               {liveClassesList.length === 0 ? (
-                <div className="py-8 text-center text-sm text-slate-500">
-                  No live meetings currently running. Click "New Meeting Link" to schedule or start a class.
+                <div className="py-8 text-center text-xs text-slate-500">
+                  No live meetings currently running. Click "New Meeting Link" to start a class.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {liveClassesList.map((cls) => (
                     <div
                       key={cls.id}
-                      className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-4 shadow-sm"
+                      className="rounded-xl border border-emerald-200 bg-emerald-50/30 p-3.5 shadow-xs"
                     >
                       <div className="flex items-center justify-between">
-                        <Badge className="bg-emerald-600">LIVE NOW</Badge>
-                        <span className="text-xs font-medium text-slate-500">{cls.subject}</span>
+                        <Badge className="bg-emerald-600 text-[10px]">LIVE NOW</Badge>
+                        <span className="text-xs font-semibold text-slate-600">{cls.subject}</span>
                       </div>
-                      <h4 className="mt-2 text-lg font-bold text-slate-900">{cls.name}</h4>
-                      <p className="text-xs text-slate-600 mt-1">
-                        Batch: {formatLiveClassBatchLabel(cls, batches)}
+                      <h4 className="mt-1.5 text-base font-bold text-slate-900">{cls.name}</h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Batch: {formatLiveClassBatchLabel(cls, safeBatches)}
                       </p>
-                      <div className="mt-4 flex items-center justify-between gap-2">
+                      <div className="mt-3 flex items-center justify-between gap-2">
                         <Button
                           size="sm"
-                          className="bg-emerald-600 hover:bg-emerald-700"
+                          className="bg-emerald-600 hover:bg-emerald-700 text-xs"
                           onClick={() => navigate(`/admin/live-classes/${cls.id}/room`)}
                         >
                           <Radio className="mr-1 h-3.5 w-3.5" />
@@ -643,7 +552,7 @@ export default function LiveClassManagement() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="text-red-600 hover:bg-red-50"
+                          className="text-red-600 hover:bg-red-50 text-xs"
                           onClick={() => void end(cls.id)}
                         >
                           End Class
@@ -661,10 +570,10 @@ export default function LiveClassManagement() {
       {/* TAB 2: MEETINGS & SCHEDULER */}
       {(activeTab === "meetings" || activeTab === "overview") && (
         <Card className="border-slate-200/80 shadow-none">
-          <CardHeader className="border-b border-slate-100 pb-4">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <CardHeader className="border-b border-slate-100 pb-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle className="text-base font-semibold text-slate-900">
+                <CardTitle className="text-sm font-bold text-slate-900">
                   Subject Meeting Links & Classes
                 </CardTitle>
                 <CardDescription className="text-xs">
@@ -673,7 +582,7 @@ export default function LiveClassManagement() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+                <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
                   {([
                     { id: "all", label: "All" },
                     { id: "live", label: "Live" },
@@ -686,8 +595,8 @@ export default function LiveClassManagement() {
                       onClick={() => setListFilter(f.id)}
                       className={
                         listFilter === f.id
-                          ? "rounded-lg bg-white px-3 py-1 text-xs font-medium text-slate-900 shadow-sm"
-                          : "rounded-lg px-3 py-1 text-xs font-medium text-slate-500 hover:text-slate-800"
+                          ? "rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-900 shadow-xs"
+                          : "rounded-md px-2.5 py-1 text-xs font-medium text-slate-500 hover:text-slate-800"
                       }
                     >
                       {f.label}
@@ -695,9 +604,9 @@ export default function LiveClassManagement() {
                   ))}
                 </div>
 
-                <div className="w-44">
+                <div className="w-36">
                   <Select value={subjectFilter} onValueChange={setSubjectFilter}>
-                    <SelectTrigger className="h-8 text-xs bg-white">
+                    <SelectTrigger className="h-7 text-xs bg-white">
                       <SelectValue placeholder="All subjects" />
                     </SelectTrigger>
                     <SelectContent>
@@ -713,7 +622,7 @@ export default function LiveClassManagement() {
 
                 <Button
                   size="sm"
-                  className="bg-indigo-600 hover:bg-indigo-700"
+                  className="h-7 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold"
                   onClick={() => {
                     resetForm();
                     setCreateOpen(true);
@@ -726,39 +635,39 @@ export default function LiveClassManagement() {
             </div>
           </CardHeader>
 
-          <CardContent className="pt-4">
+          <CardContent className="pt-3">
             {loading ? (
-              <div className="py-12 text-center text-sm text-slate-500">Loading meeting links…</div>
+              <div className="py-8 text-center text-xs text-slate-500">Loading meeting links…</div>
             ) : filteredClasses.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-500">
+              <div className="py-8 text-center text-xs text-slate-500">
                 No meeting links match your criteria. Click "New Link" to create one.
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-200/80">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50/80">
-                      <TableHead className="font-semibold">Meeting Name & Subject</TableHead>
-                      <TableHead className="font-semibold">Batch(es)</TableHead>
-                      <TableHead className="font-semibold">Status</TableHead>
-                      <TableHead className="font-semibold">Share Link</TableHead>
-                      <TableHead className="text-right font-semibold">Actions</TableHead>
+                    <TableRow className="bg-slate-50/80 text-xs">
+                      <TableHead className="font-bold">Meeting Name & Subject</TableHead>
+                      <TableHead className="font-bold">Batch(es)</TableHead>
+                      <TableHead className="font-bold">Status</TableHead>
+                      <TableHead className="font-bold">Share Link</TableHead>
+                      <TableHead className="text-right font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredClasses.map((cls) => {
                       const canControl = isHostOrCoHost(cls, user?.id);
                       return (
-                        <TableRow key={cls.id} className="hover:bg-slate-50/60">
+                        <TableRow key={cls.id} className="hover:bg-slate-50/60 text-xs">
                           <TableCell>
-                            <div className="font-medium text-slate-900">{cls.name}</div>
-                            <div className="text-xs text-indigo-600 font-medium">{cls.subject}</div>
+                            <div className="font-bold text-slate-900">{cls.name}</div>
+                            <div className="text-xs text-indigo-600 font-semibold">{cls.subject}</div>
                           </TableCell>
-                          <TableCell className="max-w-[180px] truncate text-xs text-slate-600">
-                            {formatLiveClassBatchLabel(cls, batches)}
+                          <TableCell className="max-w-[160px] truncate text-slate-600">
+                            {formatLiveClassBatchLabel(cls, safeBatches)}
                           </TableCell>
                           <TableCell>
-                            <Badge variant={statusBadgeVariant(cls.status)}>
+                            <Badge variant={statusBadgeVariant(cls.status)} className="text-[10px]">
                               {liveClassStatusLabel(cls)}
                             </Badge>
                           </TableCell>
@@ -766,7 +675,7 @@ export default function LiveClassManagement() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 text-xs"
+                              className="h-6 text-[11px] px-2"
                               onClick={() => copyShareLink(cls)}
                             >
                               {copiedId === cls.id ? (
@@ -780,21 +689,21 @@ export default function LiveClassManagement() {
                               )}
                             </Button>
                           </TableCell>
-                          <TableCell className="space-x-1.5 whitespace-nowrap text-right">
+                          <TableCell className="space-x-1 whitespace-nowrap text-right">
                             {cls.status !== "ended" && canControl ? (
                               <Button
                                 size="sm"
-                                className="bg-indigo-600 hover:bg-indigo-700"
+                                className="h-6 text-[11px] bg-indigo-600 hover:bg-indigo-700"
                                 onClick={() => void startOrJoin(cls)}
                               >
-                                <Radio className="mr-1 h-3.5 w-3.5" />
-                                {cls.status === "active" ? "Join Studio" : "Start Meeting"}
+                                <Radio className="mr-1 h-3 w-3" />
+                                {cls.status === "active" ? "Join Studio" : "Start"}
                               </Button>
                             ) : null}
                             <Button
                               size="sm"
                               variant="ghost"
-                              className="text-red-600 hover:bg-red-50"
+                              className="h-6 w-6 p-0 text-red-600 hover:bg-red-50"
                               onClick={() => void remove(cls.id)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />
@@ -813,138 +722,105 @@ export default function LiveClassManagement() {
 
       {/* TAB 3: HOST CONTROLS & STUDIO HUB */}
       {activeTab === "controls" && (
-        <div className="space-y-6">
-          <Card className="border-slate-200/80 bg-white">
-            <CardHeader>
-              <CardTitle className="text-base font-semibold text-slate-900">
-                Zoom-Style Control Panel Reference
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Host & Co-Host features available inside the WebRTC Live Meeting Studio
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-50 text-red-600 mb-3">
-                    <MicOff className="h-5 w-5" />
-                  </div>
-                  <h4 className="font-semibold text-slate-900">Mute / Unmute Control</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Host/Co-host can toggle audio state for individual students or mute all participants upon entry.
-                  </p>
+        <Card className="border-slate-200/80 bg-white">
+          <CardHeader>
+            <CardTitle className="text-sm font-bold text-slate-900">
+              Host & Co-Host Control Panel Guide
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Live WebRTC Studio feature breakdown
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 p-3.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600 mb-2">
+                  <MicOff className="h-4 w-4" />
                 </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-50 text-amber-600 mb-3">
-                    <VideoOff className="h-5 w-5" />
-                  </div>
-                  <h4 className="font-semibold text-slate-900">Video Disable / Enable</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Control student camera streams during lectures to preserve bandwidth and eliminate distractions.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 mb-3">
-                    <Monitor className="h-5 w-5" />
-                  </div>
-                  <h4 className="font-semibold text-slate-900">Screen Sharing</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    High-definition screen & tab sharing with mixed microphone audio for seamless teaching.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-600 mb-3">
-                    <PlayCircle className="h-5 w-5" />
-                  </div>
-                  <h4 className="font-semibold text-slate-900">Cloud Recording</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Start/stop recording at any moment. Automatically processed and saved into Cloudflare R2 storage.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-rose-50 text-rose-600 mb-3">
-                    <Trash2 className="h-5 w-5" />
-                  </div>
-                  <h4 className="font-semibold text-slate-900">Participant Eviction</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Remove disruptive participants from the meeting immediately with one click.
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 mb-3">
-                    <HelpCircle className="h-5 w-5" />
-                  </div>
-                  <h4 className="font-semibold text-slate-900">Private Doubts Panel</h4>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Student doubts are routed privately to Host and Co-Host controls for focused Q&A.
-                  </p>
-                </div>
+                <h4 className="font-bold text-xs text-slate-900">Mute / Unmute Control</h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  Host/Co-host can toggle audio state for students.
+                </p>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+
+              <div className="rounded-xl border border-slate-200 p-3.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 mb-2">
+                  <VideoOff className="h-4 w-4" />
+                </div>
+                <h4 className="font-bold text-xs text-slate-900">Video Disable / Enable</h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  Control student video streams to conserve bandwidth.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 p-3.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 mb-2">
+                  <Monitor className="h-4 w-4" />
+                </div>
+                <h4 className="font-bold text-xs text-slate-900">Screen Sharing</h4>
+                <p className="mt-1 text-xs text-slate-500">
+                  HD Screen and tab sharing with mixed microphone audio.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* TAB 4: RECORDINGS & DOWNLOADS */}
       {activeTab === "recordings" && (
         <Card className="border-slate-200/80 bg-white">
           <CardHeader>
-            <CardTitle className="text-base font-semibold text-slate-900">
+            <CardTitle className="text-sm font-bold text-slate-900">
               Recording Module & Cloud Downloads
             </CardTitle>
             <CardDescription className="text-xs">
-              Subject-wise recording storage in Cloudflare R2 with direct download and playback capabilities.
+              Subject-wise recording storage in Cloudflare R2 with direct download link generator.
             </CardDescription>
           </CardHeader>
           <CardContent>
             {readyRecordingsList.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-500">
-                No completed recordings found yet. Recordings will automatically appear here after a class host stops recording.
+              <div className="py-8 text-center text-xs text-slate-500">
+                No completed recordings found yet.
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-200/80">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50/80">
-                      <TableHead className="font-semibold">Class Name</TableHead>
-                      <TableHead className="font-semibold">Subject</TableHead>
-                      <TableHead className="font-semibold">Storage Location</TableHead>
-                      <TableHead className="font-semibold">Status</TableHead>
-                      <TableHead className="text-right font-semibold">Actions</TableHead>
+                    <TableRow className="bg-slate-50/80 text-xs">
+                      <TableHead className="font-bold">Class Name</TableHead>
+                      <TableHead className="font-bold">Subject</TableHead>
+                      <TableHead className="font-bold">Storage Key</TableHead>
+                      <TableHead className="font-bold">Status</TableHead>
+                      <TableHead className="text-right font-bold">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {readyRecordingsList.map((cls) => (
-                      <TableRow key={cls.id} className="hover:bg-slate-50/60">
-                        <TableCell className="font-medium text-slate-900">{cls.name}</TableCell>
-                        <TableCell className="text-indigo-600 font-medium">{cls.subject}</TableCell>
+                      <TableRow key={cls.id} className="hover:bg-slate-50/60 text-xs">
+                        <TableCell className="font-bold text-slate-900">{cls.name}</TableCell>
+                        <TableCell className="text-indigo-600 font-semibold">{cls.subject}</TableCell>
                         <TableCell className="text-xs text-slate-500 font-mono">
-                          {cls.recordingKey || "Cloudflare R2 Bucket"}
+                          {cls.recordingKey || "R2 Storage Bucket"}
                         </TableCell>
                         <TableCell>
-                          <Badge className="bg-emerald-600">Ready</Badge>
+                          <Badge className="bg-emerald-600 text-[10px]">Ready</Badge>
                         </TableCell>
-                        <TableCell className="space-x-2 whitespace-nowrap text-right">
+                        <TableCell className="space-x-1.5 whitespace-nowrap text-right">
                           <Button
                             size="sm"
                             variant="outline"
+                            className="h-6 text-[11px]"
                             onClick={() => navigate(`/admin/live-classes/${cls.id}/recording`)}
                           >
-                            <PlayCircle className="mr-1 h-3.5 w-3.5 text-indigo-600" />
-                            Watch
+                            <PlayCircle className="mr-1 h-3 w-3 text-indigo-600" /> Watch
                           </Button>
                           <Button
                             size="sm"
-                            className="bg-indigo-600 hover:bg-indigo-700"
+                            className="h-6 text-[11px] bg-indigo-600 hover:bg-indigo-700"
                             onClick={() => void handleDownloadRecording(cls)}
                           >
-                            <Download className="mr-1 h-3.5 w-3.5" />
-                            Download
+                            <Download className="mr-1 h-3 w-3" /> Download
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -961,19 +837,16 @@ export default function LiveClassManagement() {
       {activeTab === "attendance" && (
         <Card className="border-slate-200/80 bg-white">
           <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <CardTitle className="text-base font-semibold text-slate-900">
-                  Attendance Tracking & Report Generator
+                <CardTitle className="text-sm font-bold text-slate-900">
+                  Attendance Tracking & Excel Exporter
                 </CardTitle>
-                <CardDescription className="text-xs">
-                  Automatic class session attendance tracking with Excel report download.
-                </CardDescription>
               </div>
 
               <div className="flex items-center gap-2">
                 <Select value={selectedAttendanceClassId} onValueChange={setSelectedAttendanceClassId}>
-                  <SelectTrigger className="w-56 bg-white">
+                  <SelectTrigger className="w-48 h-7 text-xs bg-white">
                     <SelectValue placeholder="Select class session" />
                   </SelectTrigger>
                   <SelectContent>
@@ -987,53 +860,52 @@ export default function LiveClassManagement() {
 
                 <Button
                   size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700"
+                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 font-semibold"
                   onClick={exportAttendanceExcel}
                   disabled={safeAttendanceRecords.length === 0}
                 >
-                  <Download className="mr-1.5 h-4 w-4" />
-                  Export Excel
+                  <Download className="mr-1 h-3.5 w-3.5" /> Export Excel
                 </Button>
               </div>
             </div>
           </CardHeader>
           <CardContent>
             {loadingAttendance ? (
-              <div className="py-12 text-center text-sm text-slate-500">Loading attendance records…</div>
+              <div className="py-8 text-center text-xs text-slate-500">Loading attendance records…</div>
             ) : safeAttendanceRecords.length === 0 ? (
-              <div className="py-12 text-center text-sm text-slate-500">
-                No attendance records recorded for this class session yet.
+              <div className="py-8 text-center text-xs text-slate-500">
+                No attendance records logged for this session yet.
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-slate-200/80">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-slate-50/80">
-                      <TableHead className="font-semibold">Student Name</TableHead>
-                      <TableHead className="font-semibold">Email / ID</TableHead>
-                      <TableHead className="font-semibold">Joined At</TableHead>
-                      <TableHead className="font-semibold">Stay Duration</TableHead>
-                      <TableHead className="font-semibold">Status</TableHead>
+                    <TableRow className="bg-slate-50/80 text-xs">
+                      <TableHead className="font-bold">Student Name</TableHead>
+                      <TableHead className="font-bold">Email / ID</TableHead>
+                      <TableHead className="font-bold">Joined At</TableHead>
+                      <TableHead className="font-bold">Duration</TableHead>
+                      <TableHead className="font-bold">Status</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {safeAttendanceRecords.map((att) => (
-                      <TableRow key={att.uid} className="hover:bg-slate-50/60">
-                        <TableCell className="font-medium text-slate-900">{att.name}</TableCell>
-                        <TableCell className="text-xs text-slate-600">
+                      <TableRow key={att.uid} className="hover:bg-slate-50/60 text-xs">
+                        <TableCell className="font-bold text-slate-900">{att.name}</TableCell>
+                        <TableCell className="text-slate-600">
                           <div>{att.email}</div>
                           {att.studentId ? (
                             <span className="text-[10px] text-slate-400 font-mono">{att.studentId}</span>
                           ) : null}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-600">
+                        <TableCell className="text-slate-600">
                           {att.firstJoinedAt ? new Date(att.firstJoinedAt).toLocaleTimeString() : "N/A"}
                         </TableCell>
-                        <TableCell className="text-xs font-semibold text-slate-700">
+                        <TableCell className="font-semibold text-slate-700">
                           {Math.round((att.totalDurationSec || 0) / 60)} mins
                         </TableCell>
                         <TableCell>
-                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200">
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
                             Present
                           </Badge>
                         </TableCell>
@@ -1051,35 +923,31 @@ export default function LiveClassManagement() {
       {activeTab === "live_tests" && (
         <Card className="border-slate-200/80 bg-white">
           <CardHeader>
-            <CardTitle className="text-base font-semibold text-slate-900">
-              Live Exam & Test Integration
+            <CardTitle className="text-sm font-bold text-slate-900">
+              Live Exam Integration
             </CardTitle>
             <CardDescription className="text-xs">
-              Attach an active CBT test to an ongoing video class. Students participate automatically upon joining the meeting.
+              Attach an active CBT test to an ongoing video class.
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 text-xs text-amber-800">
-              💡 Select an ongoing class below to assign or launch a live test from your CBT Exam Engine.
-            </div>
-
+          <CardContent className="space-y-3">
             <div className="overflow-x-auto rounded-xl border border-slate-200/80">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-slate-50/80">
-                    <TableHead className="font-semibold">Live Meeting</TableHead>
-                    <TableHead className="font-semibold">Subject</TableHead>
-                    <TableHead className="font-semibold">Assigned Exam</TableHead>
-                    <TableHead className="text-right font-semibold">Action</TableHead>
+                  <TableRow className="bg-slate-50/80 text-xs">
+                    <TableHead className="font-bold">Live Meeting</TableHead>
+                    <TableHead className="font-bold">Subject</TableHead>
+                    <TableHead className="font-bold">Assigned Exam</TableHead>
+                    <TableHead className="text-right font-bold">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {safeClasses.map((cls) => {
                     const currentTest = safeExams.find((e) => e.id === cls.liveTestId);
                     return (
-                      <TableRow key={cls.id}>
-                        <TableCell className="font-medium text-slate-900">{cls.name}</TableCell>
-                        <TableCell className="text-xs text-indigo-600">{cls.subject}</TableCell>
+                      <TableRow key={cls.id} className="text-xs">
+                        <TableCell className="font-bold text-slate-900">{cls.name}</TableCell>
+                        <TableCell className="text-indigo-600 font-semibold">{cls.subject}</TableCell>
                         <TableCell>
                           <Select
                             value={cls.liveTestId || "none"}
@@ -1087,7 +955,7 @@ export default function LiveClassManagement() {
                               assignLiveTestToClass(cls.id, val === "none" ? "" : val)
                             }
                           >
-                            <SelectTrigger className="w-56 h-8 text-xs bg-white">
+                            <SelectTrigger className="w-48 h-7 text-xs bg-white">
                               <SelectValue placeholder="Select live test" />
                             </SelectTrigger>
                             <SelectContent>
@@ -1102,9 +970,9 @@ export default function LiveClassManagement() {
                         </TableCell>
                         <TableCell className="text-right">
                           {currentTest ? (
-                            <Badge className="bg-rose-600">Test Active</Badge>
+                            <Badge className="bg-rose-600 text-[10px]">Test Active</Badge>
                           ) : (
-                            <span className="text-xs text-slate-400">Ready</span>
+                            <span className="text-[11px] text-slate-400">Ready</span>
                           )}
                         </TableCell>
                       </TableRow>
@@ -1121,44 +989,41 @@ export default function LiveClassManagement() {
       {activeTab === "settings" && (
         <Card className="border-slate-200/80 bg-white">
           <CardHeader>
-            <CardTitle className="text-base font-semibold text-slate-900">
+            <CardTitle className="text-sm font-bold text-slate-900">
               Platform Security & Cloud Settings
             </CardTitle>
-            <CardDescription className="text-xs">
-              Configure session gating, single device login restrictions, and Cloudflare media infrastructure status.
-            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-4">
+          <CardContent className="space-y-3 text-xs">
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
               <div>
-                <h4 className="font-semibold text-slate-900">One-Device Session Lock</h4>
-                <p className="text-xs text-slate-500">
-                  Enforces single active device per student session to prevent account sharing during live classes.
+                <h4 className="font-bold text-slate-900">One-Device Session Lock</h4>
+                <p className="text-[11px] text-slate-500">
+                  Enforces single active device per student session.
                 </p>
               </div>
-              <Badge className="bg-emerald-600">Enforced</Badge>
+              <Badge className="bg-emerald-600 text-[10px]">Enforced</Badge>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
               <div>
-                <h4 className="font-semibold text-slate-900">Cloudflare Realtime SFU & TURN</h4>
-                <p className="text-xs text-slate-500">
-                  WebRTC Media Relay for smooth, low-latency live class streaming across Tamil Nadu network providers.
+                <h4 className="font-bold text-slate-900">Cloudflare Realtime SFU & TURN</h4>
+                <p className="text-[11px] text-slate-500">
+                  WebRTC Media Relay for smooth, low-latency live class streaming.
                 </p>
               </div>
-              <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-700">
+              <Badge variant="outline" className="border-indigo-200 bg-indigo-50 text-indigo-700 text-[10px]">
                 Connected
               </Badge>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 p-3">
               <div>
-                <h4 className="font-semibold text-slate-900">Cloudflare R2 Storage Bucket</h4>
-                <p className="text-xs text-slate-500">
-                  Durable Asia-Pacific object storage bucket (`kasc-live-class-recordings`) for automated recording archives.
+                <h4 className="font-bold text-slate-900">Cloudflare R2 Storage Bucket</h4>
+                <p className="text-[11px] text-slate-500">
+                  Asia-Pacific object storage bucket (`kasc-live-class-recordings`).
                 </p>
               </div>
-              <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700">
+              <Badge variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 text-[10px]">
                 Active
               </Badge>
             </div>
@@ -1168,17 +1033,18 @@ export default function LiveClassManagement() {
 
       {/* Create Meeting Link Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>New Subject Meeting Link</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
+          <div className="space-y-3 text-xs">
+            <div className="space-y-1">
               <Label>Class / Session Name</Label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. TNPSC General Studies — Live Lecture 5"
+                placeholder="e.g. TNPSC General Studies — Lecture 5"
+                className="h-8 text-xs"
               />
             </div>
 
@@ -1194,11 +1060,11 @@ export default function LiveClassManagement() {
               hint="Only students enrolled in selected batch(es) can join this meeting."
             />
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Subject</Label>
               {subjectOptions.length > 0 ? (
                 <Select value={subject} onValueChange={setSubject}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-xs">
                     <SelectValue placeholder="Select subject" />
                   </SelectTrigger>
                   <SelectContent>
@@ -1214,14 +1080,15 @@ export default function LiveClassManagement() {
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
                   placeholder="e.g. General Studies / Mathematics"
+                  className="h-8 text-xs"
                 />
               )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <Label>Optional Live Exam Trigger</Label>
               <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                <SelectTrigger className="bg-white">
+                <SelectTrigger className="h-8 text-xs bg-white">
                   <SelectValue placeholder="None (Standard Live Class)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -1235,20 +1102,20 @@ export default function LiveClassManagement() {
               </Select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <Label>Host(s)</Label>
                 <button
                   type="button"
-                  className="text-xs text-indigo-700 hover:underline"
+                  className="text-[11px] text-indigo-700 hover:underline"
                   onClick={() => navigate("/admin/co-hosts")}
                 >
                   Manage co-hosts
                 </button>
               </div>
-              <div className="max-h-28 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-2.5">
+              <div className="max-h-24 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 text-xs">
                 {safeAdmins.map((a) => (
-                  <label key={a.uid} className="flex items-center gap-2 text-sm">
+                  <label key={a.uid} className="flex items-center gap-2 text-xs">
                     <Checkbox
                       checked={hostUids.includes(a.uid)}
                       onCheckedChange={(v) => {
@@ -1261,7 +1128,7 @@ export default function LiveClassManagement() {
                       }}
                     />
                     <span>
-                      {a.name} {a.kind === "cohost" ? "(Co-Host Login)" : ""}
+                      {a.name} {a.kind === "cohost" ? "(Co-Host)" : ""}
                     </span>
                   </label>
                 ))}
@@ -1269,11 +1136,12 @@ export default function LiveClassManagement() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>
+            <Button variant="outline" size="sm" onClick={() => setCreateOpen(false)}>
               Cancel
             </Button>
             <Button
-              className="bg-indigo-600 hover:bg-indigo-700"
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700 font-semibold"
               onClick={() => void create()}
               disabled={creating}
             >
