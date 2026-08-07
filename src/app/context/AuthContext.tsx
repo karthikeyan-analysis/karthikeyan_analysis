@@ -233,19 +233,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // Self-healing / Promotion: If users/{uid} does not exist OR had role "student" but logging in as admin
-      if (!userData || (role === "admin" && userData.role !== "admin")) {
-        console.warn("[AUTH] Auto-provisioning/healing admin doc for UID:", firebaseUser.uid, "Email:", firebaseUser.email);
-        const adminName =
-          userData?.name ||
-          adminDocData?.name ||
-          firebaseUser.displayName ||
-          (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Admin");
-        const adminKind =
-          adminDocData?.kind === "cohost" ||
-          adminDocData?.adminKind === "cohost" ||
-          userData?.adminKind === "cohost"
-            ? "cohost"
-            : "full";
+      const adminName =
+        adminDocData?.name ||
+        firebaseUser.displayName ||
+        (typeof userData?.name === "string" && userData.name.trim() && userData.role === "admin"
+          ? userData.name.trim()
+          : undefined) ||
+        (firebaseUser.email ? firebaseUser.email.split("@")[0] : "Admin");
+      const adminKind =
+        adminDocData?.kind === "cohost" ||
+        adminDocData?.adminKind === "cohost" ||
+        userData?.adminKind === "cohost"
+          ? "cohost"
+          : "full";
+
+      if (
+        !userData ||
+        (role === "admin" &&
+          (userData.role !== "admin" || (adminDocData?.name && userData.name !== adminDocData.name)))
+      ) {
+        console.warn(
+          "[AUTH] Auto-provisioning/healing admin doc for UID:",
+          firebaseUser.uid,
+          "Email:",
+          firebaseUser.email,
+          "Name:",
+          adminName,
+        );
 
         userData = {
           ...userData,
@@ -266,11 +280,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           },
           { merge: true },
         );
-        console.log("[AUTH] Auto-healed and saved users/{uid} doc with role 'admin' for:", firebaseUser.uid);
+        console.log(
+          "[AUTH] Auto-healed and saved users/{uid} doc with role 'admin' and name:",
+          adminName,
+          "for:",
+          firebaseUser.uid,
+        );
       }
 
       if (userData) {
         let name =
+          (role === "admin" && adminDocData?.name) ||
           (typeof userData.name === "string" && userData.name.trim()) ||
           firebaseUser.displayName ||
           "";
