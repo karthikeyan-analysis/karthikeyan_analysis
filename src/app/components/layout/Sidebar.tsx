@@ -82,11 +82,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           label: "Meeting Links & Scheduler",
         },
         {
-          to: "/admin/live-classes?tab=controls",
-          icon: Sliders,
-          label: "Host Studio Control Panel",
-        },
-        {
           to: "/admin/live-classes?tab=recordings",
           icon: Download,
           label: "Recordings & Downloads",
@@ -212,7 +207,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       items: [
         { to: "/admin/live-classes?tab=overview", icon: Activity, label: "Overview" },
         { to: "/admin/live-classes?tab=meetings", icon: Video, label: "Meeting Links" },
-        { to: "/admin/live-classes?tab=controls", icon: Sliders, label: "Studio Controls" },
         { to: "/admin/live-classes?tab=recordings", icon: Download, label: "Recordings" },
         { to: "/admin/live-classes?tab=attendance", icon: FileText, label: "Attendance" },
       ],

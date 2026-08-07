@@ -78,7 +78,7 @@ function statusBadgeVariant(status: LiveClass["status"]): "default" | "secondary
   return "secondary";
 }
 
-type SuiteTab = "overview" | "meetings" | "controls" | "recordings" | "attendance" | "live_tests" | "settings";
+type SuiteTab = "overview" | "meetings" | "recordings" | "attendance" | "live_tests" | "settings";
 type ListFilter = "all" | "live" | "scheduled" | "ended" | "recordings";
 
 export default function LiveClassManagement() {
@@ -448,7 +448,6 @@ export default function LiveClassManagement() {
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md">
               {activeTab === "meetings" && <Video className="h-5 w-5" />}
-              {activeTab === "controls" && <Sliders className="h-5 w-5 text-amber-300" />}
               {activeTab === "recordings" && <Download className="h-5 w-5 text-purple-300" />}
               {activeTab === "attendance" && <FileText className="h-5 w-5 text-blue-300" />}
               {activeTab === "live_tests" && <Award className="h-5 w-5 text-rose-300" />}
@@ -457,7 +456,6 @@ export default function LiveClassManagement() {
             <div>
               <h2 className="text-base font-bold text-slate-900">
                 {activeTab === "meetings" && "Subject Meeting Links & Scheduler"}
-                {activeTab === "controls" && "Host Studio Control Panel"}
                 {activeTab === "recordings" && "Recordings & Cloud Downloads"}
                 {activeTab === "attendance" && "Attendance Reports & Exporter"}
                 {activeTab === "live_tests" && "Live Exam Integration"}
@@ -465,7 +463,6 @@ export default function LiveClassManagement() {
               </h2>
               <p className="text-xs text-slate-500">
                 {activeTab === "meetings" && "Manage subject-wise links, active sessions & batch access"}
-                {activeTab === "controls" && "WebRTC studio control features for hosts & co-hosts"}
                 {activeTab === "recordings" && "Cloudflare R2 recording storage & instant download links"}
                 {activeTab === "attendance" && "View student join logs and export official attendance spreadsheets"}
                 {activeTab === "live_tests" && "Attach CBT tests directly to live video class sessions"}
@@ -509,17 +506,6 @@ export default function LiveClassManagement() {
               >
                 <Plus className="mr-1 h-3.5 w-3.5" />
                 Create CBT Exam
-              </Button>
-            )}
-
-            {activeTab === "controls" && (
-              <Button
-                size="sm"
-                className="bg-indigo-600 font-semibold shadow-md hover:bg-indigo-500 text-xs"
-                onClick={() => navigate("/admin/co-hosts")}
-              >
-                <Shield className="mr-1 h-3.5 w-3.5" />
-                Manage Co-Hosts
               </Button>
             )}
           </div>
@@ -746,52 +732,6 @@ export default function LiveClassManagement() {
         </Card>
       )}
 
-      {/* TAB 3: HOST CONTROLS & STUDIO HUB */}
-      {activeTab === "controls" && (
-        <Card className="border-slate-200/80 bg-white">
-          <CardHeader>
-            <CardTitle className="text-sm font-bold text-slate-900">
-              Host & Co-Host Control Panel Guide
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Live WebRTC Studio feature breakdown
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-xl border border-slate-200 p-3.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-50 text-red-600 mb-2">
-                  <MicOff className="h-4 w-4" />
-                </div>
-                <h4 className="font-bold text-xs text-slate-900">Mute / Unmute Control</h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Host/Co-host can toggle audio state for students.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-3.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 mb-2">
-                  <VideoOff className="h-4 w-4" />
-                </div>
-                <h4 className="font-bold text-xs text-slate-900">Video Disable / Enable</h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  Control student video streams to conserve bandwidth.
-                </p>
-              </div>
-
-              <div className="rounded-xl border border-slate-200 p-3.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 mb-2">
-                  <Monitor className="h-4 w-4" />
-                </div>
-                <h4 className="font-bold text-xs text-slate-900">Screen Sharing</h4>
-                <p className="mt-1 text-xs text-slate-500">
-                  HD Screen and tab sharing with mixed microphone audio.
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* TAB 4: RECORDINGS & DOWNLOADS */}
       {activeTab === "recordings" && (
