@@ -22,6 +22,8 @@ import {
   VideoOff,
   PhoneOff,
   Loader2,
+  Award,
+  Zap,
 } from "lucide-react";
 
 function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass }) {
@@ -206,6 +208,28 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
               </Button>
             </div>
           </div>
+
+          {cls.liveTestId ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-amber-950 shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-600 text-white shadow">
+                  <Award className="h-5 w-5 animate-pulse" />
+                </div>
+                <div>
+                  <p className="font-bold text-xs sm:text-sm">Instructor launched a Live Exam!</p>
+                  <p className="text-[11px] text-amber-800">Your teacher started a CBT test for this class. Click below to participate.</p>
+                </div>
+              </div>
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md"
+                onClick={() => navigate(`/student/tests/${cls.liveTestId}`)}
+              >
+                <Zap className="mr-1.5 h-4 w-4 fill-current" />
+                Join Live Test Now
+              </Button>
+            </div>
+          ) : null}
 
           {hostNotice ? (
             <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm text-indigo-900">
