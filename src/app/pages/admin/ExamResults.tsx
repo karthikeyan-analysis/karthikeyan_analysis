@@ -68,7 +68,7 @@ function percentFromAttempt(a: ExamAttempt, maxMarks: number) {
 /** Submitted first, highest marks first; ties break by student name. In-progress / not submitted after, by name. */
 function sortAttemptsForRankExport(
   attempts: ExamAttempt[],
-  students: { id: string; name?: string }[],
+  students: any[],
 ) {
   const nameOf = (a: ExamAttempt) =>
     displayNameForAttempt(a, students).trim().toLowerCase() || a.uid;

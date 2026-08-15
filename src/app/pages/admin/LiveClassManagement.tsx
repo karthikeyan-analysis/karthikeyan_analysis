@@ -66,7 +66,12 @@ import {
   CheckCircle2,
   Clock,
   Zap,
+  Loader2,
+  Info,
 } from "lucide-react";
+import { collection, deleteField, onSnapshot, query } from "firebase/firestore";
+import { ref as storageRef, getDownloadURL } from "firebase/storage";
+import { storage } from "../../../config/firebase";
 import { listAdmins, type AdminProfile } from "../../features/liveClasses/adminDirectory";
 import {
   createLiveClass,
@@ -88,12 +93,31 @@ function statusBadgeVariant(status: LiveClass["status"]): "default" | "secondary
   return "secondary";
 }
 
+function formatClassDateTime(cls: LiveClass): string {
+  const dateStr = (cls as any).scheduledStartAt || cls.scheduledAt || cls.createdAt;
+  if (!dateStr) return "Live Session";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "Live Session";
+    return d.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } catch {
+    return "Live Session";
+  }
+}
+
 type SuiteTab = "overview" | "meetings" | "recordings" | "attendance" | "live_tests" | "settings";
 type ListFilter = "all" | "live" | "scheduled" | "ended" | "recordings";
 
 export default function LiveClassManagement() {
   const { user } = useAuth();
-  const { batches, exams } = useData();
+  const { batches } = useData();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as SuiteTab | null;
@@ -102,6 +126,15 @@ export default function LiveClassManagement() {
   const [loading, setLoading] = useState(true);
   const [admins, setAdmins] = useState<AdminProfile[]>([]);
   const [activeTab, setActiveTab] = useState<SuiteTab>(tabParam || "overview");
+
+  // Exam Details Modal State
+  const [examDetailsOpen, setExamDetailsOpen] = useState(false);
+  const [selectedExamForModal, setSelectedExamForModal] = useState<any>(null);
+
+  const openExamDetailsModal = (exam: any) => {
+    setSelectedExamForModal(exam);
+    setExamDetailsOpen(true);
+  };
 
   useEffect(() => {
     if (tabParam) {
@@ -170,7 +203,7 @@ export default function LiveClassManagement() {
 
   // Safe fallback arrays to prevent undefined.map / undefined.find crashes
   const safeBatches = useMemo(() => batches || [], [batches]);
-  const safeExams = useMemo(() => exams || [], [exams]);
+  const safeExams = useMemo(() => (useData() as any).exams || [], []);
   const safeClasses = useMemo(() => classes || [], [classes]);
   const safeAdmins = useMemo(() => admins || [], [admins]);
   const safeAttendanceRecords = useMemo(() => attendanceRecords || [], [attendanceRecords]);
@@ -426,8 +459,13 @@ export default function LiveClassManagement() {
     setLoadingPreview(true);
     setPreviewOpen(true);
     setPreviewUrl("");
+    if (cls.recordingDownloadUrl) {
+      setPreviewUrl(cls.recordingDownloadUrl);
+      setLoadingPreview(false);
+      return;
+    }
     try {
-      const url = await requestRecordingPlaybackUrl(cls.id);
+      const { url } = await requestRecordingPlaybackUrl(cls.id);
       if (url) {
         setPreviewUrl(url);
       } else {
@@ -442,20 +480,98 @@ export default function LiveClassManagement() {
     }
   };
 
-  const handleDownloadRecording = async (cls: LiveClass) => {
-    if (!cls.recordingKey) {
-      alert("No recording object key available for this class.");
-      return;
-    }
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+
+  const triggerInstantDownload = async (url: string, filename: string) => {
     try {
-      const url = await requestRecordingPlaybackUrl(cls.id);
-      if (url) {
-        window.open(url, "_blank");
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch {
+      let downloadUrl = url;
+      if (downloadUrl.includes("firebasestorage.googleapis.com")) {
+        const dispositionParam = `response-content-disposition=attachment%3B%20filename%3D"${encodeURIComponent(filename)}"`;
+        if (!downloadUrl.includes("response-content-disposition")) {
+          const sep = downloadUrl.includes("?") ? "&" : "?";
+          downloadUrl += `${sep}${dispositionParam}`;
+        }
+      }
+
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        try {
+          document.body.removeChild(a);
+        } catch { }
+      }, 2000);
+    }
+  };
+
+  const handleDownloadRecording = async (cls: LiveClass) => {
+    setDownloadingId(cls.id);
+    const safeName = (cls.name || "recording").replace(/[^a-z0-9_-]/gi, "_");
+    const filename = `${safeName}_recording.webm`;
+
+    try {
+      if (cls.recordingDownloadUrl) {
+        triggerInstantDownload(cls.recordingDownloadUrl, filename);
+        return;
+      }
+
+      let downloadUrl = "";
+      try {
+        const { url } = await requestRecordingPlaybackUrl(cls.id);
+        if (url) downloadUrl = url;
+      } catch (e) {
+        console.warn("requestRecordingPlaybackUrl failed, checking Firebase Storage fallback", e);
+      }
+
+      if (!downloadUrl && cls.recordingKey) {
+        try {
+          const sRef = storageRef(storage, cls.recordingKey);
+          downloadUrl = await getDownloadURL(sRef);
+        } catch (e) {
+          console.warn("Firebase Storage getDownloadURL failed", e);
+        }
+      }
+
+      if (downloadUrl) {
+        triggerInstantDownload(downloadUrl, filename);
       } else {
-        alert("Recording download link could not be generated.");
+        alert("Recording download link could not be generated for this class.");
       }
     } catch (e: any) {
+      console.error("Download error", e);
       alert("Could not retrieve download link: " + (e?.message || e));
+    } finally {
+      setTimeout(() => setDownloadingId(null), 600);
+    }
+  };
+
+  const handleDeleteRecording = async (cls: LiveClass) => {
+    if (!confirm(`Are you sure you want to delete the recording for "${cls.name}"?`)) return;
+    try {
+      await updateLiveClass(cls.id, {
+        recordingStatus: deleteField() as any,
+        recordingKey: deleteField() as any,
+        recordingDownloadUrl: deleteField() as any,
+        recordingDurationSec: deleteField() as any,
+        recordingSizeBytes: deleteField() as any,
+      });
+    } catch (err: any) {
+      console.error("Failed to delete recording", err);
+      alert("Could not delete recording: " + (err?.message || err));
     }
   };
 
@@ -465,15 +581,18 @@ export default function LiveClassManagement() {
       return;
     }
     const targetClass = safeClasses.find((c) => c.id === selectedAttendanceClassId);
-    const exportData = safeAttendanceRecords.map((att, idx) => ({
-      "S.No": idx + 1,
-      "Student ID": att.studentId || "N/A",
-      "Student Name": att.name || "Student",
-      Email: att.email || "N/A",
-      "Joined Time": att.firstJoinedAt ? new Date(att.firstJoinedAt).toLocaleString() : "N/A",
-      "Total Minutes": Math.round((att.totalDurationSec || 0) / 60),
-      Status: att.attended ? "Present" : "Absent",
-    }));
+    const exportData = safeAttendanceRecords.map((att, idx) => {
+      const joinedIso = att.firstJoinedAt || att.lastJoinedAt || att.currentSessionJoinedAt || (att.sessions && att.sessions[0]?.joinedAt);
+      return {
+        "S.No": idx + 1,
+        "Student ID": att.studentId || att.studentUid || att.studentRecordId || "N/A",
+        "Student Name": att.name || "Student",
+        Email: att.email || "N/A",
+        "Joined Time": joinedIso ? new Date(joinedIso).toLocaleString("en-IN") : "N/A",
+        "Total Minutes": Math.round((att.totalDurationSec || 0) / 60),
+        Status: att.attended !== false ? "Present" : "Absent",
+      };
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -499,56 +618,6 @@ export default function LiveClassManagement() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 pb-12">
-      {/* Sleek Top Navigation Header Bar */}
-      <div className="flex items-center justify-between overflow-x-auto rounded-2xl bg-slate-950 p-2 text-white shadow-xl border border-white/10 scrollbar-thin">
-        <div className="flex items-center gap-1.5 min-w-max">
-          {[
-            { id: "overview", label: "Overview", icon: Activity },
-            { id: "meetings", label: "Meeting Links & Scheduler", icon: Video },
-            { id: "recordings", label: "Recordings & Downloads", icon: Download, count: readyRecordingsList.length },
-            { id: "attendance", label: "Attendance Reports", icon: FileText },
-            { id: "live_tests", label: "Live Test Integration", icon: Award },
-            { id: "settings", label: "Platform Settings", icon: Settings },
-          ].map((tab) => {
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => handleTabChange(tab.id as SuiteTab)}
-                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all duration-200 ${
-                  isActive
-                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-900/50"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                <tab.icon className={`h-4 w-4 ${isActive ? "text-white" : "text-indigo-400"}`} />
-                <span>{tab.label}</span>
-                {tab.count !== undefined && tab.count > 0 ? (
-                  <span className="rounded-full bg-white/20 px-1.5 py-0.2 text-[10px] font-bold text-white">
-                    {tab.count}
-                  </span>
-                ) : null}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="hidden sm:flex items-center gap-2 pr-2">
-          <Button
-            size="sm"
-            className="h-8 bg-indigo-600 hover:bg-indigo-500 font-semibold text-xs shadow-md"
-            onClick={() => {
-              resetForm();
-              setCreateOpen(true);
-            }}
-          >
-            <Plus className="mr-1 h-3.5 w-3.5" />
-            New Link
-          </Button>
-        </div>
-      </div>
-
       {/* TAB 1: OVERVIEW */}
       {activeTab === "overview" && (
         <>
@@ -949,6 +1018,7 @@ export default function LiveClassManagement() {
                     <TableRow className="bg-slate-50/80 text-xs">
                       <TableHead className="font-bold">Class Name</TableHead>
                       <TableHead className="font-bold">Subject</TableHead>
+                      <TableHead className="font-bold">Batch & Target</TableHead>
                       <TableHead className="font-bold">Storage Key</TableHead>
                       <TableHead className="font-bold">Status</TableHead>
                       <TableHead className="text-right font-bold">Actions</TableHead>
@@ -960,7 +1030,12 @@ export default function LiveClassManagement() {
                       .map((cls) => (
                         <TableRow key={cls.id} className="hover:bg-slate-50/60 text-xs">
                           <TableCell className="font-bold text-slate-900">{cls.name}</TableCell>
-                          <TableCell className="text-indigo-600 font-semibold">{cls.subject}</TableCell>
+                          <TableCell className="text-indigo-600 font-bold">{cls.subject}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-indigo-50/80 text-indigo-700 border-indigo-200 text-[10px] font-semibold">
+                              {formatLiveClassBatchLabel(cls, safeBatches)}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="text-xs text-slate-500 font-mono">
                             {cls.recordingKey || "kasc-live-class-recordings"}
                           </TableCell>
@@ -968,20 +1043,43 @@ export default function LiveClassManagement() {
                             <Badge className="bg-emerald-600 text-[10px]">Ready</Badge>
                           </TableCell>
                           <TableCell className="space-x-1.5 whitespace-nowrap text-right">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200/80 mr-2 shadow-2xs">
+                              <span className="text-indigo-600 font-bold">Subject: {cls.subject}</span>
+                              <span className="text-slate-300">•</span>
+                              <span className="text-slate-700 font-medium">Batch: {formatLiveClassBatchLabel(cls, safeBatches)}</span>
+                            </span>
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-6 text-[11px]"
+                              className="h-6 text-[11px] font-medium"
                               onClick={() => void handleWatchPreview(cls)}
                             >
                               <PlayCircle className="mr-1 h-3 w-3 text-indigo-600" /> Preview Video
                             </Button>
                             <Button
                               size="sm"
-                              className="h-6 text-[11px] bg-indigo-600 hover:bg-indigo-700"
+                              className="h-6 text-[11px] bg-indigo-600 hover:bg-indigo-700 font-medium"
+                              disabled={downloadingId === cls.id}
                               onClick={() => void handleDownloadRecording(cls)}
                             >
-                              <Download className="mr-1 h-3 w-3" /> Download
+                              {downloadingId === cls.id ? (
+                                <>
+                                  <Loader2 className="mr-1 h-3 w-3 animate-spin" /> Downloading…
+                                </>
+                              ) : (
+                                <>
+                                  <Download className="mr-1 h-3 w-3" /> Download
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[11px] text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 font-medium"
+                              onClick={() => void handleDeleteRecording(cls)}
+                              title="Delete recording entry"
+                            >
+                              <Trash2 className="mr-1 h-3 w-3" /> Delete
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -1091,28 +1189,36 @@ export default function LiveClassManagement() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredAttendanceRecords.map((att) => (
-                        <TableRow key={att.uid} className="hover:bg-slate-50/60 text-xs">
-                          <TableCell className="font-bold text-slate-900">{att.name}</TableCell>
-                          <TableCell className="text-slate-600">
-                            <div>{att.email}</div>
-                            {att.studentId ? (
-                              <span className="text-[10px] text-slate-400 font-mono">{att.studentId}</span>
-                            ) : null}
-                          </TableCell>
-                          <TableCell className="text-slate-600">
-                            {att.firstJoinedAt ? new Date(att.firstJoinedAt).toLocaleTimeString() : "N/A"}
-                          </TableCell>
-                          <TableCell className="font-semibold text-slate-700">
-                            {Math.round((att.totalDurationSec || 0) / 60)} mins
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
-                              Present
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {filteredAttendanceRecords.map((att) => {
+                        const joinedIso = att.firstJoinedAt || att.lastJoinedAt || att.currentSessionJoinedAt || (att.sessions && att.sessions[0]?.joinedAt);
+                        const joinedFormatted = joinedIso
+                          ? new Date(joinedIso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+                          : "N/A";
+                        return (
+                          <TableRow key={att.id || att.studentRecordId || att.studentUid || att.uid} className="hover:bg-slate-50/60 text-xs">
+                            <TableCell className="font-bold text-slate-900">{att.name || "Student"}</TableCell>
+                            <TableCell className="text-slate-600">
+                              <div>{att.email || "N/A"}</div>
+                              {att.studentId ? (
+                                <span className="text-[10px] text-slate-400 font-mono">{att.studentId}</span>
+                              ) : att.studentUid ? (
+                                <span className="text-[10px] text-slate-400 font-mono">{att.studentUid}</span>
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="text-slate-600">
+                              {joinedFormatted}
+                            </TableCell>
+                            <TableCell className="font-semibold text-slate-700">
+                              {Math.round((att.totalDurationSec || 0) / 60)} mins
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">
+                                Present
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
@@ -1160,7 +1266,9 @@ export default function LiveClassManagement() {
                     <TableRow className="bg-slate-50/80 text-xs">
                       <TableHead className="font-bold">Live Meeting</TableHead>
                       <TableHead className="font-bold">Subject</TableHead>
+                      <TableHead className="font-bold">Date & Time</TableHead>
                       <TableHead className="font-bold">Assigned Exam</TableHead>
+                      <TableHead className="font-bold">View Details</TableHead>
                       <TableHead className="text-right font-bold">Action</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1168,9 +1276,12 @@ export default function LiveClassManagement() {
                     {safeClasses.map((cls) => {
                       const currentTest = safeExams.find((e) => e.id === cls.liveTestId);
                       return (
-                        <TableRow key={cls.id} className="text-xs">
+                        <TableRow key={cls.id} className="text-xs hover:bg-slate-50/60">
                           <TableCell className="font-bold text-slate-900">{cls.name}</TableCell>
                           <TableCell className="text-indigo-600 font-semibold">{cls.subject}</TableCell>
+                          <TableCell className="text-slate-600 font-medium whitespace-nowrap">
+                            {formatClassDateTime(cls)}
+                          </TableCell>
                           <TableCell>
                             <Select
                               value={cls.liveTestId || "none"}
@@ -1178,7 +1289,7 @@ export default function LiveClassManagement() {
                                 assignLiveTestToClass(cls.id, val === "none" ? "" : val)
                               }
                             >
-                              <SelectTrigger className="w-56 h-7 text-xs bg-white border-slate-200">
+                              <SelectTrigger className="w-52 h-7 text-xs bg-white border-slate-200">
                                 <SelectValue placeholder="Select live test" />
                               </SelectTrigger>
                               <SelectContent>
@@ -1191,11 +1302,36 @@ export default function LiveClassManagement() {
                               </SelectContent>
                             </Select>
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="whitespace-nowrap">
                             {currentTest ? (
-                              <Badge className="bg-rose-600 text-[10px]">Test Active</Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[11px] text-indigo-600 hover:bg-indigo-50 border-indigo-200 font-semibold shadow-xs"
+                                onClick={() => openExamDetailsModal(currentTest)}
+                              >
+                                <Info className="h-3 w-3 mr-1" /> View Details
+                              </Button>
+                            ) : safeExams.length > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[11px] text-indigo-600 hover:bg-indigo-50 border-indigo-200 font-semibold shadow-xs"
+                                onClick={() => openExamDetailsModal(safeExams[0])}
+                              >
+                                <Info className="h-3 w-3 mr-1" /> View Details
+                              </Button>
                             ) : (
-                              <span className="text-[11px] text-slate-400">Ready</span>
+                              <span className="text-[11px] text-slate-400">No test data</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            {currentTest ? (
+                              <Badge className="bg-rose-600 text-[10px] font-bold">Test Active</Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] text-slate-500 bg-slate-50 border-slate-200">
+                                Ready
+                              </Badge>
                             )}
                           </TableCell>
                         </TableRow>
@@ -1578,9 +1714,103 @@ export default function LiveClassManagement() {
               </div>
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {previewUrl ? (
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 font-medium"
+                onClick={() => {
+                  const safeName = (previewTitle || "recording").replace(/[^a-z0-9_-]/gi, "_");
+                  triggerInstantDownload(previewUrl, `${safeName}_recording.webm`);
+                }}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" /> Download Video File
+              </Button>
+            ) : <div />}
             <Button variant="outline" size="sm" onClick={() => setPreviewOpen(false)}>
               Close Preview
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Exam / Test Details Dialog */}
+      <Dialog open={examDetailsOpen} onOpenChange={setExamDetailsOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <FileText className="h-5 w-5 text-indigo-600" />
+              Live Exam Overview: {selectedExamForModal?.title || "Test Details"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedExamForModal ? (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                  <p className="text-slate-500 font-medium">Subject</p>
+                  <p className="text-indigo-600 font-bold mt-0.5">{selectedExamForModal.subject || "General"}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                  <p className="text-slate-500 font-medium">Status</p>
+                  <p className="text-slate-900 font-bold mt-0.5 capitalize">{selectedExamForModal.status || "Published"}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                  <p className="text-slate-500 font-medium">Duration</p>
+                  <p className="text-slate-900 font-bold mt-0.5">{selectedExamForModal.durationMinutes || 30} Minutes</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                  <p className="text-slate-500 font-medium">Total Questions</p>
+                  <p className="text-slate-900 font-bold mt-0.5">{selectedExamForModal.totalQuestions || 0} Questions</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                  <p className="text-slate-500 font-medium">Total Marks</p>
+                  <p className="text-slate-900 font-bold mt-0.5">{selectedExamForModal.totalMarks || 0} Marks</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80">
+                  <p className="text-slate-500 font-medium">Negative Marking</p>
+                  <p className="text-slate-900 font-bold mt-0.5">
+                    {selectedExamForModal.negativeMarkPerWrong ? `-${selectedExamForModal.negativeMarkPerWrong} per wrong` : "None"}
+                  </p>
+                </div>
+              </div>
+
+              {selectedExamForModal.startAt || selectedExamForModal.endAt ? (
+                <div className="rounded-xl bg-indigo-50/60 p-3 border border-indigo-100 text-xs space-y-1">
+                  <p className="font-bold text-indigo-900 flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-indigo-600" /> Schedule Window
+                  </p>
+                  <p className="text-indigo-800">
+                    <strong>Starts:</strong> {selectedExamForModal.startAt ? new Date(selectedExamForModal.startAt).toLocaleString("en-IN") : "Instant / Live"}
+                  </p>
+                  <p className="text-indigo-800">
+                    <strong>Ends:</strong> {selectedExamForModal.endAt ? new Date(selectedExamForModal.endAt).toLocaleString("en-IN") : "Open ended"}
+                  </p>
+                </div>
+              ) : null}
+
+              {selectedExamForModal.instructions ? (
+                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80 text-xs">
+                  <p className="font-bold text-slate-900 mb-1">Instructions</p>
+                  <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{selectedExamForModal.instructions}</p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              size="sm"
+              className="bg-rose-600 hover:bg-rose-500 font-bold text-xs"
+              onClick={() => {
+                setExamDetailsOpen(false);
+                navigate("/admin/live-tests");
+              }}
+            >
+              <Zap className="mr-1.5 h-3.5 w-3.5 fill-current" /> Open Live Control Center
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setExamDetailsOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

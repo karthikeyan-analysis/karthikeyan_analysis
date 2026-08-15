@@ -1,16 +1,17 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "../../../config/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { functions, storage } from "../../../config/firebase";
 
 export interface RecordingResult {
   key: string;
   durationSec: number;
   sizeBytes: number;
+  downloadUrl?: string;
 }
 
 export interface RecordingCaptureHandle {
-  /** Explicitly stop and upload. Also fires automatically if the host uses the
-   *  browser's native "Stop sharing" control instead of this. */
-  stop: () => void;
+  /** Explicitly stop and upload. Returns a promise resolving when upload completes. */
+  stop: () => Promise<RecordingResult | null>;
 }
 
 /**
@@ -19,14 +20,14 @@ export interface RecordingCaptureHandle {
  * asking the host to share a tab/screen via getDisplayMedia, mixing in their
  * own mic (tab-audio capture alone does not include local mic input — the
  * host's own voice would otherwise be silent in the recording), recording
- * with MediaRecorder, and uploading the result straight to R2 via a
- * presigned PUT URL on stop.
+ * with MediaRecorder, and uploading the result straight to R2 or Firebase Storage
+ * via presigned PUT / SDK upload on stop.
  */
 export async function startRecordingCapture(params: {
   classId: string;
   onUploaded: (result: RecordingResult) => void;
   onError: (error: Error) => void;
-  /** Fired once capture stops and the R2 upload is about to begin. */
+  /** Fired once capture stops and the upload is about to begin. */
   onUploading?: () => void;
 }): Promise<RecordingCaptureHandle> {
   const displayStream = await navigator.mediaDevices.getDisplayMedia({
@@ -79,44 +80,90 @@ export async function startRecordingCapture(params: {
     void audioContext.close().catch(() => {});
   };
 
-  let finished = false;
-  const finish = async () => {
-    if (finished) return;
-    finished = true;
-    try {
-      const blob = await new Promise<Blob>((resolve) => {
-        recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
-        if (recorder.state !== "inactive") recorder.stop();
-      });
-      cleanupTracks();
+  let finishedPromise: Promise<RecordingResult | null> | null = null;
 
-      const durationSec = Math.round((Date.now() - startedAt) / 1000);
-      params.onUploading?.();
+  const finish = (): Promise<RecordingResult | null> => {
+    if (finishedPromise) return finishedPromise;
 
-      const getUploadUrl = httpsCallable<{ classId: string; contentType: string }, { url: string; key: string }>(
-        functions,
-        "getRecordingUploadUrl",
-      );
-      const { data } = await getUploadUrl({ classId: params.classId, contentType: mimeType });
+    finishedPromise = (async () => {
+      try {
+        const blob = await new Promise<Blob>((resolve) => {
+          recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+          if (recorder.state !== "inactive") recorder.stop();
+        });
+        cleanupTracks();
 
-      const putRes = await fetch(data.url, {
-        method: "PUT",
-        headers: { "Content-Type": mimeType },
-        body: blob,
-      });
-      if (!putRes.ok) {
-        throw new Error(`Upload to R2 failed (status ${putRes.status})`);
+        const durationSec = Math.round((Date.now() - startedAt) / 1000);
+        params.onUploading?.();
+
+        let recordingKey = "";
+        let downloadUrl = "";
+
+        // 1. Try Cloudflare R2 presigned PUT upload
+        try {
+          const getUploadUrl = httpsCallable<{ classId: string; contentType: string }, { url: string; key: string }>(
+            functions,
+            "getRecordingUploadUrl",
+          );
+          const { data } = await getUploadUrl({ classId: params.classId, contentType: mimeType });
+
+          const putRes = await fetch(data.url, {
+            method: "PUT",
+            headers: { "Content-Type": mimeType },
+            body: blob,
+          });
+          if (!putRes.ok) {
+            throw new Error(`Upload to R2 failed (status ${putRes.status})`);
+          }
+          recordingKey = data.key;
+        } catch (r2Err) {
+          console.warn("[recordingCapture] Cloudflare R2 upload failed or CORS blocked, trying Firebase Storage fallback", r2Err);
+          // 2. Fallback: Firebase Storage direct upload
+          const ext = mimeType.includes("mp4") ? "mp4" : "webm";
+          recordingKey = `liveClasses/${params.classId}/${Date.now()}.${ext}`;
+          const storageRef = ref(storage, recordingKey);
+          await uploadBytes(storageRef, blob, { contentType: mimeType });
+          downloadUrl = await getDownloadURL(storageRef);
+        }
+
+        const res: RecordingResult = {
+          key: recordingKey,
+          durationSec,
+          sizeBytes: blob.size,
+          downloadUrl: downloadUrl || undefined,
+        };
+        params.onUploaded(res);
+        return res;
+      } catch (err) {
+        cleanupTracks();
+        const error = err instanceof Error ? err : new Error(String(err));
+
+        // 3. Last-resort Fallback: local browser download
+        if (chunks.length > 0) {
+          try {
+            const fallbackBlob = new Blob(chunks, { type: mimeType });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(fallbackBlob);
+            a.download = `live-class-${params.classId}-${Date.now()}.webm`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          } catch (e) {
+            console.error("Local fallback download failed", e);
+          }
+        }
+        params.onError(error);
+        return null;
       }
+    })();
 
-      params.onUploaded({ key: data.key, durationSec, sizeBytes: blob.size });
-    } catch (err) {
-      cleanupTracks();
-      params.onError(err instanceof Error ? err : new Error(String(err)));
-    }
+    return finishedPromise;
   };
 
   // Host clicked the browser's native "Stop sharing" instead of our button.
-  displayStream.getVideoTracks()[0]?.addEventListener("ended", () => void finish());
+  displayStream.getVideoTracks()[0]?.addEventListener("ended", () => {
+    void finish();
+  });
 
-  return { stop: () => void finish() };
+  return { stop: () => finish() };
 }

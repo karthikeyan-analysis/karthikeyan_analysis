@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import { Video, PlayCircle, Radio } from "lucide-react";
+import { Video, PlayCircle, Radio, Award, Zap } from "lucide-react";
 import { subscribeToLiveClassesForStudentBatch } from "../../features/liveClasses/liveClassApi";
 import { liveClassStatusLabel } from "../../features/liveClasses/liveClassAvailability";
 import type { LiveClass } from "../../features/liveClasses/types";
@@ -25,9 +25,17 @@ function statusBadgeVariant(status: LiveClass["status"]): "default" | "secondary
 export default function LiveClasses() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const subjectParam = searchParams.get("subject");
   const [classes, setClasses] = useState<LiveClass[]>([]);
   const [loading, setLoading] = useState(true);
-  const [subjectFilter, setSubjectFilter] = useState("all");
+  const [subjectFilter, setSubjectFilter] = useState(subjectParam || "all");
+
+  useEffect(() => {
+    if (subjectParam) {
+      setSubjectFilter(subjectParam);
+    }
+  }, [subjectParam]);
 
   useEffect(() => {
     if (!user?.batchId) {
@@ -52,10 +60,20 @@ export default function LiveClasses() {
 
   const filtered = useMemo(() => {
     if (subjectFilter === "all") return classes;
-    return classes.filter((c) => c.subject === subjectFilter);
+    return classes.filter((c) => c.subject?.toLowerCase() === subjectFilter.toLowerCase());
   }, [classes, subjectFilter]);
 
   const liveCount = classes.filter((c) => c.status === "active").length;
+
+  const handleSubjectChange = (val: string) => {
+    setSubjectFilter(val);
+    if (val === "all") {
+      searchParams.delete("subject");
+    } else {
+      searchParams.set("subject", val);
+    }
+    setSearchParams(searchParams, { replace: true });
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -71,7 +89,7 @@ export default function LiveClasses() {
         </div>
         {subjects.length > 0 ? (
           <div className="w-full sm:w-52">
-            <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+            <Select value={subjectFilter} onValueChange={handleSubjectChange}>
               <SelectTrigger className="bg-white">
                 <SelectValue placeholder="Filter by subject" />
               </SelectTrigger>
@@ -131,11 +149,27 @@ export default function LiveClasses() {
                           {liveClassStatusLabel(cls)}
                         </Badge>
                       )}
+                      {cls.liveTestId && cls.status === "active" ? (
+                        <Badge className="bg-amber-600 hover:bg-amber-600 font-bold">
+                          <Award className="mr-1 h-3 w-3 animate-pulse" />
+                          Live Exam Active
+                        </Badge>
+                      ) : null}
                       <p className="truncate font-medium text-slate-900">{cls.name}</p>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">{cls.subject}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {cls.liveTestId && cls.status === "active" ? (
+                      <Button
+                        size="sm"
+                        className="bg-amber-600 hover:bg-amber-700 font-bold shadow-sm"
+                        onClick={() => navigate(`/student/tests/${cls.liveTestId}`)}
+                      >
+                        <Zap className="mr-1 h-3.5 w-3.5 fill-current" />
+                        Take Live Test
+                      </Button>
+                    ) : null}
                     {cls.status !== "ended" ? (
                       <Button
                         size="sm"

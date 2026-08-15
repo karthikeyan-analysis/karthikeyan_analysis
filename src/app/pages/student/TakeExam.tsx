@@ -44,6 +44,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import {
   Award,
   Camera,
+  CheckCircle2,
   Clock,
   Eye,
   FileQuestion,
@@ -125,9 +126,23 @@ function canShowAnswers(params: {
   return true;
 }
 
-export default function TakeExam() {
-  const { id } = useParams();
+export default function TakeExam({
+  embeddedTestId,
+  onEmbeddedClose,
+}: {
+  embeddedTestId?: string;
+  onEmbeddedClose?: () => void;
+} = {}) {
+  const { id: paramId } = useParams();
+  const id = embeddedTestId || paramId;
   const navigate = useNavigate();
+  const handleExit = () => {
+    if (onEmbeddedClose) {
+      onEmbeddedClose();
+    } else {
+      navigate("/student/tests");
+    }
+  };
   const { user } = useAuth();
   const { batches } = useData();
   const { photoURL } = useStudentPhoto();
@@ -419,7 +434,12 @@ export default function TakeExam() {
         if (cancelled) return;
 
         if (!attempt) {
-          if (!canStartNewExamAttempt(test)) {
+          const isLiveActive = Boolean(
+            (liveSession && liveSession.status === "active") ||
+            test.status === "published" ||
+            !test.manuallyClosedAt,
+          );
+          if (!canStartNewExamAttempt(test, Date.now(), isLiveActive)) {
             setClosedForNewAttempts(true);
             setQuestions(rawQs);
             return;
@@ -900,7 +920,7 @@ export default function TakeExam() {
               >
                 {pwChecking ? "Checking..." : "Continue"}
               </Button>
-              <Button variant="outline" onClick={() => navigate("/student/tests")}>
+              <Button variant="outline" onClick={handleExit}>
                 Back
               </Button>
             </div>
@@ -946,7 +966,7 @@ export default function TakeExam() {
                 <Button
                   variant="outline"
                   className="border-slate-300"
-                  onClick={() => navigate("/student/tests")}
+                  onClick={handleExit}
                 >
                   Back
                 </Button>
@@ -1295,14 +1315,16 @@ export default function TakeExam() {
                   )}
                   onClick={() => {
                     toggleMarkForReview();
-                    goNext();
+                    if (currentIndex < questions.length - 1) goNext();
                   }}
-                  disabled={!isAttemptActive || currentIndex === questions.length - 1}
+                  disabled={!isAttemptActive}
                 >
                   <Flag
                     className={cn("w-4 h-4 mr-2", isCurrentMarkedForReview && "fill-current")}
                   />
-                  {isCurrentMarkedForReview ? "Unmark & Next" : "Mark for Review & Next"}
+                  {isCurrentMarkedForReview
+                    ? currentIndex === questions.length - 1 ? "Unmark" : "Unmark & Next"
+                    : currentIndex === questions.length - 1 ? "Mark for Review" : "Mark for Review & Next"}
                 </Button>
                 <Button variant="outline" size="sm" onClick={handleClear} disabled={!isAttemptActive}>
                   Clear Response
@@ -1310,26 +1332,49 @@ export default function TakeExam() {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                <Button
-                  size="sm"
-                  className="bg-blue-600 hover:bg-blue-700"
-                  onClick={() => void handleManualSave().finally(goNext)}
-                  disabled={!isAttemptActive || saving || submitting || currentIndex === questions.length - 1}
-                >
-                  {saving ? (
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                  ) : (
-                    <Save className="w-4 h-4 mr-2" />
-                  )}
-                  Save &amp; Next
-                </Button>
+                {currentIndex < questions.length - 1 ? (
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 hover:bg-blue-700"
+                    onClick={() => void handleManualSave().finally(goNext)}
+                    disabled={!isAttemptActive || saving || submitting}
+                  >
+                    {saving ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <Save className="w-4 h-4 mr-2" />
+                    )}
+                    Save &amp; Next
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md"
+                    onClick={() => {
+                      if (confirm("Are you sure you want to submit your test now?")) {
+                        void handleSubmit();
+                      }
+                    }}
+                    disabled={!isAttemptActive || saving || submitting}
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Test
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
 
         <Card className="min-h-0 flex flex-col overflow-hidden">
-          <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-hidden space-y-3">
+          <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-y-auto max-h-[calc(100vh-120px)] space-y-3 scroll-smooth">
             {/* ELEMENT 1: STUDENT LIVE PROCTORING CAMERA FEED WIDGET */}
             {liveSession && (
               <div className="shrink-0 rounded-xl border border-slate-800 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
@@ -1433,7 +1478,7 @@ export default function TakeExam() {
             </div>
 
             <div
-              className="mt-2 min-h-[100px] max-h-[min(42vh,280px)] flex-1 overflow-y-auto overscroll-contain scroll-smooth rounded-lg border border-slate-200/80 bg-slate-50/50 p-2 pr-1"
+              className="mt-2 min-h-[140px] max-h-[360px] flex-1 overflow-y-auto overscroll-contain scroll-smooth rounded-lg border border-slate-200/80 bg-slate-50/50 p-2 pr-1"
               aria-label="Question navigation"
             >
               <div className="grid grid-cols-6 gap-2">
@@ -1521,6 +1566,29 @@ export default function TakeExam() {
                 <Clock className="w-3.5 h-3.5" />
                 Exam ends only when the timer finishes.
               </div>
+            </div>
+
+            <div className="shrink-0 pt-3 border-t border-slate-200 mt-2 pb-4">
+              <Button
+                size="sm"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 shadow-md text-xs"
+                onClick={() => {
+                  if (confirm("Are you sure you want to submit your exam now?")) {
+                    void handleSubmit();
+                  }
+                }}
+                disabled={!isAttemptActive || submitting || saving}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting Exam...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Exam Now
+                  </>
+                )}
+              </Button>
             </div>
           </CardContent>
         </Card>

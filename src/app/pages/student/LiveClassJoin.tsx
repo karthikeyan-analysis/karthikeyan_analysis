@@ -3,6 +3,13 @@ import { useNavigate, useParams } from "react-router";
 import { useObservableAsValue } from "partytracks/react";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../../components/ui/dialog";
 import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
 import { useLiveClassPresence } from "../../features/liveClasses/useLiveClassPresence";
 import {
@@ -13,6 +20,7 @@ import {
   subscribeToOwnDoubts,
 } from "../../features/liveClasses/liveClassApi";
 import type { LiveClass, LiveClassDoubt, LiveClassPresence } from "../../features/liveClasses/types";
+import TakeExam from "./TakeExam";
 import {
   Send,
   MessageCircleQuestion,
@@ -24,7 +32,44 @@ import {
   Loader2,
   Award,
   Zap,
+  Bell,
+  Sparkles,
 } from "lucide-react";
+
+function playNotificationChime() {
+  try {
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = "sine";
+    osc1.frequency.setValueAtTime(587.33, now); // D5
+    osc1.frequency.exponentialRampToValueAtTime(880, now + 0.15); // A5
+    gain1.gain.setValueAtTime(0.3, now);
+    gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(now);
+    osc1.stop(now + 0.4);
+
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = "sine";
+    osc2.frequency.setValueAtTime(880, now + 0.15);
+    osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.35); // D6
+    gain2.gain.setValueAtTime(0.3, now + 0.15);
+    gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(now + 0.15);
+    osc2.stop(now + 0.6);
+  } catch (err) {
+    console.warn("Could not play audio chime", err);
+  }
+}
 
 function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass }) {
   const { user } = useAuth();
@@ -44,6 +89,26 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
   const [doubtText, setDoubtText] = useState("");
   const [sending, setSending] = useState(false);
 
+  const [activeInRoomTestId, setActiveInRoomTestId] = useState<string | null>(null);
+  const [showTestAlertModal, setShowTestAlertModal] = useState(false);
+  const prevTestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const currentTestId = cls.liveTestId || null;
+    if (currentTestId && currentTestId !== prevTestIdRef.current) {
+      playNotificationChime();
+      setShowTestAlertModal(true);
+      if ("Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification("🚀 Live Test Launched!", {
+            body: "Your instructor launched a CBT test for this live class. Click to participate.",
+          });
+        } catch (e) {}
+      }
+    }
+    prevTestIdRef.current = currentTestId;
+  }, [cls.liveTestId]);
+
   useEffect(() => subscribeToOwnDoubts(classId, user!.id, setDoubts), [classId, user]);
 
   // Attendance: join when the call connects; leave on unmount / disconnect.
@@ -54,6 +119,8 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
       studentRecordId: user.studentRecordId,
       studentUid: user.id,
       name: user.name,
+      email: user.email,
+      studentId: user.studentId,
     }).catch(console.error);
     return () => {
       recordAttendanceLeave({ classId, studentRecordId: user.studentRecordId! }).catch(console.error);
@@ -144,7 +211,13 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     );
   }
 
-  const spotlightPresence = cls.spotlightUid ? roster.find((p) => p.id === cls.spotlightUid) : null;
+  const spotlightPresence = cls.spotlightUid
+    ? roster.find((p) => p.id === cls.spotlightUid)
+    : roster.find((p) => p.screenshareVideoTrack) ||
+      roster.find((p) => p.role === "host") ||
+      roster.find((p) => p.role === "co-host") ||
+      (roster.length > 0 ? roster[0] : null);
+
   const otherRoster = spotlightPresence ? roster.filter((p) => p.id !== spotlightPresence.id) : roster;
 
   const renderTile = (p: LiveClassPresence, spotlighted?: boolean) => {
@@ -209,7 +282,7 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
             </div>
           </div>
 
-          {cls.liveTestId ? (
+          {cls.liveTestId && (cls.liveTestStartedAt || (cls as any).liveTestActive) ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-amber-950 shadow-md">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-600 text-white shadow">
@@ -223,7 +296,10 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
               <Button
                 size="sm"
                 className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-md"
-                onClick={() => navigate(`/student/tests/${cls.liveTestId}`)}
+                onClick={() => {
+                  setShowTestAlertModal(false);
+                  setActiveInRoomTestId(cls.liveTestId!);
+                }}
               >
                 <Zap className="mr-1.5 h-4 w-4 fill-current" />
                 Join Live Test Now
@@ -294,6 +370,78 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
           </div>
         </div>
       </div>
+
+      {/* Live Test Alert Dialog Popup */}
+      <Dialog open={showTestAlertModal} onOpenChange={setShowTestAlertModal}>
+        <DialogContent className="max-w-md border-amber-300 bg-amber-50">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-amber-950">
+              <Sparkles className="h-5 w-5 text-amber-600 animate-spin" />
+              🚀 Live Test Launched!
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 text-xs sm:text-sm text-amber-900">
+            <p>
+              Your instructor has launched a CBT Live Test for this class.
+            </p>
+            <p className="font-semibold text-amber-950 bg-amber-100/80 p-2.5 rounded-lg border border-amber-200">
+              ⚡ You will stay connected to the live class meeting with your camera and mic active while taking this test.
+            </p>
+          </div>
+          <DialogFooter className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="outline"
+              className="border-amber-300 text-amber-900 hover:bg-amber-100"
+              onClick={() => setShowTestAlertModal(false)}
+            >
+              Later
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              onClick={() => {
+                setShowTestAlertModal(false);
+                if (cls.liveTestId) {
+                  setActiveInRoomTestId(cls.liveTestId);
+                }
+              }}
+            >
+              <Zap className="mr-1.5 h-4 w-4 fill-current" />
+              Start Test Now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* In-Room Full-Screen Exam Overlay (Keeps WebRTC presence connected!) */}
+      {activeInRoomTestId ? (
+        <div className="fixed inset-0 z-50 flex flex-col bg-slate-900/95 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="flex items-center justify-between border-b border-slate-700 bg-slate-950 px-4 py-2 text-white shadow-lg">
+            <div className="flex items-center gap-2.5 text-xs sm:text-sm font-semibold">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500"></span>
+              </span>
+              <span className="text-emerald-400">Live Meeting Active</span>
+              <span className="text-slate-400">•</span>
+              <span className="text-slate-300">Camera & Mic Connected ({roster.length} in room)</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-slate-700 bg-slate-800 text-xs font-semibold text-white hover:bg-slate-700"
+              onClick={() => setActiveInRoomTestId(null)}
+            >
+              Minimize Test & Return to Video Call
+            </Button>
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <TakeExam
+              embeddedTestId={activeInRoomTestId}
+              onEmbeddedClose={() => setActiveInRoomTestId(null)}
+            />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

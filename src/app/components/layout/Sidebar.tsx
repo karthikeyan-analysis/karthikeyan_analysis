@@ -28,6 +28,9 @@ import {
   Activity,
 } from "lucide-react";
 import { cn } from "../ui/utils";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
+import { db } from "../../../config/firebase";
+import { subscribeAllActiveLiveTestSessions } from "../../features/liveTests/liveTestApi";
 
 interface SidebarProps {
   isOpen?: boolean;
@@ -57,6 +60,41 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const isCohost = user?.adminKind === "cohost";
 
   const fullPath = location.pathname + location.search;
+
+  const [activeLiveTestCount, setActiveLiveTestCount] = useState(0);
+
+  useEffect(() => {
+    const unsub1 = subscribeAllActiveLiveTestSessions((sessions) => {
+      const studentBatchId = user?.batchId;
+      const relevantSessions = sessions.filter((s) => {
+        if (s.status !== "active") return false;
+        if (!studentBatchId) return true;
+        if (s.batchId === studentBatchId) return true;
+        if (s.batchIds && Array.isArray(s.batchIds) && s.batchIds.includes(studentBatchId)) return true;
+        return false;
+      });
+
+      const activeSessionsCount = relevantSessions.length;
+
+      const q2 = query(collection(db, "liveClasses"), where("status", "==", "active"));
+      onSnapshot(q2, (snap2) => {
+        const liveClassActiveTests = snap2.docs.filter((d) => {
+          const data = d.data();
+          if (!data.liveTestId || data.liveTestActive !== true) return false;
+          if (!studentBatchId) return true;
+          const bIds: string[] = data.batchIds || (data.batchId ? [data.batchId] : []);
+          return bIds.includes(studentBatchId);
+        }).length;
+        setActiveLiveTestCount(activeSessionsCount + liveClassActiveTests);
+      }, () => {
+        setActiveLiveTestCount(activeSessionsCount);
+      });
+    });
+
+    return () => {
+      unsub1();
+    };
+  }, [user?.batchId]);
 
   // Category Definitions with all sub-pages & tabs in side drawer
   const adminCategories: PrimaryCategory[] = [
@@ -121,7 +159,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           end: true,
         },
         {
-          to: "/admin/tests/create",
+          to: "/admin/tests/new",
           icon: PlusCircle,
           label: "Create New Test",
           end: true,
@@ -217,6 +255,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   const studentCategories: PrimaryCategory[] = [
     { id: "s_dash", label: "Dashboard", icon: LayoutDashboard, to: "/student" },
     { id: "s_live", label: "Live Classes", icon: Video, to: "/student/live-classes" },
+    { id: "s_live_test", label: "Live Test", icon: Award, to: "/student/tests?view=live" },
     { id: "s_media", label: "Media Library", icon: BookOpen, to: "/student/media" },
     { id: "s_tests", label: "Tests & Exams", icon: ClipboardList, to: "/student/tests" },
   ];
@@ -366,27 +405,41 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
 
                   // Direct link items (Dashboard / Settings / Student routes)
                   if (!hasSubItems && cat.to) {
+                    const isLiveView = location.search.includes("view=live");
+                    const isDirectActive =
+                      cat.id === "s_live_test"
+                        ? isLiveView
+                        : cat.id === "s_tests"
+                          ? location.pathname === "/student/tests" && !isLiveView
+                          : cat.to === "/student"
+                            ? location.pathname === "/student"
+                            : cat.to === "/admin"
+                              ? location.pathname === "/admin"
+                              : location.pathname.startsWith(cat.to);
+
                     return (
                       <NavLink
                         key={cat.id}
                         to={cat.to}
-                        end={cat.to === "/admin" || cat.to === "/student"}
                         onClick={onClose}
-                        className={({ isActive }) =>
-                          cn(
-                            "flex items-center justify-between rounded-xl px-3 py-2.5 text-xs transition-all",
-                            isActive
-                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 font-semibold"
-                              : "text-slate-300 hover:bg-white/10 hover:text-white font-medium",
-                          )
-                        }
+                        className={cn(
+                          "flex items-center justify-between rounded-xl px-3 py-2.5 text-xs transition-all",
+                          isDirectActive
+                            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900/30 font-semibold"
+                            : "text-slate-300 hover:bg-white/10 hover:text-white font-medium",
+                        )}
                       >
-                        {({ isActive }) => (
+                        <div className="flex items-center justify-between w-full">
                           <div className="flex items-center gap-3">
-                            <cat.icon className={cn("h-4 w-4", isActive ? "text-white" : "text-indigo-400")} />
+                            <cat.icon className={cn("h-4 w-4", isDirectActive ? "text-white" : "text-indigo-400")} />
                             <span>{cat.label}</span>
                           </div>
-                        )}
+                          {cat.id === "s_live_test" && activeLiveTestCount > 0 ? (
+                            <span className="flex items-center gap-1 rounded-full bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold text-white animate-pulse">
+                              <Radio className="h-2.5 w-2.5" /> LIVE
+                            </span>
+                          ) : null}
+                        </div>
                       </NavLink>
                     );
                   }

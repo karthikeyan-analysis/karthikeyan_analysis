@@ -206,11 +206,19 @@ export function useLiveClassPresence(params: {
     };
     const micSub = mic.error$.subscribe((err) => setConnectError(toMessage(err)));
     const camSub = camera.error$.subscribe((err) => setConnectError(toMessage(err)));
+    const screenSub = screenshare.video.error$.subscribe((err) => {
+      if (err.name !== "NotAllowedError") {
+        console.warn("Screenshare error:", err);
+      }
+      screenshare.stopBroadcasting();
+      screenshare.disableSource();
+    });
     return () => {
       micSub.unsubscribe();
       camSub.unsubscribe();
+      screenSub.unsubscribe();
     };
-  }, [partyTracks, mic, camera]);
+  }, [partyTracks, mic, camera, screenshare]);
 
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
@@ -270,6 +278,7 @@ export function useLiveClassPresence(params: {
     mic,
     camera,
     screenshare,
+    isScreenOn,
     roster,
     myPresence,
   };

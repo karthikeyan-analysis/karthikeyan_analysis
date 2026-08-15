@@ -18,21 +18,19 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { KeyRound, Zap } from "lucide-react";
+import { KeyRound, Zap, Award, Radio } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getAttempt, getExamTest, listExamTestsForStudent } from "../../features/exams/examApi";
 import {
   canShowExamToStudentToday,
   getExamWindowStatus,
 } from "../../features/exams/examAvailability";
-import type { ExamAttempt, ExamTest } from "../../features/exams/types";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import StudentAvatar from "../../components/StudentAvatar";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
-
 import { subscribeAllActiveLiveTestSessions } from "../../features/liveTests/liveTestApi";
 import type { LiveTestSession } from "../../features/liveTests/liveTestTypes";
-import { Radio } from "lucide-react";
+import type { ExamTest, ExamAttempt } from "../../features/exams/types";
 
 export default function TestSchedule() {
   const { user } = useAuth();
@@ -331,6 +329,44 @@ export default function TestSchedule() {
     );
   };
 
+  const activeLiveTestsForStudent = useMemo(() => {
+    const studentBatchId = user?.batchId;
+
+    const liveSessionItems = activeLiveSessions
+      .filter((s) => {
+        if (s.status !== "active") return false;
+        if (!studentBatchId) return true;
+        if (s.batchId === studentBatchId) return true;
+        if (s.batchIds && Array.isArray(s.batchIds) && s.batchIds.includes(studentBatchId)) return true;
+        return false;
+      })
+      .map((s) => {
+        const fullTest = examTests.find((t) => t.id === s.testId || t.id === s.id);
+        return {
+          id: s.testId || s.id,
+          testNo: s.testTitle || fullTest?.title || "Live Test",
+          title: s.testTitle || fullTest?.title || "Live Test",
+          portion: s.subject || fullTest?.subject || "All Topics",
+          subject: s.subject || fullTest?.subject || "General",
+          startAt: s.startedAt || new Date().toISOString(),
+          endAt: new Date(Date.now() + (s.durationMinutes || 60) * 60000).toISOString(),
+          isLiveSession: true,
+          sessionId: s.id,
+        };
+      });
+
+    const activeExamItems = studentExams.todayActive.filter(
+      (t) =>
+        getExamWindowStatus(t, now) === "active" &&
+        !liveSessionItems.some((ls) => ls.id === t.id),
+    );
+
+    return [...liveSessionItems, ...activeExamItems];
+  }, [activeLiveSessions, examTests, studentExams.todayActive, user?.batchId, now]);
+
+  const [searchParams] = useSearchParams();
+  const isLiveView = searchParams.get("view") === "live";
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
@@ -345,55 +381,77 @@ export default function TestSchedule() {
           ) : null}
         </div>
       </div>
-      {/* In-app CBT exams */}
-      <div className="space-y-2">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <Zap className="w-5 h-5" />
-            Today's Active CBT Exams
-          </h2>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
-              <KeyRound className="w-3 h-3 mr-1" />
-              Passcode join
-            </Button>
-            <Badge variant="outline" className="text-xs">
-              Only today
-            </Badge>
+
+      {isLiveView ? (
+        /* LIVE TEST HUB VIEW (Only shows active live tests triggered by host) */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Award className="w-5 h-5 text-rose-600 animate-pulse" />
+              Live CBT Exam & Active Test Center
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
+                <KeyRound className="w-3 h-3 mr-1" />
+                Passcode join
+              </Button>
+            </div>
           </div>
+
+          <TestTableSection
+            title="Active Live Tests"
+            tests={activeLiveTestsForStudent}
+            icon={Zap}
+            isExam
+          />
+
+          {activeLiveTestsForStudent.length === 0 && !examLoading && (
+            <Card className="border-rose-200/80 bg-gradient-to-b from-rose-50/30 to-slate-50/50">
+              <CardContent className="pt-8 text-center pb-8">
+                <Award className="w-12 h-12 mx-auto text-rose-400 mb-3 animate-pulse" />
+                <p className="text-slate-900 font-bold text-base">No Live Test Currently Active</p>
+                <p className="text-sm text-slate-600 mt-1 max-w-md mx-auto">
+                  When your instructor starts a live test from the Live Control Center during class, it will appear here with an instant join prompt.
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
+      ) : (
+        /* TESTS & EXAMS ARCHIVE & SCHEDULE VIEW */
+        <div className="space-y-4">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-indigo-600" />
+              Tests & Exams Archive & Schedule
+            </h2>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
+                <KeyRound className="w-3 h-3 mr-1" />
+                Passcode join
+              </Button>
+            </div>
+          </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="border-slate-200">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm text-slate-600">Active</CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-bold text-slate-900">
-              {studentExams.todayActive.length}
-            </CardContent>
-          </Card>
+          <TestTableSection title="Scheduled Exams" tests={studentExams.todayActive} icon={Zap} isExam />
+
+          {studentExams.todayActive.length === 0 && !examLoading && (
+            <Card>
+              <CardContent className="pt-8 text-center pb-8">
+                <Zap className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+                <p className="text-slate-600 font-medium">No scheduled exams found</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  Exams will appear here on their scheduled date and time.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {attemptLoading && studentExams.todayActive.length > 0 && (
+            <div className="text-xs text-slate-500">Loading your attempts…</div>
+          )}
         </div>
-
-        <TestTableSection title="Available Now" tests={studentExams.todayActive} icon={Zap} isExam />
-
-        {studentExams.todayActive.length === 0 && !examLoading && (
-          <Card>
-            <CardContent className="pt-8 text-center pb-8">
-              <Zap className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-              <p className="text-slate-600 font-medium">No active tests for today</p>
-              <p className="text-sm text-slate-500 mt-1">
-                Tests will appear here only on their scheduled day and active time.
-              </p>
-            </CardContent>
-          </Card>
-        )}
-
-        {attemptLoading && studentExams.todayActive.length > 0 && (
-          <div className="text-xs text-slate-500">Loading your attempts…</div>
-        )}
-      </div>
-
-      {/* Legacy tests (external links) intentionally hidden to avoid confusion. */}
+      )}
     </div>
   );
 }

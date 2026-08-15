@@ -4,7 +4,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
-import { ArrowLeft, Shield, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
+import { ArrowLeft, Shield, AlertTriangle, RefreshCw, Loader2, Download } from "lucide-react";
 import { requestRecordingPlaybackUrl } from "../../features/liveClasses/recordingPlayback";
 import { subscribeToLiveClass } from "../../features/liveClasses/liveClassApi";
 import type { LiveClass } from "../../features/liveClasses/types";
@@ -140,8 +140,7 @@ export default function LiveClassRecording() {
                 src={playbackUrl}
                 className="h-full w-full"
                 controls
-                controlsList="nodownload noremoteplayback noplaybackrate"
-                disablePictureInPicture
+                controlsList="noremoteplayback"
                 playsInline
                 onContextMenu={(e) => e.preventDefault()}
               >
@@ -178,17 +177,46 @@ export default function LiveClassRecording() {
             ) : null}
           </div>
 
-          <div className="border-t border-amber-200 bg-amber-50 p-4">
+          <div className="border-t border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-start gap-3">
-              <Shield className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600" />
+              <Shield className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-500" />
               <div>
-                <p className="text-sm font-medium text-amber-900">Protected link</p>
-                <p className="mt-1 text-xs text-amber-800">
-                  This playback link is generated just for your account and expires automatically. Downloading,
-                  recording, or sharing this link is against the terms of use.
+                <p className="text-sm font-medium text-slate-900">Recorded Session Playback</p>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Stream securely or download the raw recording file directly to your device.
                 </p>
               </div>
             </div>
+            {playbackUrl ? (
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 font-medium self-start sm:self-auto"
+                onClick={() => {
+                  const safeName = (cls?.name || "recording").replace(/[^a-z0-9_-]/gi, "_");
+                  const filename = `${safeName}_recording.webm`;
+                  let downloadUrl = playbackUrl;
+                  if (downloadUrl.includes("firebasestorage.googleapis.com")) {
+                    const dispositionParam = `response-content-disposition=attachment%3B%20filename%3D"${encodeURIComponent(filename)}"`;
+                    if (!downloadUrl.includes("response-content-disposition")) {
+                      const sep = downloadUrl.includes("?") ? "&" : "?";
+                      downloadUrl += `${sep}${dispositionParam}`;
+                    }
+                  }
+                  const a = document.createElement("a");
+                  a.href = downloadUrl;
+                  a.download = filename;
+                  document.body.appendChild(a);
+                  a.click();
+                  setTimeout(() => {
+                    try {
+                      document.body.removeChild(a);
+                    } catch {}
+                  }, 2000);
+                }}
+              >
+                <Download className="mr-1.5 h-4 w-4" /> Download Recording
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>

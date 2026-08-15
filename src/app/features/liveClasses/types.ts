@@ -27,8 +27,9 @@ export interface LiveClass {
   liveTestId?: string;
   liveTestStartedAt?: string;
   recordingStatus?: RecordingStatus;
-  /** Cloudflare R2 object key once the recording is ready. */
+  /** Cloudflare R2 or Firebase Storage object key once the recording is ready. */
   recordingKey?: string;
+  recordingDownloadUrl?: string;
   recordingDurationSec?: number;
   recordingSizeBytes?: number;
   createdBy: string;
@@ -88,11 +89,16 @@ export interface LiveClassAttendance {
   id: string;
   studentRecordId: string;
   studentUid: string;
+  uid?: string;
+  studentId?: string;
+  email?: string;
   name: string;
   sessions: LiveClassAttendanceSession[];
   /** Set while the student currently has an open (not-yet-closed) session. */
   currentSessionJoinedAt?: string;
   totalDurationSec: number;
   lastJoinedAt?: string;
+  firstJoinedAt?: string;
   lastLeftAt?: string;
+  attended?: boolean;
 }

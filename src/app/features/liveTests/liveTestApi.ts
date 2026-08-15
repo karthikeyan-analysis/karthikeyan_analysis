@@ -89,17 +89,19 @@ export function subscribeToActiveLiveTestForTest(
 ): () => void {
   const q = query(
     collection(db, "liveTestSessions"),
-    where("testId", "==", testId),
     where("status", "==", "active"),
   );
 
   return onSnapshot(q, (snap) => {
-    if (snap.empty) {
+    const found = snap.docs.find((d) => {
+      const data = d.data();
+      return d.id === testId || data.testId === testId || data.id === testId;
+    });
+    if (found) {
+      onData({ id: found.id, ...found.data() } as LiveTestSession);
+    } else {
       onData(null);
-      return;
     }
-    const d = snap.docs[0]!;
-    onData({ id: d.id, ...d.data() } as LiveTestSession);
   });
 }
 

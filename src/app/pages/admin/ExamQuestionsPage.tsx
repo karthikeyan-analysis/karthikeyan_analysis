@@ -358,13 +358,13 @@ export default function ExamQuestionsPage() {
                       <ExamQuestionImageFrame
                         src={q.imagePreviewUrl}
                         alt={`Question ${idx + 1} preview`}
-                        questionNo={q.questionNo}
+                        questionNo={idx + 1}
                       />
                     ) : q.imageUrl ? (
                       <ExamQuestionImageFrame
                         src={q.imageUrl}
                         alt={`Question ${idx + 1}`}
-                        questionNo={q.questionNo}
+                        questionNo={idx + 1}
                       />
                     ) : (
                       <div className="text-xs text-slate-500">

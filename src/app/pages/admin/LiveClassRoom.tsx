@@ -74,6 +74,7 @@ function LiveClassRoomInner({
   const [testPickerOpen, setTestPickerOpen] = useState(false);
   const [availableTests, setAvailableTests] = useState<ExamTest[]>([]);
   const [recordingHandle, setRecordingHandle] = useState<RecordingCaptureHandle | null>(null);
+  const [notificationToast, setNotificationToast] = useState<string | null>(null);
 
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
@@ -108,9 +109,14 @@ function LiveClassRoomInner({
   const openTestPicker = async () => {
     const all = await listExamTestsForAdmin();
     const batchIds = getLiveClassBatchIds(cls);
-    setAvailableTests(
-      all.filter((t) => t.status === "published" && batchIds.some((b) => examIncludesBatch(t, b))),
-    );
+    const matching = all.filter((t) => {
+      if (t.status && t.status !== "published") return false;
+      if (!batchIds.length) return true;
+      const testBatches = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+      if (!testBatches.length) return true;
+      return batchIds.some((b) => examIncludesBatch(t, b));
+    });
+    setAvailableTests(matching.length > 0 ? matching : all.filter((t) => t.status === "published"));
     setTestPickerOpen(true);
   };
 
@@ -119,7 +125,7 @@ function LiveClassRoomInner({
       const handle = recordingHandle;
       setRecordingHandle(null);
       await updateLiveClass(classId, { recordingStatus: "uploading" });
-      handle.stop();
+      await handle.stop();
       return;
     }
     try {
@@ -134,6 +140,7 @@ function LiveClassRoomInner({
           await updateLiveClass(classId, {
             recordingStatus: "ready",
             recordingKey: result.key,
+            recordingDownloadUrl: result.downloadUrl || undefined,
             recordingDurationSec: result.durationSec,
             recordingSizeBytes: result.sizeBytes,
           });
@@ -161,10 +168,19 @@ function LiveClassRoomInner({
   const launchTest = async (testId: string) => {
     await launchLiveTest(classId, testId);
     setTestPickerOpen(false);
+    const targetTest = availableTests.find((t) => t.id === testId);
+    const testTitle = targetTest?.title ? `"${targetTest.title}"` : "Live Exam";
+    setNotificationToast(`🚀 ${testTitle} launched successfully! All students in the live class have been notified.`);
+    setTimeout(() => setNotificationToast(null), 5000);
   };
 
   const leaveRoom = async () => {
-    recordingHandle?.stop();
+    if (recordingHandle) {
+      const handle = recordingHandle;
+      setRecordingHandle(null);
+      await updateLiveClass(classId, { recordingStatus: "uploading" });
+      await handle.stop();
+    }
     // If this was the last host/co-host, put the class back to waiting so
     // students cannot join (or stay in) an empty room.
     const otherHosts = roster.filter(
@@ -182,7 +198,12 @@ function LiveClassRoomInner({
 
   const endForEveryone = async () => {
     if (!confirm("End this class for everyone? This will stop the meeting and finalize any recording.")) return;
-    recordingHandle?.stop();
+    if (recordingHandle) {
+      const handle = recordingHandle;
+      setRecordingHandle(null);
+      await updateLiveClass(classId, { recordingStatus: "uploading" });
+      await handle.stop();
+    }
     await endLiveClass(classId);
     navigate("/admin/live-classes");
   };
@@ -209,7 +230,27 @@ function LiveClassRoomInner({
     );
   }
 
-  const spotlightPresence = cls.spotlightUid ? roster.find((p) => p.id === cls.spotlightUid) : null;
+  const toggleScreenshare = () => {
+    try {
+      if (!isScreenOn) {
+        screenshare.enableSource();
+        screenshare.startBroadcasting();
+      } else {
+        screenshare.stopBroadcasting();
+        screenshare.disableSource();
+      }
+    } catch (err) {
+      console.warn("Screenshare toggle error", err);
+    }
+  };
+
+  const spotlightPresence = cls.spotlightUid
+    ? roster.find((p) => p.id === cls.spotlightUid)
+    : roster.find((p) => (p.id === uid ? isScreenOn : !!p.screenshareVideoTrack)) ||
+      roster.find((p) => p.role === "host") ||
+      roster.find((p) => p.role === "co-host") ||
+      (roster.length > 0 ? roster[0] : null);
+
   const otherRoster = spotlightPresence ? roster.filter((p) => p.id !== spotlightPresence.id) : roster;
   const isRecording = !!recordingHandle || cls.recordingStatus === "recording";
   const isUploading = cls.recordingStatus === "uploading";
@@ -298,7 +339,7 @@ function LiveClassRoomInner({
               <Button
                 size="sm"
                 variant={isScreenOn ? "default" : "outline"}
-                onClick={() => screenshare.toggleBroadcasting()}
+                onClick={() => void toggleScreenshare()}
               >
                 {isScreenOn ? <ScreenShareOff className="h-4 w-4" /> : <ScreenShare className="h-4 w-4" />}
               </Button>
@@ -330,6 +371,18 @@ function LiveClassRoomInner({
               </Button>
             </div>
           </div>
+
+          {notificationToast ? (
+            <div className="flex items-center justify-between rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-xs sm:text-sm font-bold text-emerald-900 shadow-md">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-emerald-600 animate-spin" />
+                <span>{notificationToast}</span>
+              </div>
+              <button onClick={() => setNotificationToast(null)} className="text-emerald-700 hover:text-emerald-950 font-bold text-xs">
+                ✕
+              </button>
+            </div>
+          ) : null}
 
           {spotlightPresence ? (
             <div className="space-y-2">
@@ -413,10 +466,12 @@ function LiveClassRoomInner({
                 <Button
                   size="sm"
                   variant="outline"
-                  className="text-red-600 border-red-200 hover:bg-red-50 text-xs"
+                  className="text-red-600 border-red-200 hover:bg-red-50 text-xs font-semibold"
                   onClick={async () => {
                     await stopLiveTest(classId);
                     setTestPickerOpen(false);
+                    setNotificationToast("Live Test unlinked.");
+                    setTimeout(() => setNotificationToast(null), 3000);
                   }}
                 >
                   Unlink Test
@@ -430,24 +485,39 @@ function LiveClassRoomInner({
                   No published CBT exams found matching this class batch.
                 </p>
               ) : (
-                availableTests.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between rounded-xl border border-slate-200 p-3 hover:border-amber-300 bg-white"
-                  >
-                    <div>
-                      <p className="font-bold text-slate-900">{t.title}</p>
-                      <p className="text-[11px] text-slate-500">{t.subject} · {t.durationMinutes} mins · {t.totalQuestions} Qs</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      className="bg-amber-600 hover:bg-amber-700 font-semibold text-xs"
-                      onClick={() => void launchTest(t.id)}
+                availableTests.map((t) => {
+                  const isLaunched = cls.liveTestId === t.id && (cls.liveTestStartedAt || (cls as any).liveTestActive);
+                  return (
+                    <div
+                      key={t.id}
+                      className={`flex items-center justify-between rounded-xl border p-3 bg-white transition-all ${
+                        isLaunched ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200 hover:border-amber-300"
+                      }`}
                     >
-                      Launch Now
-                    </Button>
-                  </div>
-                ))
+                      <div>
+                        <p className="font-bold text-slate-900">{t.title}</p>
+                        <p className="text-[11px] text-slate-500">{t.subject} · {t.durationMinutes} mins · {t.totalQuestions} Qs</p>
+                      </div>
+                      {isLaunched ? (
+                        <Button
+                          size="sm"
+                          disabled
+                          className="bg-emerald-600 text-white font-bold text-xs border border-emerald-500 opacity-100 cursor-default shadow-xs"
+                        >
+                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Test Launched
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="bg-amber-600 hover:bg-amber-700 font-semibold text-xs text-white shadow-xs"
+                          onClick={() => void launchTest(t.id)}
+                        >
+                          Launch Now
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

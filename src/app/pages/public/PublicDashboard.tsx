@@ -44,7 +44,7 @@ export default function PublicDashboard() {
         const all = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
         // Show tests that have a passcode (public access) or are generally open
         const visible = all.filter(
-          (t) => t.accessPasswordHash || t.visibility === "ALL" || (t as any).isPublicTest === true,
+          (t) => t.accessPasswordHash || (t.visibility as string) === "ALL" || (t as any).isPublicTest === true,
         );
         setTests(visible);
       } catch (e) {

@@ -33,13 +33,15 @@ export function isExamScheduledToday(
   );
 }
 
-/** New attempts only — in-progress students may continue until their timer ends. */
 export function canStartNewExamAttempt(
   test: Pick<ExamTest, "startAt" | "endAt" | "manuallyClosedAt" | "status">,
   nowMs = Date.now(),
+  isLiveTestActive = false,
 ): boolean {
-  if (test.status && test.status !== "published") return false;
+  if (isLiveTestActive) return true;
   if (isExamManuallyClosed(test)) return false;
+  if (test.status === "draft") return false;
+  if (test.status === "published") return true;
   return getExamWindowStatus(test, nowMs) === "active";
 }
 

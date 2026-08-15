@@ -204,8 +204,7 @@ export default function VideoPlayer() {
                 src={playbackUrl || undefined}
                 className="w-full h-full"
                 controls
-                controlsList="nodownload noremoteplayback noplaybackrate"
-                disablePictureInPicture
+                controlsList="noremoteplayback"
                 playsInline
                 preload="metadata"
                 onPlay={() => setIsPlaying(true)}

@@ -108,6 +108,7 @@ export interface ExamGuestProfile {
   name: string;
   email: string;
   createdAt: string;
+  createdAtServer?: any;
 }
 
 export interface ExamAttempt {
@@ -122,8 +123,10 @@ export interface ExamAttempt {
   testId: string;
   batchId: string;
   startedAt: string; // ISO
+  startedAtServer?: any;
   hardEndAt?: string; // ISO (immutable per-attempt end time)
   lastSavedAt: string; // ISO
+  lastSavedAtServer?: any;
   submittedAt?: string; // ISO
   status: AttemptStatus;
   answers: Record<string, number | null>; // questionId -> selectedIndex

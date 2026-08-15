@@ -210,17 +210,66 @@ export async function setSpotlight(id: string, uid: string | null): Promise<void
 }
 
 export async function launchLiveTest(id: string, examTestId: string): Promise<void> {
+  const now = new Date().toISOString();
   await updateDoc(liveClassRef(id), {
     liveTestId: examTestId,
-    liveTestStartedAt: new Date().toISOString(),
+    liveTestStartedAt: now,
+    liveTestActive: true,
   } as any);
+
+  try {
+    const testSnap = await getDoc(doc(db, "examTests", examTestId));
+    if (testSnap.exists()) {
+      const testData = testSnap.data();
+      const q = query(
+        collection(db, "liveTestSessions"),
+        where("testId", "==", examTestId),
+        where("status", "==", "active"),
+      );
+      const activeSnaps = await getDocs(q);
+      if (activeSnaps.empty) {
+        await setDoc(doc(db, "liveTestSessions", examTestId), {
+          id: examTestId,
+          testId: examTestId,
+          testTitle: testData.title || "Live Class Test",
+          subject: testData.subject || "",
+          batchId: testData.batchId || "",
+          batchIds: testData.batchIds || (testData.batchId ? [testData.batchId] : []),
+          status: "active",
+          startedAt: now,
+          startedByUid: "live_class_host",
+          adminName: "Live Class Host",
+          durationMinutes: testData.durationMinutes || 60,
+          createdAt: now,
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Could not create liveTestSession on launchLiveTest", err);
+  }
 }
 
 export async function stopLiveTest(id: string): Promise<void> {
+  const classSnap = await getDoc(liveClassRef(id));
+  const liveTestId = classSnap.exists() ? classSnap.data()?.liveTestId : null;
+
   await updateDoc(liveClassRef(id), {
     liveTestId: deleteField(),
     liveTestStartedAt: deleteField(),
+    liveTestActive: deleteField(),
   } as any);
+
+  if (liveTestId) {
+    try {
+      const sessionRef = doc(db, "liveTestSessions", liveTestId);
+      const snap = await getDoc(sessionRef);
+      if (snap.exists() && snap.data()?.status === "active") {
+        await updateDoc(sessionRef, { status: "ended", endedAt: new Date().toISOString() });
+      }
+    } catch (e) {
+      console.warn("Could not stop liveTestSession", e);
+    }
+  }
 }
 
 // ── Attendance ────────────────────────────────────────────────────────────
@@ -230,6 +279,8 @@ export async function recordAttendanceJoin(params: {
   studentRecordId: string;
   studentUid: string;
   name: string;
+  email?: string;
+  studentId?: string;
 }): Promise<void> {
   const ref = liveClassAttendanceRef(params.classId, params.studentRecordId);
   await runTransaction(db, async (tx) => {
@@ -240,17 +291,30 @@ export async function recordAttendanceJoin(params: {
         studentRecordId: params.studentRecordId,
         studentUid: params.studentUid,
         name: params.name,
+        email: params.email || "",
+        studentId: params.studentId || "",
         sessions: [],
         totalDurationSec: 0,
         currentSessionJoinedAt: now,
+        firstJoinedAt: now,
         lastJoinedAt: now,
       });
       return;
     }
-    // Reconnect while a session is already open — leave it as-is (idempotent).
     const data = snap.data() as any;
-    if (data.currentSessionJoinedAt) return;
-    tx.update(ref, { currentSessionJoinedAt: now, lastJoinedAt: now, name: params.name });
+    const updates: Record<string, any> = {
+      name: params.name || data.name,
+      lastJoinedAt: now,
+    };
+    if (!data.firstJoinedAt) updates.firstJoinedAt = now;
+    if (params.email && !data.email) updates.email = params.email;
+    if (params.studentId && !data.studentId) updates.studentId = params.studentId;
+
+    // Reconnect while a session is already open — leave currentSessionJoinedAt as-is
+    if (!data.currentSessionJoinedAt) {
+      updates.currentSessionJoinedAt = now;
+    }
+    tx.update(ref, updates);
   });
 }
 
@@ -276,9 +340,41 @@ export async function recordAttendanceLeave(params: {
   });
 }
 
+function processAttendanceRows(rows: LiveClassAttendance[]): LiveClassAttendance[] {
+  return rows.map((d) => {
+    const joined = d.firstJoinedAt || d.lastJoinedAt || d.currentSessionJoinedAt || (d.sessions && d.sessions[0]?.joinedAt);
+    return {
+      ...d,
+      firstJoinedAt: joined || d.firstJoinedAt,
+    };
+  });
+}
+
 export async function listAttendanceForAdmin(classId: string): Promise<LiveClassAttendance[]> {
   const snap = await getDocs(liveClassAttendanceCol(classId));
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as LiveClassAttendance[];
+  const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as LiveClassAttendance[];
+  
+  try {
+    const missingInfo = docs.some((d) => !d.email || !d.studentId);
+    if (missingInfo) {
+      const studentSnaps = await getDocs(collection(db, "students"));
+      const studentMap = new Map<string, any>();
+      studentSnaps.docs.forEach((sDoc) => {
+        studentMap.set(sDoc.id, sDoc.data());
+      });
+      docs.forEach((d) => {
+        const info = studentMap.get(d.studentRecordId) || studentMap.get(d.id);
+        if (info) {
+          if (!d.email && info.email) d.email = info.email;
+          if (!d.studentId && info.studentId) d.studentId = info.studentId;
+        }
+      });
+    }
+  } catch (err) {
+    console.warn("Could not enrich student attendance details", err);
+  }
+
+  return processAttendanceRows(docs);
 }
 
 export function subscribeToAttendance(
@@ -286,7 +382,8 @@ export function subscribeToAttendance(
   onChange: (rows: LiveClassAttendance[]) => void,
 ): () => void {
   return onSnapshot(liveClassAttendanceCol(classId), (snap) => {
-    onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as LiveClassAttendance[]);
+    const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as LiveClassAttendance[];
+    onChange(processAttendanceRows(docs));
   });
 }
 

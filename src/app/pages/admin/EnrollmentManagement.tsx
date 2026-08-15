@@ -50,7 +50,7 @@ import {
   EyeOff,
   FileDown,
 } from "lucide-react";
-import type { EnrollmentForm, ShareableFormLink } from "./enrollment-types";
+import type { EnrollmentForm, ShareableFormLink } from "../../features/enrollment/enrollment-types";
 import {
   getEnrollmentFormsByBatch,
   getAllEnrollmentForms,

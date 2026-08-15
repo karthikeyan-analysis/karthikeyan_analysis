@@ -7,7 +7,7 @@ import { Check, Link2 } from "lucide-react";
 import { cn } from "../ui/utils";
 
 type CopyGuestLinkButtonProps = {
-  test: Pick<ExamTest, "id" | "settings" | "accessPasswordHash">;
+  test: Pick<ExamTest, "id" | "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility">;
   variant?: "icon" | "outline";
   className?: string;
 };
