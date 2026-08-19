@@ -318,10 +318,8 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
 
           {/* MIDDLE MAIN STAGE: Big Admin or Co-Host Screen */}
           {hostPresence ? (
-            <div className="space-y-3">
-              <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-500/20 bg-slate-950 shadow-xl aspect-video flex items-center justify-center">
-                {renderTile(hostPresence, true)}
-              </div>
+            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-slate-900 shadow-xl">
+              {renderTile(hostPresence, true)}
             </div>
           ) : (
             <div className="flex h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">

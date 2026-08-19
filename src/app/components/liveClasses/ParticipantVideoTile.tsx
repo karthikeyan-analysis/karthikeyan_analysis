@@ -141,7 +141,9 @@ export default function ParticipantVideoTile({
           autoPlay
           muted={!!isLocal}
           playsInline
-          className={`h-full w-full ${isSharing ? "object-contain bg-black" : "object-cover"}`}
+          className={`h-full w-full ${
+            isSharing ? "object-contain bg-black" : "object-cover"
+          } ${isLocal && !isSharing ? "-scale-x-1" : ""}`}
         />
       ) : (
         <div className="flex h-full w-full items-center justify-center text-slate-500">

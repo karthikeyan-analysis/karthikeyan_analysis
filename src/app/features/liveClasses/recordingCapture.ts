@@ -87,31 +87,29 @@ export async function startRecordingCapture(params: {
         let downloadUrl = "";
 
         // 1. Try Cloudflare R2 presigned PUT upload
-        try {
-          const getUploadUrl = httpsCallable<{ classId: string; contentType: string }, { url: string; key: string }>(
-            functions,
-            "getRecordingUploadUrl",
-          );
-          const { data } = await getUploadUrl({ classId: params.classId, contentType: mimeType });
+        // Upload to Cloudflare R2 via presigned PUT URL
+        const getUploadUrl = httpsCallable<{ classId: string; contentType: string }, { url: string; key: string }>(
+          functions,
+          "getRecordingUploadUrl",
+        );
+        const { data } = await getUploadUrl({ classId: params.classId, contentType: mimeType });
 
-          const putRes = await fetch(data.url, {
-            method: "PUT",
-            headers: { "Content-Type": mimeType },
-            body: blob,
-          });
-          if (!putRes.ok) {
-            throw new Error(`Upload to R2 failed (status ${putRes.status})`);
-          }
-          recordingKey = data.key;
-        } catch (r2Err) {
-          console.warn("[recordingCapture] Cloudflare R2 upload failed or CORS blocked, trying Firebase Storage fallback", r2Err);
-          // 2. Fallback: Firebase Storage direct upload
-          const ext = mimeType.includes("mp4") ? "mp4" : "webm";
-          recordingKey = `liveClasses/${params.classId}/${Date.now()}.${ext}`;
-          const storageRef = ref(storage, recordingKey);
-          await uploadBytes(storageRef, blob, { contentType: mimeType });
-          downloadUrl = await getDownloadURL(storageRef);
+        // Strip any accidental CRLF (%0D%0A) linebreaks from backend secrets in URL
+        const cleanUploadUrl = (data.url || "")
+          .replace(/%0D%0A/gi, "")
+          .replace(/[\r\n]/g, "");
+
+        const putRes = await fetch(cleanUploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": mimeType },
+          body: blob,
+        });
+
+        if (!putRes.ok) {
+          throw new Error(`Upload to Cloudflare R2 failed with status ${putRes.status}`);
         }
+
+        recordingKey = data.key;
 
         const res: RecordingResult = {
           key: recordingKey,

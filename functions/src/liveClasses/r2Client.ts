@@ -7,13 +7,21 @@ export const r2AccessKeyId = defineSecret("R2_ACCESS_KEY_ID");
 export const r2SecretAccessKey = defineSecret("R2_SECRET_ACCESS_KEY");
 export const r2Bucket = defineSecret("R2_BUCKET");
 
+function getCleanSecret(secret: ReturnType<typeof defineSecret>, fallback = ""): string {
+  try {
+    const val = secret.value();
+    if (val) return val.trim().replace(/[\r\n]/g, "");
+  } catch {}
+  return fallback;
+}
+
 export function getR2Client(): S3Client {
   return new S3Client({
     region: "auto",
-    endpoint: `https://${r2AccountId.value()}.r2.cloudflarestorage.com`,
+    endpoint: `https://${getCleanSecret(r2AccountId)}.r2.cloudflarestorage.com`,
     credentials: {
-      accessKeyId: r2AccessKeyId.value(),
-      secretAccessKey: r2SecretAccessKey.value(),
+      accessKeyId: getCleanSecret(r2AccessKeyId),
+      secretAccessKey: getCleanSecret(r2SecretAccessKey),
     },
   });
 }
@@ -25,11 +33,15 @@ export function getR2Client(): S3Client {
  * limit, so no multipart upload orchestration is needed for v1.
  */
 export async function getPresignedUploadUrl(key: string, contentType: string, expiresInSeconds = 3600) {
-  const command = new PutObjectCommand({ Bucket: r2Bucket.value(), Key: key, ContentType: contentType });
+  const bucketName = getCleanSecret(r2Bucket, "kasc-live-class-recordings");
+  const cleanKey = key.trim().replace(/[\r\n]/g, "");
+  const command = new PutObjectCommand({ Bucket: bucketName, Key: cleanKey, ContentType: contentType });
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
 
 export async function getPresignedDownloadUrl(key: string, expiresInSeconds: number) {
-  const command = new GetObjectCommand({ Bucket: r2Bucket.value(), Key: key });
+  const bucketName = getCleanSecret(r2Bucket, "kasc-live-class-recordings");
+  const cleanKey = key.trim().replace(/[\r\n]/g, "");
+  const command = new GetObjectCommand({ Bucket: bucketName, Key: cleanKey });
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
