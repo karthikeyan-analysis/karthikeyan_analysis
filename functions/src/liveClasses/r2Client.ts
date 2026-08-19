@@ -23,6 +23,8 @@ export function getR2Client(): S3Client {
       accessKeyId: getCleanSecret(r2AccessKeyId),
       secretAccessKey: getCleanSecret(r2SecretAccessKey),
     },
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
 }
 
@@ -32,10 +34,10 @@ export function getR2Client(): S3Client {
  * A class-length recording comfortably fits under R2/S3's 5GB single-PUT
  * limit, so no multipart upload orchestration is needed for v1.
  */
-export async function getPresignedUploadUrl(key: string, contentType: string, expiresInSeconds = 3600) {
+export async function getPresignedUploadUrl(key: string, _contentType?: string, expiresInSeconds = 3600) {
   const bucketName = getCleanSecret(r2Bucket, "kasc-live-class-recordings");
   const cleanKey = key.trim().replace(/[\r\n]/g, "");
-  const command = new PutObjectCommand({ Bucket: bucketName, Key: cleanKey, ContentType: contentType });
+  const command = new PutObjectCommand({ Bucket: bucketName, Key: cleanKey });
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
 

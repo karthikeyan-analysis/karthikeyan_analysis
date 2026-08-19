@@ -136,14 +136,18 @@ export default function ParticipantVideoTile({
       }`}
     >
       {hasVideo ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          muted={!!isLocal}
-          playsInline
-          className={`h-full w-full ${isSharing ? "object-contain bg-black" : "object-cover"}`}
-          style={{ transform: isSharing ? "none" : "scaleX(-1)" }}
-        />
+        <div
+          className="h-full w-full overflow-hidden"
+          style={{ transform: isLocal && !isSharing ? "scaleX(-1)" : "none" }}
+        >
+          <video
+            ref={videoRef}
+            autoPlay
+            muted={!!isLocal}
+            playsInline
+            className={`h-full w-full ${isSharing ? "object-contain bg-black" : "object-cover"}`}
+          />
+        </div>
       ) : (
         <div className="flex h-full w-full items-center justify-center text-slate-500">
           <User className="h-10 w-10" />

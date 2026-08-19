@@ -159,13 +159,16 @@ function LiveClassRoomInner({
         },
         onUploaded: async (result) => {
           setRecordingHandle(null);
-          await updateLiveClass(classId, {
+          const updatePayload: Record<string, any> = {
             recordingStatus: "ready",
             recordingKey: result.key,
-            recordingDownloadUrl: result.downloadUrl || undefined,
             recordingDurationSec: result.durationSec,
             recordingSizeBytes: result.sizeBytes,
-          });
+          };
+          if (result.downloadUrl) {
+            updatePayload.recordingDownloadUrl = result.downloadUrl;
+          }
+          await updateLiveClass(classId, updatePayload);
         },
         onError: async (err) => {
           setRecordingHandle(null);
