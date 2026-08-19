@@ -94,7 +94,10 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
   const prevTestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const currentTestId = cls.liveTestId || null;
+    const currentTestId =
+      cls.liveTestId && cls.liveTestId !== "none" && (cls as any).liveTestActive === true
+        ? cls.liveTestId
+        : null;
     if (currentTestId && currentTestId !== prevTestIdRef.current) {
       playNotificationChime();
       setShowTestAlertModal(true);
@@ -107,7 +110,7 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
       }
     }
     prevTestIdRef.current = currentTestId;
-  }, [cls.liveTestId]);
+  }, [cls.liveTestId, (cls as any).liveTestActive]);
 
   useEffect(() => subscribeToOwnDoubts(classId, user!.id, setDoubts), [classId, user]);
 
@@ -211,14 +214,13 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     );
   }
 
-  const spotlightPresence = cls.spotlightUid
-    ? roster.find((p) => p.id === cls.spotlightUid)
-    : roster.find((p) => p.screenshareVideoTrack) ||
-      roster.find((p) => p.role === "host") ||
-      roster.find((p) => p.role === "co-host") ||
-      (roster.length > 0 ? roster[0] : null);
-
-  const otherRoster = spotlightPresence ? roster.filter((p) => p.id !== spotlightPresence.id) : roster;
+  const hostPresence =
+    (cls.spotlightUid ? roster.find((p) => p.id === cls.spotlightUid) : null) ||
+    roster.find((p) => p.screenshareVideoTrack && p.id !== user!.id) ||
+    roster.find((p) => p.role === "host") ||
+    roster.find((p) => p.role === "co-host") ||
+    roster.find((p) => p.id !== user!.id) ||
+    null;
 
   const renderTile = (p: LiveClassPresence, spotlighted?: boolean) => {
     const isLocal = p.id === user!.id;
@@ -282,7 +284,8 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
             </div>
           </div>
 
-          {cls.liveTestId && (cls.liveTestStartedAt || (cls as any).liveTestActive) ? (
+          {/* Test banner ONLY if host explicitly launched a test */}
+          {cls.liveTestId && cls.liveTestId !== "none" && (cls as any).liveTestActive === true ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-amber-950 shadow-md">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-600 text-white shadow">
@@ -313,60 +316,85 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
             </div>
           ) : null}
 
-          {spotlightPresence ? (
-            <div className="space-y-2">
-              {renderTile(spotlightPresence, true)}
-              {otherRoster.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                  {otherRoster.map((p) => renderTile(p))}
-                </div>
-              ) : null}
+          {/* MIDDLE MAIN STAGE: Big Admin or Co-Host Screen */}
+          {hostPresence ? (
+            <div className="space-y-3">
+              <div className="relative overflow-hidden rounded-2xl border-2 border-indigo-500/20 bg-slate-950 shadow-xl aspect-video flex items-center justify-center">
+                {renderTile(hostPresence, true)}
+              </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {roster.map((p) => renderTile(p))}
+            <div className="flex h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+              <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-pulse" />
+              <p className="font-semibold text-slate-800 text-base">Waiting for Host / Admin stream…</p>
+              <p className="text-xs text-slate-400 mt-1">The instructor's video & screen presentation will appear here in big.</p>
             </div>
           )}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-          <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-            <MessageCircleQuestion className="h-4 w-4 text-indigo-600" />
-            Ask a Doubt
-          </p>
-          <p className="mb-2 text-xs text-slate-500">Only your instructor can see your doubts.</p>
-          <div className="mb-3">
-            <textarea
-              className="min-h-[60px] w-full rounded-lg border border-slate-200 p-2 text-sm"
-              value={doubtText}
-              onChange={(e) => setDoubtText(e.target.value)}
-              placeholder="Type your doubt…"
-            />
-          </div>
-          <Button
-            size="sm"
-            className="w-full bg-indigo-600 hover:bg-indigo-700"
-            disabled={sending || !doubtText.trim()}
-            onClick={() => void submitDoubt()}
-          >
-            <Send className="mr-1.5 h-3.5 w-3.5" />
-            Send
-          </Button>
+        {/* RIGHT SIDEBAR: Ask a Doubt & Student's own video preview below it */}
+        <div className="space-y-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+            <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+              <MessageCircleQuestion className="h-4 w-4 text-indigo-600" />
+              Ask a Doubt
+            </p>
+            <p className="mb-2 text-xs text-slate-500">Only your instructor can see your doubts.</p>
+            <div className="mb-3">
+              <textarea
+                className="min-h-[60px] w-full rounded-lg border border-slate-200 p-2 text-sm"
+                value={doubtText}
+                onChange={(e) => setDoubtText(e.target.value)}
+                placeholder="Type your doubt…"
+              />
+            </div>
+            <Button
+              size="sm"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 font-semibold"
+              disabled={sending || !doubtText.trim()}
+              onClick={() => void submitDoubt()}
+            >
+              <Send className="mr-1.5 h-3.5 w-3.5" />
+              Send
+            </Button>
 
-          <div className="mt-4 max-h-[40vh] space-y-2 overflow-y-auto">
-            {doubts.map((d) => (
-              <div
-                key={d.id}
-                className={`rounded-lg border p-2 text-sm ${
-                  d.resolved ? "border-emerald-100 bg-emerald-50/60" : "border-slate-100 bg-slate-50"
-                }`}
-              >
-                <p>{d.text}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {d.resolved ? "Answered" : "Waiting for instructor"}
-                </p>
-              </div>
-            ))}
+            <div className="mt-4 max-h-[25vh] space-y-2 overflow-y-auto">
+              {doubts.map((d) => (
+                <div
+                  key={d.id}
+                  className={`rounded-lg border p-2 text-sm ${
+                    d.resolved ? "border-emerald-100 bg-emerald-50/60" : "border-slate-100 bg-slate-50"
+                  }`}
+                >
+                  <p>{d.text}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {d.resolved ? "✓ Answered by host" : "Pending review…"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* STUDENT'S OWN VIDEO PREVIEW TILE IN BOTTOM RIGHT CORNER BELOW DOUBTS */}
+          <div className="rounded-xl border border-indigo-200 bg-white p-3 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
+                Your Video Stream
+              </p>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">You</span>
+            </div>
+            <div className="overflow-hidden rounded-lg">
+              {renderTile(
+                roster.find((p) => p.id === user!.id) || {
+                  id: user!.id,
+                  name: user!.name,
+                  role: "student",
+                  mutedByHost: false,
+                  videoDisabledByHost: false,
+                },
+              )}
+            </div>
           </div>
         </div>
       </div>

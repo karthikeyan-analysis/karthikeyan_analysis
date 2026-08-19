@@ -30,41 +30,28 @@ export async function startRecordingCapture(params: {
   /** Fired once capture stops and the upload is about to begin. */
   onUploading?: () => void;
 }): Promise<RecordingCaptureHandle> {
-  const displayStream = await navigator.mediaDevices.getDisplayMedia({
-    video: { frameRate: 30 },
-    audio: true,
-  });
+  // Capture host/admin video screen and microphone audio directly (no screen share popup)
+  let stream: MediaStream;
+  let ownTracksCreated = false;
 
-  let micStream: MediaStream | null = null;
   try {
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  } catch {
-    // Continue without mic audio rather than fail the whole recording — a
-    // recording missing host narration is still better than none at all.
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+      audio: true,
+    });
+    ownTracksCreated = true;
+  } catch (videoErr) {
+    // If video capture is blocked or unavailable, fall back to audio capture
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    ownTracksCreated = true;
   }
-
-  const audioContext = new AudioContext();
-  const destination = audioContext.createMediaStreamDestination();
-
-  const displayAudioTracks = displayStream.getAudioTracks();
-  if (displayAudioTracks.length) {
-    audioContext.createMediaStreamSource(new MediaStream(displayAudioTracks)).connect(destination);
-  }
-  if (micStream) {
-    audioContext.createMediaStreamSource(micStream).connect(destination);
-  }
-
-  const combined = new MediaStream([
-    ...displayStream.getVideoTracks(),
-    ...destination.stream.getAudioTracks(),
-  ]);
 
   const mimeType =
     ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((t) =>
       MediaRecorder.isTypeSupported(t),
     ) || "video/webm";
 
-  const recorder = new MediaRecorder(combined, { mimeType });
+  const recorder = new MediaRecorder(stream, { mimeType });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data);
@@ -75,9 +62,9 @@ export async function startRecordingCapture(params: {
   recorder.start(1000);
 
   const cleanupTracks = () => {
-    displayStream.getTracks().forEach((t) => t.stop());
-    micStream?.getTracks().forEach((t) => t.stop());
-    void audioContext.close().catch(() => {});
+    if (ownTracksCreated && stream) {
+      stream.getTracks().forEach((t) => t.stop());
+    }
   };
 
   let finishedPromise: Promise<RecordingResult | null> | null = null;
@@ -160,8 +147,8 @@ export async function startRecordingCapture(params: {
     return finishedPromise;
   };
 
-  // Host clicked the browser's native "Stop sharing" instead of our button.
-  displayStream.getVideoTracks()[0]?.addEventListener("ended", () => {
+  // Handle track end event if stream ends
+  stream.getVideoTracks()[0]?.addEventListener("ended", () => {
     void finish();
   });
 

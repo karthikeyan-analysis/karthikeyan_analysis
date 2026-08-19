@@ -605,11 +605,21 @@ export default function LiveClassManagement() {
 
   const assignLiveTestToClass = async (classId: string, testId: string) => {
     try {
-      await updateLiveClass(classId, {
-        liveTestId: testId || undefined,
-        liveTestStartedAt: testId ? new Date().toISOString() : undefined,
-      });
-      alert(testId ? "Live test assigned to ongoing class!" : "Live test unlinked.");
+      if (!testId || testId === "none") {
+        await updateLiveClass(classId, {
+          liveTestId: deleteField() as any,
+          liveTestStartedAt: deleteField() as any,
+          liveTestActive: deleteField() as any,
+        });
+        alert("Live test unlinked.");
+      } else {
+        await updateLiveClass(classId, {
+          liveTestId: testId,
+          liveTestStartedAt: new Date().toISOString(),
+          liveTestActive: true,
+        });
+        alert("Live test assigned to ongoing class!");
+      }
     } catch (e) {
       console.error(e);
       alert("Failed to update live test.");
@@ -1531,23 +1541,6 @@ export default function LiveClassManagement() {
             </div>
 
             <div className="space-y-1">
-              <Label>Optional Live Exam Trigger</Label>
-              <Select value={selectedExamId} onValueChange={setSelectedExamId}>
-                <SelectTrigger className="h-8 text-xs bg-white">
-                  <SelectValue placeholder="None (Standard Live Class)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (Standard Live Class)</SelectItem>
-                  {safeExams.map((ex) => (
-                    <SelectItem key={ex.id} value={ex.id}>
-                      {ex.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1">
               <div className="flex items-center justify-between gap-2">
                 <Label>Host(s)</Label>
                 <button
@@ -1631,23 +1624,6 @@ export default function LiveClassManagement() {
                 onChange={(e) => setEditSubject(e.target.value)}
                 className="h-8 text-xs"
               />
-            </div>
-
-            <div className="space-y-1">
-              <Label>Linked Live Exam</Label>
-              <Select value={editExamId} onValueChange={setEditExamId}>
-                <SelectTrigger className="h-8 text-xs bg-white">
-                  <SelectValue placeholder="None (Standard Live Class)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None (Standard Live Class)</SelectItem>
-                  {safeExams.map((ex) => (
-                    <SelectItem key={ex.id} value={ex.id}>
-                      {ex.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-1">

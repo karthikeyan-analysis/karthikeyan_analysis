@@ -149,7 +149,7 @@ export default function LiveClasses() {
                           {liveClassStatusLabel(cls)}
                         </Badge>
                       )}
-                      {cls.liveTestId && cls.status === "active" ? (
+                      {cls.liveTestId && cls.liveTestId !== "none" && (cls.liveTestStartedAt || (cls as any).liveTestActive) && cls.status === "active" ? (
                         <Badge className="bg-amber-600 hover:bg-amber-600 font-bold">
                           <Award className="mr-1 h-3 w-3 animate-pulse" />
                           Live Exam Active
@@ -160,7 +160,7 @@ export default function LiveClasses() {
                     <p className="mt-1 text-xs text-slate-500">{cls.subject}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {cls.liveTestId && cls.status === "active" ? (
+                    {cls.liveTestId && cls.liveTestId !== "none" && (cls.liveTestStartedAt || (cls as any).liveTestActive) && cls.status === "active" ? (
                       <Button
                         size="sm"
                         className="bg-amber-600 hover:bg-amber-700 font-bold shadow-sm"
