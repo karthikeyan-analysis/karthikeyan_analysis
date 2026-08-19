@@ -34,6 +34,7 @@ import {
   Zap,
   Bell,
   Sparkles,
+  MessageSquare,
 } from "lucide-react";
 
 function playNotificationChime() {
@@ -360,14 +361,25 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
               {doubts.map((d) => (
                 <div
                   key={d.id}
-                  className={`rounded-lg border p-2 text-sm ${
-                    d.resolved ? "border-emerald-100 bg-emerald-50/60" : "border-slate-100 bg-slate-50"
+                  className={`rounded-lg border p-2.5 text-xs space-y-1.5 ${
+                    d.resolved ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-slate-50"
                   }`}
                 >
-                  <p>{d.text}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {d.resolved ? "✓ Answered by host" : "Pending review…"}
-                  </p>
+                  <p className="text-slate-900 font-medium">{d.text}</p>
+                  
+                  {d.replyText ? (
+                    <div className="mt-1.5 rounded-md border border-indigo-200 bg-white p-2 text-indigo-950 font-medium">
+                      <p className="text-[10px] font-bold text-indigo-600 flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        {d.repliedByName || "Instructor"}'s Reply:
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-800">{d.replyText}</p>
+                    </div>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {d.resolved ? "✓ Answered by instructor" : "Pending instructor review…"}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>

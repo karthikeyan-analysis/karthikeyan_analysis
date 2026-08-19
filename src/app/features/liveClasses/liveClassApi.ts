@@ -440,6 +440,26 @@ export async function resolveDoubt(classId: string, doubtId: string, resolvedBy:
   } as any);
 }
 
+export async function replyToDoubt(params: {
+  classId: string;
+  doubtId: string;
+  replyText: string;
+  repliedByUid: string;
+  repliedByName?: string;
+}): Promise<void> {
+  const replyText = params.replyText.trim();
+  if (!replyText) return;
+  await updateDoc(doc(liveClassDoubtsCol(params.classId), params.doubtId), {
+    replyText,
+    repliedBy: params.repliedByUid,
+    repliedByName: params.repliedByName || "Instructor",
+    repliedAt: new Date().toISOString(),
+    resolved: true,
+    resolvedBy: params.repliedByUid,
+    resolvedAt: new Date().toISOString(),
+  } as any);
+}
+
 // ── Presence (live roster) ──────────────────────────────────────────────────
 // Ephemeral — one doc per currently-connected participant, doc id === uid.
 // Distinct from the `attendance` subcollection above, which is the durable
