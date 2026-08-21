@@ -1,7 +1,7 @@
 {
-  "buildCommand": "cd \"student portal\" && npm install && npm run build",
+  "buildCommand": "npm --prefix \"student portal\" install && npm --prefix \"student portal\" run build",
   "outputDirectory": "student portal/dist",
-  "framework": "vite",
+  "framework": null,
   "rewrites": [
     {
       "source": "/(.*)",
