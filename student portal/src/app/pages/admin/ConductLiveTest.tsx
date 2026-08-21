@@ -957,16 +957,29 @@ export default function ConductLiveTest() {
             /* DETAILED PROCTORING ROOM VIEW FOR SELECTED SESSION */
             <div className="space-y-6">
               {/* Top Navigation & Back Button */}
-              <div className="flex items-center justify-between">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setViewingSessionMode("list")}
-                  className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
-                >
-                  <ArrowLeft className="mr-1.5 h-4 w-4 text-indigo-600" />
-                  Back to Ongoing Tests List
-                </Button>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewingSessionMode("list")}
+                    className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+                  >
+                    <ArrowLeft className="mr-1.5 h-4 w-4 text-indigo-600" />
+                    Back to Ongoing Tests List
+                  </Button>
+
+                  {hasOperatingAccess && (
+                    <Button
+                      size="sm"
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
+                      onClick={() => void handleEndSession()}
+                    >
+                      <StopCircle className="h-4 w-4" />
+                      End Live Test Session
+                    </Button>
+                  )}
+                </div>
 
                 {activeSessions.length > 1 && (
                   <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-1.5 text-xs">
