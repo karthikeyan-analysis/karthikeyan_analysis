@@ -107,7 +107,9 @@ export default function ConductLiveTest() {
   const [warningMsg, setWarningMsg] = useState("");
 
   const [launching, setLaunching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"setup" | "room" | "schedule">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "room" | "schedule">(() =>
+    user?.adminKind === "cohost" ? "room" : "setup",
+  );
 
   // Scheduled Test Form State
   const [scheduleTest, setScheduleTest] = useState<ExamTest | null>(null);
@@ -229,14 +231,15 @@ export default function ConductLiveTest() {
     return unsub;
   }, [selectedSessionId]);
 
-  // Hook into WebRTC for Admin in the active session
-  const adminUid = user?.id || "admin";
-  const adminName = user?.name || "Admin Proctor";
+  // Hook into WebRTC for Admin / Co-Host in the active session
+  const isCohost = user?.adminKind === "cohost";
+  const adminUid = user?.id || (isCohost ? "cohost" : "admin");
+  const adminName = user?.name || (isCohost ? "Co-Host Proctor" : "Admin Proctor");
   const { partyTracks, camera, mic } = useLiveTestPresence({
     sessionId: selectedSessionId || "",
     uid: adminUid,
     name: adminName,
-    role: "admin",
+    role: isCohost ? "cohost" : "admin",
   });
 
   const [isAdminMicOn, setIsAdminMicOn] = useState(true);
@@ -472,8 +475,8 @@ export default function ConductLiveTest() {
   };
 
   const studentPresenceList = useMemo(
-    () => presenceList.filter((p) => p.role === "student"),
-    [presenceList],
+    () => presenceList.filter((p) => p.role === "student" && p.uid !== adminUid && p.uid !== user?.id),
+    [presenceList, adminUid, user?.id],
   );
 
   const totalTabViolations = useMemo(
@@ -486,16 +489,18 @@ export default function ConductLiveTest() {
 
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "setup" | "room" | "schedule")} className="w-full">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl bg-slate-100 p-1">
-          <TabsTrigger value="setup" className="font-semibold text-xs sm:text-sm">
-            1. Select & Configure Test
-          </TabsTrigger>
+        <TabsList className={cn("grid w-full max-w-2xl bg-slate-100 p-1", isCohost ? "grid-cols-1" : "grid-cols-3")}>
+          {!isCohost && (
+            <TabsTrigger value="setup" className="font-semibold text-xs sm:text-sm">
+              1. Select & Configure Test
+            </TabsTrigger>
+          )}
 
           <TabsTrigger
             value="room"
             className="font-semibold relative text-xs sm:text-sm"
           >
-            2. Ongoing Live Tests
+            {isCohost ? "Live Student Proctoring Monitor" : "2. Ongoing Live Tests"}
             {activeSessions.length > 0 && (
               <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] text-white font-bold">
                 {activeSessions.length}
@@ -503,14 +508,16 @@ export default function ConductLiveTest() {
             )}
           </TabsTrigger>
 
-          <TabsTrigger value="schedule" className="font-semibold text-xs sm:text-sm">
-            3. Scheduled Tests
-            {scheduledSessions.length > 0 && (
-              <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white font-bold">
-                {scheduledSessions.length}
-              </span>
-            )}
-          </TabsTrigger>
+          {!isCohost && (
+            <TabsTrigger value="schedule" className="font-semibold text-xs sm:text-sm">
+              3. Scheduled Tests
+              {scheduledSessions.length > 0 && (
+                <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white font-bold">
+                  {scheduledSessions.length}
+                </span>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* TAB 1: SETUP & LAUNCH */}
@@ -1043,7 +1050,7 @@ export default function ConductLiveTest() {
                         <CardTitle className="text-sm font-semibold flex items-center justify-between text-slate-200">
                           <span className="flex items-center gap-2">
                             <Video className="h-4 w-4 text-emerald-400" />
-                            Admin Proctor Camera & Mic Feed
+                            {isCohost ? "Co-Host Proctor Camera & Mic Feed" : "Admin Proctor Camera & Mic Feed"}
                           </span>
                           <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
                             BROADCASTING LIVE
@@ -1074,7 +1081,7 @@ export default function ConductLiveTest() {
                           )}
                           {/* Name overlay */}
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
-                            <span className="text-xs font-medium text-white">{adminName} (Proctor)</span>
+                            <span className="text-xs font-medium text-white">{adminName} ({isCohost ? "Co-Host" : "Admin"})</span>
                           </div>
                         </div>
 
