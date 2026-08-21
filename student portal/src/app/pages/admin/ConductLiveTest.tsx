@@ -44,6 +44,7 @@ import {
   ExternalLink,
   Eye,
   FileSpreadsheet,
+  FileText,
   Globe,
   Loader2,
   Megaphone,
