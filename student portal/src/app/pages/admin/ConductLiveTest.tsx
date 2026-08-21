@@ -28,6 +28,7 @@ import {
   subscribeToLiveTestPresence,
   subscribeToLiveTestSession,
 } from "../../features/liveTests/liveTestApi";
+import { subscribeToAdmins, type AdminProfile } from "../../features/liveClasses/adminDirectory";
 import { useLiveTestPresence } from "../../features/liveTests/useLiveTestPresence";
 import type { LiveTestPresence, LiveTestSession } from "../../features/liveTests/liveTestTypes";
 import {
@@ -58,6 +59,7 @@ import {
   ShieldCheck,
   StopCircle,
   Trash2,
+  UserPlus,
   Users,
   Video,
   VideoOff,
@@ -72,6 +74,10 @@ export default function ConductLiveTest() {
   const [loadingTests, setLoadingTests] = useState(true);
   const [searchTest, setSearchTest] = useState("");
   const [selectedTest, setSelectedTest] = useState<ExamTest | null>(null);
+
+  // Co-Host & Directory profiles
+  const [adminProfiles, setAdminProfiles] = useState<AdminProfile[]>([]);
+  const [selectedCoHostId, setSelectedCoHostId] = useState<string>("none");
 
   // Configuration options
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
@@ -129,6 +135,24 @@ export default function ConductLiveTest() {
       cancelled = true;
     };
   }, []);
+
+  // Subscribe to admins/co-hosts list
+  useEffect(() => {
+    return subscribeToAdmins((profiles) => {
+      setAdminProfiles(profiles);
+    });
+  }, []);
+
+  // Compute whether currently logged in user has operating access to currentSession
+  const hasOperatingAccess = useMemo(() => {
+    if (!user) return false;
+    if (user.role === "admin" && user.adminKind !== "cohost") return true;
+    if (!currentSession) return true;
+    if (currentSession.startedByUid === user.id || currentSession.scheduledByUid === user.id) return true;
+    if (currentSession.coHostId && currentSession.coHostId === user.id) return true;
+    if (currentSession.coHostEmail && user.email && currentSession.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
+    return false;
+  }, [user, currentSession]);
 
   // Subscribe to active live test sessions
   useEffect(() => {
@@ -271,7 +295,7 @@ export default function ConductLiveTest() {
 
   const handleSelectTest = (test: ExamTest) => {
     setSelectedTest(test);
-    const ids = test.batchIds?.length ? test.batchIds : t.batchId ? [t.batchId] : [];
+    const ids = test.batchIds?.length ? test.batchIds : test.batchId ? [test.batchId] : [];
     setSelectedBatchIds(ids);
     setCustomDurationMinutes(test.durationMinutes);
   };
@@ -291,6 +315,8 @@ export default function ConductLiveTest() {
           ? customDurationMinutes
           : selectedTest.durationMinutes;
 
+      const coHostProfile = adminProfiles.find((p) => p.uid === selectedCoHostId);
+
       const newSessionId = await createLiveTestSession({
         testId: selectedTest.id,
         testTitle: selectedTest.title,
@@ -300,6 +326,9 @@ export default function ConductLiveTest() {
         durationMinutes: duration,
         adminUid,
         adminName,
+        coHostId: coHostProfile ? coHostProfile.uid : undefined,
+        coHostEmail: coHostProfile ? coHostProfile.email : undefined,
+        coHostName: coHostProfile ? coHostProfile.name : undefined,
         proctoringSettings: {
           enableStudentCamera,
           enableAdminVideo,
@@ -336,6 +365,8 @@ export default function ConductLiveTest() {
 
     setScheduling(true);
     try {
+      const coHostProfile = adminProfiles.find((p) => p.uid === selectedCoHostId);
+
       await scheduleLiveTestSession({
         testId: scheduleTest.id,
         testTitle: scheduleTest.title,
@@ -346,6 +377,9 @@ export default function ConductLiveTest() {
         scheduledEndTime: new Date(scheduleEndTime).toISOString(),
         adminUid,
         adminName,
+        coHostId: coHostProfile ? coHostProfile.uid : undefined,
+        coHostEmail: coHostProfile ? coHostProfile.email : undefined,
+        coHostName: coHostProfile ? coHostProfile.name : undefined,
         proctoringSettings: {
           enableStudentCamera,
           enableAdminVideo,
@@ -445,38 +479,7 @@ export default function ConductLiveTest() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Top Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Radio className="h-6 w-6 text-emerald-400 animate-pulse" />
-            <h1 className="text-2xl font-bold tracking-tight">Live Test Control Center</h1>
-          </div>
-          <p className="text-sm text-slate-300">
-            Conduct live exams with multi-student camera proctoring, broadcast controls, and real-time monitoring.
-          </p>
-        </div>
 
-        {activeSessions.length > 0 ? (
-          <div className="flex items-center gap-3">
-            <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 px-3 py-1 text-xs font-semibold">
-              <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-              {activeSessions.length} Active Session{activeSessions.length > 1 ? "s" : ""}
-            </Badge>
-            {selectedSessionId && viewingSessionMode === "detail" && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="bg-rose-600 hover:bg-rose-700 shadow-md"
-                onClick={() => void handleEndSession()}
-              >
-                <StopCircle className="mr-1.5 h-4 w-4" />
-                End Session
-              </Button>
-            )}
-          </div>
-        ) : null}
-      </div>
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "setup" | "room" | "schedule")} className="w-full">
         <TabsList className="grid w-full grid-cols-3 max-w-2xl bg-slate-100 p-1">
@@ -720,6 +723,29 @@ export default function ConductLiveTest() {
                           );
                         })}
                       </div>
+                    </div>
+
+                    {/* Co-Host Assignment */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <Label className="text-xs font-semibold text-slate-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <UserPlus className="h-4 w-4 text-indigo-600" />
+                          Assign Co-Host (Optional)
+                        </span>
+                        <span className="text-[11px] font-normal text-slate-500">Operating access granted to Host & Selected Co-Host</span>
+                      </Label>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                        value={selectedCoHostId}
+                        onChange={(e) => setSelectedCoHostId(e.target.value)}
+                      >
+                        <option value="none">-- No Co-Host (Host Only) --</option>
+                        {adminProfiles.map((a) => (
+                          <option key={a.uid} value={a.uid}>
+                            {a.name} ({a.kind === "cohost" ? "Co-Host" : "Admin"} • {a.email})
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* Proctoring Settings */}
@@ -1204,156 +1230,354 @@ export default function ConductLiveTest() {
         {/* TAB 3: SCHEDULED TESTS */}
         <TabsContent value="schedule" className="mt-6 space-y-6">
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-            {/* Form: Schedule a Live Test */}
-            <Card className="lg:col-span-5 border-slate-200 shadow-md">
-              <CardHeader className="border-b border-slate-100 pb-3">
-                <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <CalendarClock className="h-5 w-5 text-indigo-600" />
-                  Schedule a Live Test
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-5 p-5">
-                {/* Test Picker */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">1. Select Test</Label>
-                  <select
-                    className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-                    value={scheduleTest?.id || ""}
-                    onChange={(e) => {
-                      const t = tests.find((x) => x.id === e.target.value);
-                      setScheduleTest(t || null);
-                      if (t) {
-                        const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
-                        setScheduleBatchIds(bIds);
-                      }
-                    }}
-                  >
-                    <option value="">-- Choose a Premade Test --</option>
-                    {tests.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.title} ({t.durationMinutes} mins • {t.totalQuestions} Qs)
-                      </option>
-                    ))}
-                  </select>
+            {/* Left: Premade Tests Picker for Scheduling */}
+            <Card className="lg:col-span-6 border-slate-200 shadow-md flex flex-col">
+              <div className="p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-base font-semibold text-slate-900">
+                    <FileSpreadsheet className="h-5 w-5 text-indigo-600" />
+                    Select Premade Test to Schedule
+                  </span>
+                  <Badge variant="outline" className="text-slate-700 bg-slate-50 font-bold px-2.5 py-0.5">
+                    {filteredTests.length} Tests Available
+                  </Badge>
                 </div>
 
-                {/* Target Batches */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">2. Target Batches</Label>
-                  <div className="flex flex-wrap gap-1.5">
+                {/* BATCH SELECTION TABS */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                    <span>Select Batch Filter</span>
+                    <span className="text-[11px] font-normal text-slate-400">
+                      {selectedBatchTab === "all" ? "Showing all batches" : "Filtered by batch"}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBatchTab("all")}
+                      className={cn(
+                        "rounded-lg px-3 py-1 text-xs font-semibold transition-all duration-150 flex items-center gap-1",
+                        selectedBatchTab === "all"
+                          ? "bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/20"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/80",
+                      )}
+                    >
+                      <span>All Batches</span>
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.2 text-[10px]",
+                          selectedBatchTab === "all" ? "bg-slate-800 text-slate-200" : "bg-slate-200 text-slate-700",
+                        )}
+                      >
+                        {tests.length}
+                      </span>
+                    </button>
+
                     {batches.map((b) => {
-                      const checked = scheduleBatchIds.includes(b.id);
+                      const count = tests.filter((t) => {
+                        const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+                        return bIds.includes(b.id);
+                      }).length;
+
                       return (
                         <button
                           key={b.id}
                           type="button"
-                          onClick={() => {
-                            setScheduleBatchIds((prev) =>
-                              prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id],
-                            );
-                          }}
+                          onClick={() => setSelectedBatchTab(b.id)}
                           className={cn(
-                            "rounded-md border px-2.5 py-1 text-xs font-medium transition-all",
-                            checked
-                              ? "border-indigo-600 bg-indigo-600 text-white shadow-xs"
-                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                            "rounded-lg px-3 py-1 text-xs font-semibold transition-all duration-150 flex items-center gap-1",
+                            selectedBatchTab === b.id
+                              ? "bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600/20"
+                              : "bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/80",
                           )}
                         >
-                          {b.name}
+                          <span>{b.name}</span>
+                          <span
+                            className={cn(
+                              "rounded-md px-1.5 py-0.2 text-[10px]",
+                              selectedBatchTab === b.id ? "bg-indigo-700 text-white" : "bg-slate-200 text-slate-700",
+                            )}
+                          >
+                            {count}
+                          </span>
                         </button>
                       );
                     })}
                   </div>
                 </div>
 
-                {/* Schedule Start Time */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">3. Scheduled Start Date & Time</Label>
+                {/* SEARCH INPUT */}
+                <div className="relative pt-0.5">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                   <Input
-                    type="datetime-local"
-                    value={scheduleStartTime}
-                    onChange={(e) => setScheduleStartTime(e.target.value)}
-                    className="text-xs"
+                    placeholder="Search test by title or keyword..."
+                    value={searchTest}
+                    onChange={(e) => setSearchTest(e.target.value)}
+                    className="pl-9 text-sm bg-slate-50/50 border-slate-200 h-9"
                   />
-                </div>
-
-                {/* Schedule End Time */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-semibold text-slate-700">4. Scheduled End Date & Time</Label>
-                  <Input
-                    type="datetime-local"
-                    value={scheduleEndTime}
-                    onChange={(e) => setScheduleEndTime(e.target.value)}
-                    className="text-xs"
-                  />
-                </div>
-
-                <Button
-                  onClick={() => void handleCreateSchedule()}
-                  disabled={scheduling || !scheduleTest || !scheduleStartTime || !scheduleEndTime}
-                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-10 text-xs shadow-md"
-                >
-                  {scheduling ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Saving Schedule...
-                    </>
-                  ) : (
-                    <>
-                      <Calendar className="mr-2 h-4 w-4" />
-                      Save Test Schedule
-                    </>
+                  {searchTest && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTest("")}
+                      className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      ✕
+                    </button>
                   )}
-                </Button>
-              </CardContent>
+                </div>
+              </div>
+
+              <div className="px-4 pb-4 pt-0 flex-1">
+                {loadingTests ? (
+                  <div className="flex h-48 items-center justify-center text-slate-500">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                    Loading published tests...
+                  </div>
+                ) : filteredTests.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-slate-500">
+                    No published tests found matching your selected batch or search query.
+                  </p>
+                ) : (
+                  <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
+                    {filteredTests.map((t) => {
+                      const isSelected = scheduleTest?.id === t.id;
+                      const testBatches = formatExamBatchLabel(t, batches);
+                      return (
+                        <div
+                          key={t.id}
+                          onClick={() => {
+                            setScheduleTest(t);
+                            const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+                            setScheduleBatchIds(bIds);
+                          }}
+                          className={cn(
+                            "cursor-pointer rounded-xl border p-4 transition-all duration-200",
+                            isSelected
+                              ? "border-indigo-600 bg-indigo-50/60 ring-2 ring-indigo-500/20 shadow-sm"
+                              : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/80",
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h4 className="font-semibold text-slate-900">{t.title}</h4>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700 font-medium">
+                                  {t.subject || "General"}
+                                </Badge>
+                                <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 font-medium">
+                                  {testBatches}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-slate-500 mt-2">
+                                <span className="flex items-center gap-1 font-medium">
+                                  <Clock className="h-3.5 w-3.5 text-slate-400" />
+                                  {t.durationMinutes} mins
+                                </span>
+                                <span className="flex items-center gap-1 font-medium">
+                                  <FileText className="h-3.5 w-3.5 text-slate-400" />
+                                  {t.totalQuestions} Questions
+                                </span>
+                                {t.totalMarks ? (
+                                  <span className="flex items-center gap-1 font-bold text-indigo-700">
+                                    {t.totalMarks} Marks
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div
+                              className={cn(
+                                "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-all",
+                                isSelected
+                                  ? "border-indigo-600 bg-indigo-600 text-white"
+                                  : "border-slate-300 bg-white",
+                              )}
+                            >
+                              {isSelected && <CheckCircle2 className="h-4 w-4" />}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </Card>
 
-            {/* List: Scheduled Tests */}
-            <Card className="lg:col-span-7 border-slate-200 shadow-md">
+            {/* Right: Configure Scheduled Live Test Session */}
+            <Card className="lg:col-span-6 border-slate-200 shadow-md">
               <CardHeader className="border-b border-slate-100 pb-3">
                 <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <Calendar className="h-5 w-5 text-indigo-600" />
-                  Scheduled Tests ({scheduledSessions.length})
+                  <CalendarClock className="h-5 w-5 text-indigo-600" />
+                  Configure & Save Test Schedule
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
-                {scheduledSessions.length === 0 ? (
-                  <div className="flex h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-slate-500">
-                    <CalendarClock className="h-10 w-10 text-slate-300 mb-2" />
-                    <p className="font-semibold text-slate-700">No Scheduled Tests</p>
+              <CardContent className="space-y-5 p-5">
+                {!scheduleTest ? (
+                  <div className="flex h-64 flex-col items-center justify-center text-center text-slate-500">
+                    <FileSpreadsheet className="h-10 w-10 text-slate-300 mb-2" />
+                    <p className="font-semibold text-slate-700">No Test Selected</p>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      Use the form on the left to schedule tests ahead of time. They will automatically start and end at the configured times.
+                      Please select a premade test from the list on the left to configure start/end times and schedule.
                     </p>
                   </div>
                 ) : (
-                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-                    {scheduledSessions.map((s) => {
-                      const testBatches = s.batchIds?.length
-                        ? batches
-                            .filter((b) => s.batchIds!.includes(b.id))
-                            .map((b) => b.name)
-                            .join(", ")
-                        : "All Batches";
+                  <>
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+                      <div className="flex items-center justify-between">
+                        <Badge className="bg-indigo-600 text-white text-[10px] font-bold">SELECTED FOR SCHEDULE</Badge>
+                        <Badge variant="outline" className="text-indigo-700 border-indigo-300 text-xs">
+                          {scheduleTest.durationMinutes} mins
+                        </Badge>
+                      </div>
+                      <h3 className="text-base font-bold text-slate-900 mt-2">{scheduleTest.title}</h3>
+                      <p className="text-xs text-slate-600 mt-0.5">{scheduleTest.subject} • {scheduleTest.totalQuestions} Questions</p>
+                    </div>
 
-                      const startFormatted = s.scheduledStartTime
-                        ? new Date(s.scheduledStartTime).toLocaleString([], {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })
-                        : "Not set";
+                    {/* Target Batches */}
+                    <div className="space-y-2">
+                      <Label className="text-xs font-semibold text-slate-800">Target Batches</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {batches.map((b) => {
+                          const checked = scheduleBatchIds.includes(b.id);
+                          return (
+                            <button
+                              key={b.id}
+                              type="button"
+                              onClick={() => {
+                                setScheduleBatchIds((prev) =>
+                                  prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id],
+                                );
+                              }}
+                              className={cn(
+                                "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                                checked
+                                  ? "border-indigo-600 bg-indigo-600 text-white shadow-xs"
+                                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                              )}
+                            >
+                              {b.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                      const endFormatted = s.scheduledEndTime
-                        ? new Date(s.scheduledEndTime).toLocaleString([], {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })
-                        : "Not set";
+                    {/* Schedule Start Time */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-700">Scheduled Start Date & Time</Label>
+                      <Input
+                        type="datetime-local"
+                        value={scheduleStartTime}
+                        onChange={(e) => setScheduleStartTime(e.target.value)}
+                        className="text-xs"
+                      />
+                    </div>
 
-                      return (
-                        <div
-                          key={s.id}
-                          className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-indigo-300 transition-all space-y-3"
-                        >
+                    {/* Schedule End Time */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-slate-700">Scheduled End Date & Time</Label>
+                      <Input
+                        type="datetime-local"
+                        value={scheduleEndTime}
+                        onChange={(e) => setScheduleEndTime(e.target.value)}
+                        className="text-xs"
+                      />
+                    </div>
+
+                    {/* Co-Host Assignment */}
+                    <div className="space-y-2 pt-2 border-t border-slate-100">
+                      <Label className="text-xs font-semibold text-slate-800 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <UserPlus className="h-4 w-4 text-indigo-600" />
+                          Assign Co-Host (Optional)
+                        </span>
+                      </Label>
+                      <select
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                        value={selectedCoHostId}
+                        onChange={(e) => setSelectedCoHostId(e.target.value)}
+                      >
+                        <option value="none">-- No Co-Host (Host Only) --</option>
+                        {adminProfiles.map((a) => (
+                          <option key={a.uid} value={a.uid}>
+                            {a.name} ({a.kind === "cohost" ? "Co-Host" : "Admin"} • {a.email})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <Button
+                      onClick={() => void handleCreateSchedule()}
+                      disabled={scheduling || !scheduleStartTime || !scheduleEndTime}
+                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-10 text-xs shadow-md mt-4"
+                    >
+                      {scheduling ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Saving Schedule...
+                        </>
+                      ) : (
+                        <>
+                          <Calendar className="mr-2 h-4 w-4" />
+                          Save Test Schedule
+                        </>
+                      )}
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* List: Scheduled Tests */}
+          <Card className="border-slate-200 shadow-md">
+            <CardHeader className="border-b border-slate-100 pb-3">
+              <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-indigo-600" />
+                Scheduled Tests Roster ({scheduledSessions.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4">
+              {scheduledSessions.length === 0 ? (
+                <div className="flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-slate-500">
+                  <CalendarClock className="h-8 w-8 text-slate-300 mb-1.5" />
+                  <p className="font-semibold text-slate-700">No Scheduled Tests</p>
+                  <p className="text-xs text-slate-400 mt-0.5 max-w-xs">
+                    Select a premade test above and configure start/end times to create automated schedules.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {scheduledSessions.map((s) => {
+                    const testBatches = s.batchIds?.length
+                      ? batches
+                          .filter((b) => s.batchIds!.includes(b.id))
+                          .map((b) => b.name)
+                          .join(", ")
+                      : "All Batches";
+
+                    const startFormatted = s.scheduledStartTime
+                      ? new Date(s.scheduledStartTime).toLocaleString([], {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
+                      : "Not set";
+
+                    const endFormatted = s.scheduledEndTime
+                      ? new Date(s.scheduledEndTime).toLocaleString([], {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
+                      : "Not set";
+
+                    return (
+                      <div
+                        key={s.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-indigo-300 transition-all space-y-3 flex flex-col justify-between"
+                      >
+                        <div className="space-y-2">
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-semibold mb-1">
@@ -1361,6 +1585,11 @@ export default function ConductLiveTest() {
                               </Badge>
                               <h4 className="font-bold text-slate-900 text-sm">{s.testTitle}</h4>
                               <p className="text-xs text-slate-500">{s.subject} • {testBatches}</p>
+                              {s.coHostName && (
+                                <p className="text-[11px] text-indigo-600 font-medium mt-1">
+                                  Co-Host: {s.coHostName}
+                                </p>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-1">
@@ -1396,13 +1625,13 @@ export default function ConductLiveTest() {
                             </div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

@@ -31,6 +31,9 @@ export interface LiveTestSession {
   scheduledEndTime?: string;
   scheduledByUid?: string;
   scheduledByName?: string;
+  coHostId?: string;
+  coHostEmail?: string;
+  coHostName?: string;
 }
 
 export interface LiveTestPresence {

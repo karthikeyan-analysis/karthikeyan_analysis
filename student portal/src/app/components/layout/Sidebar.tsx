@@ -135,11 +135,6 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           label: "Live Test Integration",
         },
         {
-          to: "/admin/live-classes?tab=settings",
-          icon: Settings2,
-          label: "Settings",
-        },
-        {
           to: "/admin/co-hosts",
           icon: UserPlus,
           label: "Co-Host Management",

@@ -22,6 +22,9 @@ export async function createLiveTestSession(params: {
   durationMinutes: number;
   adminUid: string;
   adminName: string;
+  coHostId?: string;
+  coHostEmail?: string;
+  coHostName?: string;
   proctoringSettings?: Partial<ProctoringSettings>;
 }): Promise<string> {
   const sessionId = doc(collection(db, "liveTestSessions")).id;
@@ -38,6 +41,9 @@ export async function createLiveTestSession(params: {
     startedAt: now,
     startedByUid: params.adminUid,
     adminName: params.adminName,
+    coHostId: params.coHostId,
+    coHostEmail: params.coHostEmail,
+    coHostName: params.coHostName,
     durationMinutes: params.durationMinutes,
     proctoringSettings: {
       enableStudentCamera: true,
@@ -146,6 +152,9 @@ export async function scheduleLiveTestSession(params: {
   scheduledEndTime: string;
   adminUid: string;
   adminName: string;
+  coHostId?: string;
+  coHostEmail?: string;
+  coHostName?: string;
   proctoringSettings?: Partial<ProctoringSettings>;
 }): Promise<string> {
   const sessionId = doc(collection(db, "liveTestSessions")).id;
@@ -164,6 +173,9 @@ export async function scheduleLiveTestSession(params: {
     scheduledByUid: params.adminUid,
     scheduledByName: params.adminName,
     adminName: params.adminName,
+    coHostId: params.coHostId,
+    coHostEmail: params.coHostEmail,
+    coHostName: params.coHostName,
     durationMinutes: params.durationMinutes,
     proctoringSettings: {
       enableStudentCamera: true,
