@@ -82,6 +82,8 @@ export default function ConductLiveTest() {
 
   // Configuration options
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([]);
+  const [showBatchToggleTab1, setShowBatchToggleTab1] = useState(false);
+  const [showBatchToggleTab3, setShowBatchToggleTab3] = useState(false);
   const [enableStudentCamera, setEnableStudentCamera] = useState(true);
   const [enableAdminVideo, setEnableAdminVideo] = useState(true);
   const [maxTabSwitchWarnings, setMaxTabSwitchWarnings] = useState(3);
@@ -703,27 +705,55 @@ export default function ConductLiveTest() {
 
                     {/* Batch Selection */}
                     <div className="space-y-2">
-                      <Label className="text-sm font-semibold text-slate-800">Target Batches</Label>
-                      <div className="flex flex-wrap gap-2 pt-1">
-                        {batches.map((b) => {
-                          const checked = selectedBatchIds.includes(b.id);
-                          return (
-                            <button
-                              key={b.id}
-                              type="button"
-                              onClick={() => toggleBatch(b.id)}
-                              className={cn(
-                                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-                                checked
-                                  ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
-                                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
-                              )}
-                            >
-                              {b.name}
-                            </button>
-                          );
-                        })}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-semibold text-slate-800">
+                          Target Batches ({selectedBatchIds.length})
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => setShowBatchToggleTab1(!showBatchToggleTab1)}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                        >
+                          {showBatchToggleTab1 ? "Done Editing" : "Edit Batches"}
+                        </button>
                       </div>
+
+                      {!showBatchToggleTab1 ? (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {selectedBatchIds.length === 0 ? (
+                            <span className="text-xs text-slate-400 font-medium italic">No batches selected</span>
+                          ) : (
+                            batches
+                              .filter((b) => selectedBatchIds.includes(b.id))
+                              .map((b) => (
+                                <Badge key={b.id} className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5">
+                                  {b.name}
+                                </Badge>
+                              ))
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {batches.map((b) => {
+                            const checked = selectedBatchIds.includes(b.id);
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => toggleBatch(b.id)}
+                                className={cn(
+                                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                                  checked
+                                    ? "border-indigo-600 bg-indigo-600 text-white shadow-sm"
+                                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                                )}
+                              >
+                                {b.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Co-Host Assignment */}
@@ -1438,31 +1468,59 @@ export default function ConductLiveTest() {
 
                     {/* Target Batches */}
                     <div className="space-y-2">
-                      <Label className="text-xs font-semibold text-slate-800">Target Batches</Label>
-                      <div className="flex flex-wrap gap-1.5">
-                        {batches.map((b) => {
-                          const checked = scheduleBatchIds.includes(b.id);
-                          return (
-                            <button
-                              key={b.id}
-                              type="button"
-                              onClick={() => {
-                                setScheduleBatchIds((prev) =>
-                                  prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id],
-                                );
-                              }}
-                              className={cn(
-                                "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
-                                checked
-                                  ? "border-indigo-600 bg-indigo-600 text-white shadow-xs"
-                                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
-                              )}
-                            >
-                              {b.name}
-                            </button>
-                          );
-                        })}
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold text-slate-800">
+                          Target Batches ({scheduleBatchIds.length})
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => setShowBatchToggleTab3(!showBatchToggleTab3)}
+                          className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                        >
+                          {showBatchToggleTab3 ? "Done Editing" : "Edit Batches"}
+                        </button>
                       </div>
+
+                      {!showBatchToggleTab3 ? (
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {scheduleBatchIds.length === 0 ? (
+                            <span className="text-xs text-slate-400 font-medium italic">No batches selected</span>
+                          ) : (
+                            batches
+                              .filter((b) => scheduleBatchIds.includes(b.id))
+                              .map((b) => (
+                                <Badge key={b.id} className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5">
+                                  {b.name}
+                                </Badge>
+                              ))
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {batches.map((b) => {
+                            const checked = scheduleBatchIds.includes(b.id);
+                            return (
+                              <button
+                                key={b.id}
+                                type="button"
+                                onClick={() => {
+                                  setScheduleBatchIds((prev) =>
+                                    prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id],
+                                  );
+                                }}
+                                className={cn(
+                                  "rounded-lg border px-3 py-1.5 text-xs font-medium transition-all",
+                                  checked
+                                    ? "border-indigo-600 bg-indigo-600 text-white shadow-xs"
+                                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                                )}
+                              >
+                                {b.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
 
                     {/* Schedule Start Time */}
