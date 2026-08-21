@@ -31,6 +31,7 @@ import {
   subscribeToTest,
 } from "../../features/exams/examApi";
 import StudentPhotoImage from "../../components/StudentPhotoImage";
+import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
 import { examIncludesBatch, formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import { useData } from "../../context/DataContext";
@@ -194,7 +195,7 @@ export default function TakeExam({
     [answers],
   );
 
-  const { roster, myPresence, cameraStatus } = useLiveTestPresence({
+  const { partyTracks, roster, myPresence, cameraStatus, camera } = useLiveTestPresence({
     sessionId: liveSession?.id || "",
     uid: user?.id || "",
     name: user?.name || "Student",
@@ -204,6 +205,45 @@ export default function TakeExam({
     totalQuestions: questions.length,
     isSubmitted: attemptStatus === "submitted",
   });
+
+  const studentCamVideoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const sub = camera.broadcastTrack$.subscribe((track) => {
+      const el = studentCamVideoRef.current;
+      if (!el) return;
+      if (track) {
+        const ms = new MediaStream();
+        ms.addTrack(track);
+        el.srcObject = ms;
+      } else {
+        el.srcObject = null;
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [camera.broadcastTrack$]);
+
+  const proctorPresence = useMemo(() => {
+    return (
+      roster.find((p) => p.role === "admin" || p.uid === liveSession?.startedByUid) ||
+      (liveSession
+        ? {
+            id: liveSession.startedByUid || "proctor",
+            uid: liveSession.startedByUid || "proctor",
+            name: liveSession.adminName || "Proctor / Instructor",
+            role: "admin" as const,
+            sessionId: liveSession.id,
+            cameraStatus: "active" as const,
+            tabSwitchCount: 0,
+            isTabActive: true,
+            currentQuestionIndex: 0,
+            totalAnswered: 0,
+            totalQuestions: 0,
+            isSubmitted: false,
+            updatedAt: new Date().toISOString(),
+          }
+        : null)
+    );
+  }, [roster, liveSession]);
 
   // Tab Switch / Focus Loss Proctoring Detector
   useEffect(() => {
@@ -1388,8 +1428,14 @@ export default function TakeExam({
                   </Badge>
                 </div>
                 <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
-                  <div className="text-center p-2">
-                    <Camera className="h-6 w-6 text-emerald-400 mx-auto mb-1 animate-pulse" />
+                  <video
+                    ref={studentCamVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="h-full w-full object-cover"
+                  />
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-center">
                     <p className="text-[11px] font-semibold text-slate-200">{user?.name || "Student"}</p>
                     <p className="text-[9px] text-slate-400">Webcam Stream Monitored Live</p>
                   </div>
@@ -1416,13 +1462,21 @@ export default function TakeExam({
 
                 {showAdminStream && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-indigo-950/60 border border-indigo-900/50 flex items-center justify-center">
-                    <div className="text-center p-2">
-                      <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1" />
-                      <p className="text-[11px] font-semibold text-indigo-200">
-                        {liveSession.adminName || "Proctor / Instructor"}
-                      </p>
-                      <p className="text-[9px] text-indigo-300/80">Live Video Broadcast Active</p>
-                    </div>
+                    {partyTracks && proctorPresence ? (
+                      <ParticipantVideoTile
+                        presence={proctorPresence}
+                        partyTracks={partyTracks}
+                        isLocal={false}
+                      />
+                    ) : (
+                      <div className="text-center p-2">
+                        <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1 animate-pulse" />
+                        <p className="text-[11px] font-semibold text-indigo-200">
+                          {liveSession.adminName || proctorPresence?.name || "Proctor / Instructor"}
+                        </p>
+                        <p className="text-[9px] text-indigo-300/80">Live Video Broadcast Active</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -1,6 +1,6 @@
 import type { PublishedTrack } from "../liveClasses/types";
 
-export type LiveTestSessionStatus = "active" | "ended";
+export type LiveTestSessionStatus = "scheduled" | "active" | "ended";
 
 export interface ProctoringSettings {
   enableStudentCamera: boolean;
@@ -18,15 +18,19 @@ export interface LiveTestSession {
   batchId?: string;
   batchIds?: string[];
   status: LiveTestSessionStatus;
-  startedAt: string; // ISO String
-  startedByUid: string;
-  adminName: string;
+  startedAt?: string; // ISO String
+  startedByUid?: string;
+  adminName?: string;
   durationMinutes: number;
   proctoringSettings: ProctoringSettings;
   announcement?: string;
   announcementAt?: string;
   createdAt: string;
   endedAt?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  scheduledByUid?: string;
+  scheduledByName?: string;
 }
 
 export interface LiveTestPresence {

@@ -9,35 +9,33 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../../components/ui/table";
 import { cn } from "../../components/ui/utils";
 import StudentAvatar from "../../components/StudentAvatar";
 import { listExamTestsForAdmin } from "../../features/exams/examApi";
 import type { ExamTest } from "../../features/exams/types";
-import { examIncludesBatch, formatExamBatchLabel } from "../../features/exams/examBatchUtils";
+import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import {
   createLiveTestSession,
+  deleteLiveTestSession,
   endLiveTestSession,
   forceSubmitStudentAttempt,
+  scheduleLiveTestSession,
   sendLiveTestAnnouncement,
   sendStudentWarningMessage,
+  startScheduledTestNow,
   subscribeAllActiveLiveTestSessions,
+  subscribeAllScheduledLiveTestSessions,
   subscribeToLiveTestPresence,
   subscribeToLiveTestSession,
 } from "../../features/liveTests/liveTestApi";
 import { useLiveTestPresence } from "../../features/liveTests/useLiveTestPresence";
 import type { LiveTestPresence, LiveTestSession } from "../../features/liveTests/liveTestTypes";
-import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
+  Calendar,
+  CalendarClock,
   Camera,
   CameraOff,
   CheckCircle2,
@@ -51,6 +49,7 @@ import {
   Mic,
   MicOff,
   Play,
+  PlayCircle,
   Radio,
   RefreshCw,
   Search,
@@ -58,6 +57,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   StopCircle,
+  Trash2,
   Users,
   Video,
   VideoOff,
@@ -65,7 +65,7 @@ import {
 
 export default function ConductLiveTest() {
   const { user } = useAuth();
-  const { batches, students } = useData();
+  const { batches } = useData();
   const navigate = useNavigate();
 
   const [tests, setTests] = useState<ExamTest[]>([]);
@@ -81,8 +81,9 @@ export default function ConductLiveTest() {
   const [autoSubmitOnViolationLimit, setAutoSubmitOnViolationLimit] = useState(false);
   const [customDurationMinutes, setCustomDurationMinutes] = useState<number | "">("");
 
-  // Active Sessions State
+  // Active & Scheduled Sessions State
   const [activeSessions, setActiveSessions] = useState<LiveTestSession[]>([]);
+  const [scheduledSessions, setScheduledSessions] = useState<LiveTestSession[]>([]);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [currentSession, setCurrentSession] = useState<LiveTestSession | null>(null);
   const [presenceList, setPresenceList] = useState<LiveTestPresence[]>([]);
@@ -96,7 +97,17 @@ export default function ConductLiveTest() {
   const [warningMsg, setWarningMsg] = useState("");
 
   const [launching, setLaunching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"setup" | "room">("setup");
+  const [activeTab, setActiveTab] = useState<"setup" | "room" | "schedule">("setup");
+
+  // Scheduled Test Form State
+  const [scheduleTest, setScheduleTest] = useState<ExamTest | null>(null);
+  const [scheduleBatchIds, setScheduleBatchIds] = useState<string[]>([]);
+  const [scheduleStartTime, setScheduleStartTime] = useState<string>("");
+  const [scheduleEndTime, setScheduleEndTime] = useState<string>("");
+  const [scheduling, setScheduling] = useState(false);
+
+  // View Mode for Tab 2: "list" (show list of ongoing tests) vs "detail" (show selected session proctoring room)
+  const [viewingSessionMode, setViewingSessionMode] = useState<"list" | "detail">("list");
 
   // Load published premade tests
   useEffect(() => {
@@ -123,13 +134,48 @@ export default function ConductLiveTest() {
   useEffect(() => {
     const unsub = subscribeAllActiveLiveTestSessions((sessions) => {
       setActiveSessions(sessions);
-      if (sessions.length > 0 && !selectedSessionId) {
-        setSelectedSessionId(sessions[0]!.id);
-        setActiveTab("room");
-      }
     });
     return unsub;
-  }, [selectedSessionId]);
+  }, []);
+
+  // Subscribe to scheduled live test sessions
+  useEffect(() => {
+    const unsub = subscribeAllScheduledLiveTestSessions((sessions) => {
+      setScheduledSessions(sessions);
+    });
+    return unsub;
+  }, []);
+
+  // Automatic Lifecycle Scheduler for Scheduled Tests
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const nowMs = Date.now();
+
+      // Auto-Start scheduled tests when start time arrives
+      scheduledSessions.forEach((s) => {
+        if (s.scheduledStartTime) {
+          const startMs = new Date(s.scheduledStartTime).getTime();
+          if (nowMs >= startMs && s.status === "scheduled") {
+            console.log(`Auto-starting scheduled test: ${s.testTitle}`);
+            void startScheduledTestNow(s.id, user?.id, user?.name);
+          }
+        }
+      });
+
+      // Auto-End active tests when scheduled end time arrives
+      activeSessions.forEach((s) => {
+        if (s.scheduledEndTime) {
+          const endMs = new Date(s.scheduledEndTime).getTime();
+          if (nowMs >= endMs && s.status === "active") {
+            console.log(`Auto-ending active test session: ${s.testTitle}`);
+            void endLiveTestSession(s.id);
+          }
+        }
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [scheduledSessions, activeSessions, user]);
 
   // Subscribe to currently selected session
   useEffect(() => {
@@ -225,7 +271,7 @@ export default function ConductLiveTest() {
 
   const handleSelectTest = (test: ExamTest) => {
     setSelectedTest(test);
-    const ids = test.batchIds?.length ? test.batchIds : test.batchId ? [test.batchId] : [];
+    const ids = test.batchIds?.length ? test.batchIds : t.batchId ? [t.batchId] : [];
     setSelectedBatchIds(ids);
     setCustomDurationMinutes(test.durationMinutes);
   };
@@ -264,12 +310,59 @@ export default function ConductLiveTest() {
       });
 
       setSelectedSessionId(newSessionId);
+      setViewingSessionMode("detail");
       setActiveTab("room");
     } catch (err) {
       console.error("Failed to launch live test session", err);
       alert("Error launching live test session. Please try again.");
     } finally {
       setLaunching(false);
+    }
+  };
+
+  const handleCreateSchedule = async () => {
+    if (!scheduleTest) {
+      alert("Please select a test to schedule.");
+      return;
+    }
+    if (!scheduleStartTime || !scheduleEndTime) {
+      alert("Please select both Start Time and End Time for the test schedule.");
+      return;
+    }
+    if (scheduleBatchIds.length === 0) {
+      alert("Please select at least one target batch.");
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      await scheduleLiveTestSession({
+        testId: scheduleTest.id,
+        testTitle: scheduleTest.title,
+        subject: scheduleTest.subject,
+        batchIds: scheduleBatchIds,
+        durationMinutes: scheduleTest.durationMinutes,
+        scheduledStartTime: new Date(scheduleStartTime).toISOString(),
+        scheduledEndTime: new Date(scheduleEndTime).toISOString(),
+        adminUid,
+        adminName,
+        proctoringSettings: {
+          enableStudentCamera,
+          enableAdminVideo,
+          maxTabSwitchWarnings,
+          autoSubmitOnViolationLimit,
+        },
+      });
+
+      alert(`Test "${scheduleTest.title}" successfully scheduled!`);
+      setScheduleTest(null);
+      setScheduleStartTime("");
+      setScheduleEndTime("");
+    } catch (err) {
+      console.error("Failed to schedule test", err);
+      alert("Error creating schedule. Please check dates and try again.");
+    } finally {
+      setScheduling(false);
     }
   };
 
@@ -280,7 +373,27 @@ export default function ConductLiveTest() {
     try {
       await endLiveTestSession(selectedSessionId);
       setSelectedSessionId(null);
-      setActiveTab("setup");
+      setViewingSessionMode("list");
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleDeleteSchedule = async (sessionId: string, title: string) => {
+    if (!confirm(`Are you sure you want to cancel the schedule for "${title}"?`)) return;
+    try {
+      await deleteLiveTestSession(sessionId);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleStartScheduledNow = async (s: LiveTestSession) => {
+    try {
+      await startScheduledTestNow(s.id, adminUid, adminName);
+      setSelectedSessionId(s.id);
+      setViewingSessionMode("detail");
+      setActiveTab("room");
     } catch (err) {
       console.error(err);
     }
@@ -350,7 +463,7 @@ export default function ConductLiveTest() {
               <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
               {activeSessions.length} Active Session{activeSessions.length > 1 ? "s" : ""}
             </Badge>
-            {selectedSessionId && (
+            {selectedSessionId && viewingSessionMode === "detail" && (
               <Button
                 variant="destructive"
                 size="sm"
@@ -365,21 +478,29 @@ export default function ConductLiveTest() {
         ) : null}
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "setup" | "room")} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md bg-slate-100 p-1">
-          <TabsTrigger value="setup" className="font-semibold">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "setup" | "room" | "schedule")} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 max-w-2xl bg-slate-100 p-1">
+          <TabsTrigger value="setup" className="font-semibold text-xs sm:text-sm">
             1. Select & Configure Test
           </TabsTrigger>
 
           <TabsTrigger
             value="room"
-            className="font-semibold relative"
-            disabled={!selectedSessionId && activeSessions.length === 0}
+            className="font-semibold relative text-xs sm:text-sm"
           >
-            2. Live Proctoring Grid
-            {studentPresenceList.length > 0 && (
-              <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white">
-                {studentPresenceList.length}
+            2. Ongoing Live Tests
+            {activeSessions.length > 0 && (
+              <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] text-white font-bold">
+                {activeSessions.length}
+              </span>
+            )}
+          </TabsTrigger>
+
+          <TabsTrigger value="schedule" className="font-semibold text-xs sm:text-sm">
+            3. Scheduled Tests
+            {scheduledSessions.length > 0 && (
+              <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white font-bold">
+                {scheduledSessions.length}
               </span>
             )}
           </TabsTrigger>
@@ -669,294 +790,609 @@ export default function ConductLiveTest() {
           </div>
         </TabsContent>
 
-        {/* TAB 2: ACTIVE PROCTORING ROOM */}
+        {/* TAB 2: ONGOING LIVE TESTS (LIST & PROCTORING ROOM VIEWS) */}
         <TabsContent value="room" className="mt-6 space-y-6">
-          {activeSessions.length > 1 && (
-            <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-2 text-xs">
-              <span className="font-semibold text-slate-600">Select Active Session:</span>
-              {activeSessions.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedSessionId(s.id)}
-                  className={cn(
-                    "rounded-lg px-3 py-1 font-medium transition-all",
-                    selectedSessionId === s.id
-                      ? "bg-indigo-600 text-white shadow-sm"
-                      : "bg-white text-slate-700 hover:bg-slate-200",
-                  )}
-                >
-                  {s.testTitle}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {currentSession ? (
-            <div className="space-y-6">
-              {/* Live Session KPIs */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="pt-4 pb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase">Live Session</p>
-                      <p className="text-lg font-bold text-slate-900 truncate max-w-[180px]">
-                        {currentSession.testTitle}
-                      </p>
-                    </div>
-                    <Radio className="h-7 w-7 text-emerald-500 animate-pulse shrink-0" />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="pt-4 pb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase">Students Joined</p>
-                      <p className="text-2xl font-bold text-slate-900 tabular-nums">
-                        {studentPresenceList.length}
-                      </p>
-                    </div>
-                    <Users className="h-7 w-7 text-indigo-500 shrink-0" />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="pt-4 pb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase">Tab Violations</p>
-                      <p className="text-2xl font-bold text-rose-600 tabular-nums">
-                        {totalTabViolations}
-                      </p>
-                    </div>
-                    <AlertTriangle className="h-7 w-7 text-rose-500 shrink-0" />
-                  </CardContent>
-                </Card>
-
-                <Card className="border-slate-200 shadow-sm">
-                  <CardContent className="pt-4 pb-3 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold text-slate-500 uppercase">Duration</p>
-                      <p className="text-2xl font-bold text-slate-900 tabular-nums">
-                        {currentSession.durationMinutes} mins
-                      </p>
-                    </div>
-                    <Clock className="h-7 w-7 text-amber-500 shrink-0" />
-                  </CardContent>
-                </Card>
+          {viewingSessionMode === "list" || !selectedSessionId ? (
+            /* ONGOING TESTS LIST VIEW */
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <Radio className="h-5 w-5 text-emerald-500 animate-pulse" />
+                    Ongoing Live Test Sessions ({activeSessions.length})
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Select an ongoing test below to view its live proctoring grid and broadcast controls.
+                  </p>
+                </div>
               </div>
 
-              {/* Admin Broadcast Tile & Announcement Sender */}
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-                {/* Admin Video Tile */}
-                <Card className="lg:col-span-5 border-slate-200 shadow-sm bg-slate-900 text-white">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold flex items-center justify-between text-slate-200">
-                      <span className="flex items-center gap-2">
-                        <Video className="h-4 w-4 text-emerald-400" />
-                        Admin Proctor Camera & Mic Feed
-                      </span>
-                      <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
-                        BROADCASTING LIVE
-                      </Badge>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
-                      {/* Real camera feed */}
-                      <video
-                        ref={adminVideoRef}
-                        autoPlay
-                        muted
-                        playsInline
-                        className={cn(
-                          "h-full w-full object-cover transition-opacity duration-300",
-                          isAdminCamOn ? "opacity-100" : "opacity-0",
-                        )}
-                      />
-                      {/* Fallback placeholder when cam is off */}
-                      {!isAdminCamOn && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 text-slate-400">
-                            <VideoOff className="h-6 w-6" />
+              {activeSessions.length === 0 ? (
+                <div className="flex h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 shadow-xs">
+                  <Radio className="h-10 w-10 text-slate-300 mb-2" />
+                  <p className="font-semibold text-slate-700">No Ongoing Live Tests</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                    There are currently no active live test sessions running. Go to tab &quot;1. Select & Configure Test&quot; to launch a session.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                    onClick={() => setActiveTab("setup")}
+                  >
+                    Launch a Live Test Session
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {activeSessions.map((s) => {
+                    const testBatches = s.batchIds?.length
+                      ? batches
+                          .filter((b) => s.batchIds!.includes(b.id))
+                          .map((b) => b.name)
+                          .join(", ")
+                      : s.batchId
+                      ? batches.find((b) => b.id === s.batchId)?.name || "All Batches"
+                      : "All Batches";
+
+                    return (
+                      <Card
+                        key={s.id}
+                        className="border-slate-200 shadow-md hover:border-indigo-300 transition-all duration-200 flex flex-col justify-between"
+                      >
+                        <CardHeader className="pb-3 border-b border-slate-100">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <Badge className="bg-emerald-500/20 text-emerald-700 border-emerald-500/40 text-[10px] mb-1.5 font-semibold">
+                                <span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                LIVE ONGOING
+                              </Badge>
+                              <CardTitle className="text-base font-bold text-slate-900 leading-tight">
+                                {s.testTitle}
+                              </CardTitle>
+                              <p className="text-xs text-slate-500 mt-0.5">{s.subject}</p>
+                            </div>
                           </div>
-                          <p className="text-xs text-slate-400">Camera Off</p>
+                        </CardHeader>
+
+                        <CardContent className="pt-3 pb-4 space-y-3">
+                          <div className="space-y-1.5 text-xs text-slate-600">
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Target Batches:</span>
+                              <span className="font-semibold text-slate-800 truncate max-w-[160px]">{testBatches}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Duration:</span>
+                              <span className="font-semibold text-slate-800">{s.durationMinutes} Mins</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-slate-500">Proctor:</span>
+                              <span className="font-semibold text-slate-800">{s.adminName || "Admin"}</span>
+                            </div>
+                          </div>
+
+                          <Button
+                            onClick={() => {
+                              setSelectedSessionId(s.id);
+                              setViewingSessionMode("detail");
+                            }}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium h-9 text-xs shadow-xs"
+                          >
+                            <Eye className="mr-1.5 h-4 w-4" />
+                            View & Monitor Test
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* DETAILED PROCTORING ROOM VIEW FOR SELECTED SESSION */
+            <div className="space-y-6">
+              {/* Top Navigation & Back Button */}
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewingSessionMode("list")}
+                  className="bg-white border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold"
+                >
+                  <ArrowLeft className="mr-1.5 h-4 w-4 text-indigo-600" />
+                  Back to Ongoing Tests List
+                </Button>
+
+                {activeSessions.length > 1 && (
+                  <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-1.5 text-xs">
+                    <span className="font-semibold text-slate-600">Switch Session:</span>
+                    {activeSessions.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => setSelectedSessionId(s.id)}
+                        className={cn(
+                          "rounded-lg px-2.5 py-1 font-medium transition-all text-xs",
+                          selectedSessionId === s.id
+                            ? "bg-indigo-600 text-white shadow-xs"
+                            : "bg-white text-slate-700 hover:bg-slate-200",
+                        )}
+                      >
+                        {s.testTitle}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {currentSession && (
+                <div className="space-y-6">
+                  {/* Live Session KPIs */}
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <Card className="border-slate-200 shadow-xs">
+                      <CardContent className="pt-4 pb-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">Live Session</p>
+                          <p className="text-lg font-bold text-slate-900 truncate max-w-[180px]">
+                            {currentSession.testTitle}
+                          </p>
                         </div>
-                      )}
-                      {/* Name overlay */}
-                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
-                        <span className="text-xs font-medium text-white">{adminName} (Proctor)</span>
-                      </div>
+                        <Radio className="h-7 w-7 text-emerald-500 animate-pulse shrink-0" />
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-slate-200 shadow-xs">
+                      <CardContent className="pt-4 pb-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">Students Joined</p>
+                          <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                            {studentPresenceList.length}
+                          </p>
+                        </div>
+                        <Users className="h-7 w-7 text-indigo-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-slate-200 shadow-xs">
+                      <CardContent className="pt-4 pb-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">Tab Violations</p>
+                          <p className="text-2xl font-bold text-rose-600 tabular-nums">
+                            {totalTabViolations}
+                          </p>
+                        </div>
+                        <AlertTriangle className="h-7 w-7 text-rose-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-slate-200 shadow-xs">
+                      <CardContent className="pt-4 pb-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">Duration</p>
+                          <p className="text-2xl font-bold text-slate-900 tabular-nums">
+                            {currentSession.durationMinutes} mins
+                          </p>
+                        </div>
+                        <Clock className="h-7 w-7 text-amber-500 shrink-0" />
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Admin Broadcast Tile & Announcement Sender */}
+                  <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+                    {/* Admin Video Tile */}
+                    <Card className="lg:col-span-5 border-slate-200 shadow-xs bg-slate-900 text-white">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold flex items-center justify-between text-slate-200">
+                          <span className="flex items-center gap-2">
+                            <Video className="h-4 w-4 text-emerald-400" />
+                            Admin Proctor Camera & Mic Feed
+                          </span>
+                          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
+                            BROADCASTING LIVE
+                          </Badge>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-950 border border-slate-800">
+                          {/* Real camera feed */}
+                          <video
+                            ref={adminVideoRef}
+                            autoPlay
+                            muted
+                            playsInline
+                            className={cn(
+                              "h-full w-full object-cover transition-opacity duration-300",
+                              isAdminCamOn ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          {/* Fallback placeholder when cam is off */}
+                          {!isAdminCamOn && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center">
+                              <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 text-slate-400">
+                                <VideoOff className="h-6 w-6" />
+                              </div>
+                              <p className="text-xs text-slate-400">Camera Off</p>
+                            </div>
+                          )}
+                          {/* Name overlay */}
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
+                            <span className="text-xs font-medium text-white">{adminName} (Proctor)</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant={isAdminMicOn ? "default" : "outline"}
+                            className={isAdminMicOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
+                            onClick={handleToggleMic}
+                          >
+                            {isAdminMicOn ? <Mic className="mr-1.5 h-4 w-4" /> : <MicOff className="mr-1.5 h-4 w-4" />}
+                            {isAdminMicOn ? "Mic On" : "Muted"}
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant={isAdminCamOn ? "default" : "outline"}
+                            className={isAdminCamOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
+                            onClick={handleToggleCam}
+                          >
+                            {isAdminCamOn ? <Camera className="mr-1.5 h-4 w-4" /> : <CameraOff className="mr-1.5 h-4 w-4" />}
+                            {isAdminCamOn ? "Camera On" : "Cam Off"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Announcement Broadcast */}
+                    <Card className="lg:col-span-7 border-slate-200 shadow-xs">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                          <Megaphone className="h-4 w-4 text-indigo-600" />
+                          Broadcast Live Announcement to All Students
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Type announcement (e.g. '10 minutes remaining! Check Section B')..."
+                            value={announcementText}
+                            onChange={(e) => setAnnouncementText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void handleSendAnnouncement();
+                            }}
+                            className="text-sm"
+                          />
+                          <Button
+                            onClick={() => void handleSendAnnouncement()}
+                            disabled={sendingAnnouncement || !announcementText.trim()}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
+                          >
+                            <Send className="mr-1.5 h-4 w-4" />
+                            Send
+                          </Button>
+                        </div>
+
+                        {currentSession.announcement ? (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                            <p className="font-semibold text-amber-950 flex items-center gap-1.5">
+                              <Megaphone className="h-3.5 w-3.5" />
+                              Last Broadcasted Announcement:
+                            </p>
+                            <p className="mt-1 font-medium">{currentSession.announcement}</p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-slate-400">
+                            Broadcasted announcements will pop up immediately on every student&apos;s exam window.
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* STUDENT MULTI-CAMERA PROCTORING GRID */}
+                  <div className="space-y-4 pt-2">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                        <Eye className="h-5 w-5 text-indigo-600" />
+                        Live Student Proctoring Grid ({studentPresenceList.length} Connected)
+                      </h3>
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 pt-1">
-                      <Button
-                        size="sm"
-                        variant={isAdminMicOn ? "default" : "outline"}
-                        className={isAdminMicOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
-                        onClick={handleToggleMic}
-                      >
-                        {isAdminMicOn ? <Mic className="mr-1.5 h-4 w-4" /> : <MicOff className="mr-1.5 h-4 w-4" />}
-                        {isAdminMicOn ? "Mic On" : "Muted"}
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant={isAdminCamOn ? "default" : "outline"}
-                        className={isAdminCamOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
-                        onClick={handleToggleCam}
-                      >
-                        {isAdminCamOn ? <Camera className="mr-1.5 h-4 w-4" /> : <CameraOff className="mr-1.5 h-4 w-4" />}
-                        {isAdminCamOn ? "Camera On" : "Cam Off"}
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Announcement Broadcast */}
-                <Card className="lg:col-span-7 border-slate-200 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                      <Megaphone className="h-4 w-4 text-indigo-600" />
-                      Broadcast Live Announcement to All Students
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Type announcement (e.g. '10 minutes remaining! Check Section B')..."
-                        value={announcementText}
-                        onChange={(e) => setAnnouncementText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") void handleSendAnnouncement();
-                        }}
-                        className="text-sm"
-                      />
-                      <Button
-                        onClick={() => void handleSendAnnouncement()}
-                        disabled={sendingAnnouncement || !announcementText.trim()}
-                        className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
-                      >
-                        <Send className="mr-1.5 h-4 w-4" />
-                        Send
-                      </Button>
-                    </div>
-
-                    {currentSession.announcement ? (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                        <p className="font-semibold text-amber-950 flex items-center gap-1.5">
-                          <Megaphone className="h-3.5 w-3.5" />
-                          Last Broadcasted Announcement:
+                    {studentPresenceList.length === 0 ? (
+                      <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+                        <Users className="h-10 w-10 text-slate-300 mb-2" />
+                        <p className="font-medium text-slate-700">Waiting for Students to Join</p>
+                        <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                          As soon as students open the live test window, their webcams and exam progress will appear live in this grid.
                         </p>
-                        <p className="mt-1 font-medium">{currentSession.announcement}</p>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400">
-                        Broadcasted announcements will pop up immediately on every student&apos;s exam window.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {studentPresenceList.map((p) => {
+                          const isViolation = (p.tabSwitchCount || 0) > 0;
+                          return (
+                            <div
+                              key={p.uid}
+                              className={cn(
+                                "group relative overflow-hidden rounded-2xl border bg-white p-3 shadow-xs transition-all duration-200",
+                                isViolation
+                                  ? "border-rose-300 ring-2 ring-rose-500/20 bg-rose-50/20"
+                                  : "border-slate-200 hover:border-indigo-300 hover:shadow-md",
+                              )}
+                            >
+                              {/* Student Live Video Tile */}
+                              <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+                                <div className="flex flex-col items-center justify-center text-center text-white p-2">
+                                  <StudentAvatar name={p.name} className="h-10 w-10 text-xs font-bold border border-white/20 mb-1" />
+                                  <p className="text-xs font-semibold">{p.name}</p>
+                                  <span className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                    Camera Live
+                                  </span>
+                                </div>
 
-              {/* STUDENT MULTI-CAMERA PROCTORING GRID */}
-              <div className="space-y-4 pt-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                    <Eye className="h-5 w-5 text-indigo-600" />
-                    Live Student Proctoring Grid ({studentPresenceList.length} Connected)
-                  </h3>
+                                {p.tabSwitchCount > 0 && (
+                                  <div className="absolute top-2 left-2 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                                    ⚠️ {p.tabSwitchCount} Tab Switch{p.tabSwitchCount > 1 ? "es" : ""}
+                                  </div>
+                                )}
+
+                                {p.isSubmitted && (
+                                  <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-white">
+                                    <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-1" />
+                                    <p className="text-xs font-bold">Exam Submitted</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Student Info & Progress */}
+                              <div className="mt-3 space-y-2">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="font-semibold text-slate-800 truncate max-w-[120px]">{p.name}</span>
+                                  <span className="font-medium text-slate-500">
+                                    Q{p.currentQuestionIndex + 1} / {p.totalQuestions || "?"}
+                                  </span>
+                                </div>
+
+                                <div className="flex items-center justify-between text-[11px] text-slate-500">
+                                  <span>Answered: <strong className="text-slate-800">{p.totalAnswered}</strong></span>
+                                  {p.isSubmitted ? (
+                                    <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Submitted</Badge>
+                                  ) : (
+                                    <Badge variant="outline" className="text-[10px] text-indigo-700 bg-indigo-50 border-indigo-200">
+                                      In Progress
+                                    </Badge>
+                                  )}
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[11px] text-amber-700 hover:bg-amber-50"
+                                    onClick={() => {
+                                      setWarningStudent(p);
+                                      setWarningMsg("Please stay focused on your test screen.");
+                                    }}
+                                  >
+                                    Warn
+                                  </Button>
+
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[11px] text-rose-700 hover:bg-rose-50"
+                                    onClick={() => void handleForceSubmit(p)}
+                                  >
+                                    Force Submit
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* TAB 3: SCHEDULED TESTS */}
+        <TabsContent value="schedule" className="mt-6 space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+            {/* Form: Schedule a Live Test */}
+            <Card className="lg:col-span-5 border-slate-200 shadow-md">
+              <CardHeader className="border-b border-slate-100 pb-3">
+                <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <CalendarClock className="h-5 w-5 text-indigo-600" />
+                  Schedule a Live Test
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-5 p-5">
+                {/* Test Picker */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">1. Select Test</Label>
+                  <select
+                    className="w-full rounded-lg border border-slate-300 bg-white p-2.5 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+                    value={scheduleTest?.id || ""}
+                    onChange={(e) => {
+                      const t = tests.find((x) => x.id === e.target.value);
+                      setScheduleTest(t || null);
+                      if (t) {
+                        const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+                        setScheduleBatchIds(bIds);
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose a Premade Test --</option>
+                    {tests.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.title} ({t.durationMinutes} mins • {t.totalQuestions} Qs)
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
-                {studentPresenceList.length === 0 ? (
-                  <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-                    <Users className="h-10 w-10 text-slate-300 mb-2" />
-                    <p className="font-medium text-slate-700">Waiting for Students to Join</p>
-                    <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                      As soon as students open the live test window, their webcams and exam progress will appear live in this grid.
+                {/* Target Batches */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">2. Target Batches</Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {batches.map((b) => {
+                      const checked = scheduleBatchIds.includes(b.id);
+                      return (
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => {
+                            setScheduleBatchIds((prev) =>
+                              prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id],
+                            );
+                          }}
+                          className={cn(
+                            "rounded-md border px-2.5 py-1 text-xs font-medium transition-all",
+                            checked
+                              ? "border-indigo-600 bg-indigo-600 text-white shadow-xs"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300",
+                          )}
+                        >
+                          {b.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Schedule Start Time */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">3. Scheduled Start Date & Time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={scheduleStartTime}
+                    onChange={(e) => setScheduleStartTime(e.target.value)}
+                    className="text-xs"
+                  />
+                </div>
+
+                {/* Schedule End Time */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-slate-700">4. Scheduled End Date & Time</Label>
+                  <Input
+                    type="datetime-local"
+                    value={scheduleEndTime}
+                    onChange={(e) => setScheduleEndTime(e.target.value)}
+                    className="text-xs"
+                  />
+                </div>
+
+                <Button
+                  onClick={() => void handleCreateSchedule()}
+                  disabled={scheduling || !scheduleTest || !scheduleStartTime || !scheduleEndTime}
+                  className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-10 text-xs shadow-md"
+                >
+                  {scheduling ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Saving Schedule...
+                    </>
+                  ) : (
+                    <>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Save Test Schedule
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* List: Scheduled Tests */}
+            <Card className="lg:col-span-7 border-slate-200 shadow-md">
+              <CardHeader className="border-b border-slate-100 pb-3">
+                <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-indigo-600" />
+                  Scheduled Tests ({scheduledSessions.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4">
+                {scheduledSessions.length === 0 ? (
+                  <div className="flex h-56 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-slate-500">
+                    <CalendarClock className="h-10 w-10 text-slate-300 mb-2" />
+                    <p className="font-semibold text-slate-700">No Scheduled Tests</p>
+                    <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                      Use the form on the left to schedule tests ahead of time. They will automatically start and end at the configured times.
                     </p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {studentPresenceList.map((p) => {
-                      const isViolation = (p.tabSwitchCount || 0) > 0;
+                  <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                    {scheduledSessions.map((s) => {
+                      const testBatches = s.batchIds?.length
+                        ? batches
+                            .filter((b) => s.batchIds!.includes(b.id))
+                            .map((b) => b.name)
+                            .join(", ")
+                        : "All Batches";
+
+                      const startFormatted = s.scheduledStartTime
+                        ? new Date(s.scheduledStartTime).toLocaleString([], {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "Not set";
+
+                      const endFormatted = s.scheduledEndTime
+                        ? new Date(s.scheduledEndTime).toLocaleString([], {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "Not set";
+
                       return (
                         <div
-                          key={p.uid}
-                          className={cn(
-                            "group relative overflow-hidden rounded-2xl border bg-white p-3 shadow-sm transition-all duration-200",
-                            isViolation
-                              ? "border-rose-300 ring-2 ring-rose-500/20 bg-rose-50/20"
-                              : "border-slate-200 hover:border-indigo-300 hover:shadow-md",
-                          )}
+                          key={s.id}
+                          className="rounded-xl border border-slate-200 bg-white p-4 shadow-xs hover:border-indigo-300 transition-all space-y-3"
                         >
-                          {/* Student Live Video Tile */}
-                          <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center">
-                            {/* WebRTC Video Stream Placeholder or Live Frame */}
-                            <div className="flex flex-col items-center justify-center text-center text-white p-2">
-                              <StudentAvatar name={p.name} className="h-10 w-10 text-xs font-bold border border-white/20 mb-1" />
-                              <p className="text-xs font-semibold">{p.name}</p>
-                              <span className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                                Camera Live
-                              </span>
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-semibold mb-1">
+                                SCHEDULED
+                              </Badge>
+                              <h4 className="font-bold text-slate-900 text-sm">{s.testTitle}</h4>
+                              <p className="text-xs text-slate-500">{s.subject} • {testBatches}</p>
                             </div>
 
-                            {/* Status Overlay Badges */}
-                            {p.tabSwitchCount > 0 && (
-                              <div className="absolute top-2 left-2 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow">
-                                ⚠️ {p.tabSwitchCount} Tab Switch{p.tabSwitchCount > 1 ? "es" : ""}
-                              </div>
-                            )}
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-[11px] text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                                onClick={() => void handleStartScheduledNow(s)}
+                              >
+                                <PlayCircle className="mr-1 h-3.5 w-3.5 text-emerald-600" />
+                                Start Now
+                              </Button>
 
-                            {p.isSubmitted && (
-                              <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-white">
-                                <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-1" />
-                                <p className="text-xs font-bold">Exam Submitted</p>
-                              </div>
-                            )}
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600"
+                                onClick={() => void handleDeleteSchedule(s.id, s.testTitle)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
 
-                          {/* Student Info & Progress */}
-                          <div className="mt-3 space-y-2">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-semibold text-slate-800 truncate max-w-[120px]">{p.name}</span>
-                              <span className="font-medium text-slate-500">
-                                Q{p.currentQuestionIndex + 1} / {p.totalQuestions || "?"}
-                              </span>
+                          <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-700">
+                            <div>
+                              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Starts At</span>
+                              <span className="font-semibold text-indigo-950">{startFormatted}</span>
                             </div>
-
-                            <div className="flex items-center justify-between text-[11px] text-slate-500">
-                              <span>Answered: <strong className="text-slate-800">{p.totalAnswered}</strong></span>
-                              {p.isSubmitted ? (
-                                <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Submitted</Badge>
-                              ) : (
-                                <Badge variant="outline" className="text-[10px] text-indigo-700 bg-indigo-50 border-indigo-200">
-                                  In Progress
-                                </Badge>
-                              )}
-                            </div>
-
-                            {/* Action Buttons */}
-                            <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-slate-100">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-[11px] text-amber-700 hover:bg-amber-50"
-                                onClick={() => {
-                                  setWarningStudent(p);
-                                  setWarningMsg("Please stay focused on your test screen.");
-                                }}
-                              >
-                                Warn
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 text-[11px] text-rose-700 hover:bg-rose-50"
-                                onClick={() => void handleForceSubmit(p)}
-                              >
-                                Force Submit
-                              </Button>
+                            <div>
+                              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Ends At</span>
+                              <span className="font-semibold text-rose-950">{endFormatted}</span>
                             </div>
                           </div>
                         </div>
@@ -964,13 +1400,9 @@ export default function ConductLiveTest() {
                     })}
                   </div>
                 )}
-              </div>
-            </div>
-          ) : (
-            <div className="p-8 text-center text-sm text-slate-500">
-              No active session selected. Go to tab &quot;1. Select & Configure Test&quot; to launch a live test.
-            </div>
-          )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
 

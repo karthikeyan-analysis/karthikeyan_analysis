@@ -115,6 +115,90 @@ export function subscribeAllActiveLiveTestSessions(
   });
 }
 
+export function subscribeAllScheduledLiveTestSessions(
+  onData: (sessions: LiveTestSession[]) => void,
+): () => void {
+  const q = query(collection(db, "liveTestSessions"), where("status", "==", "scheduled"));
+  return onSnapshot(q, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LiveTestSession);
+    onData(list);
+  });
+}
+
+export function subscribeAllLiveTestSessions(
+  onData: (sessions: LiveTestSession[]) => void,
+): () => void {
+  const col = collection(db, "liveTestSessions");
+  return onSnapshot(col, (snap) => {
+    const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }) as LiveTestSession);
+    onData(list);
+  });
+}
+
+export async function scheduleLiveTestSession(params: {
+  testId: string;
+  testTitle: string;
+  subject: string;
+  batchId?: string;
+  batchIds?: string[];
+  durationMinutes: number;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
+  adminUid: string;
+  adminName: string;
+  proctoringSettings?: Partial<ProctoringSettings>;
+}): Promise<string> {
+  const sessionId = doc(collection(db, "liveTestSessions")).id;
+  const now = new Date().toISOString();
+
+  const sessionData: LiveTestSession = {
+    id: sessionId,
+    testId: params.testId,
+    testTitle: params.testTitle,
+    subject: params.subject,
+    batchId: params.batchId || "",
+    batchIds: params.batchIds || (params.batchId ? [params.batchId] : []),
+    status: "scheduled",
+    scheduledStartTime: params.scheduledStartTime,
+    scheduledEndTime: params.scheduledEndTime,
+    scheduledByUid: params.adminUid,
+    scheduledByName: params.adminName,
+    adminName: params.adminName,
+    durationMinutes: params.durationMinutes,
+    proctoringSettings: {
+      enableStudentCamera: true,
+      enableAdminVideo: true,
+      maxTabSwitchWarnings: 3,
+      autoSubmitOnViolationLimit: false,
+      lockFullScreen: false,
+      ...params.proctoringSettings,
+    },
+    createdAt: now,
+  };
+
+  await setDoc(doc(db, "liveTestSessions", sessionId), sessionData);
+  return sessionId;
+}
+
+export async function startScheduledTestNow(
+  sessionId: string,
+  adminUid?: string,
+  adminName?: string,
+): Promise<void> {
+  const ref = doc(db, "liveTestSessions", sessionId);
+  const now = new Date().toISOString();
+  await updateDoc(ref, {
+    status: "active",
+    startedAt: now,
+    ...(adminUid ? { startedByUid: adminUid } : {}),
+    ...(adminName ? { adminName } : {}),
+  });
+}
+
+export async function deleteLiveTestSession(sessionId: string): Promise<void> {
+  await deleteDoc(doc(db, "liveTestSessions", sessionId));
+}
+
 export async function sendLiveTestAnnouncement(
   sessionId: string,
   text: string,

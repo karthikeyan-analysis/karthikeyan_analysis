@@ -130,7 +130,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
           label: "Attendance Reports",
         },
         {
-          to: "/admin/live-classes?tab=live_tests",
+          to: "/admin/live-tests",
           icon: Award,
           label: "Live Test Integration",
         },
