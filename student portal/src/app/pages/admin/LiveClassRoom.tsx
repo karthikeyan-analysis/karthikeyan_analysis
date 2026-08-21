@@ -449,15 +449,6 @@ function LiveClassRoomInner({
                 {isRecording ? <Square className="mr-1 h-4 w-4" /> : <Circle className="mr-1 h-4 w-4" />}
                 {isUploading ? "Uploading…" : isRecording ? "Stop Recording" : "Record"}
               </Button>
-              <Button
-                size="sm"
-                variant={cls.liveTestId ? "default" : "outline"}
-                className={cls.liveTestId ? "bg-amber-600 hover:bg-amber-700 font-semibold" : "border-amber-300 text-amber-900 hover:bg-amber-50"}
-                onClick={() => void openTestPicker()}
-              >
-                <ClipboardList className="mr-1.5 h-4 w-4" />
-                {cls.liveTestId ? "Live Test Active" : "Trigger Live Test"}
-              </Button>
               <Button size="sm" variant="outline" onClick={() => void leaveRoom()}>
                 Leave
               </Button>
@@ -603,90 +594,7 @@ function LiveClassRoomInner({
         </div>
       </div>
 
-      {/* Trigger CBT Live Test Dialog */}
-      <Dialog open={testPickerOpen} onOpenChange={setTestPickerOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base font-bold text-slate-900">
-              <ClipboardList className="h-5 w-5 text-amber-600" />
-              Launch CBT Exam in Live Class
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 text-xs">
-            <p className="text-slate-600">
-              Select a published exam to trigger live during this session. All joined students will automatically receive a join notification.
-            </p>
 
-            {cls.liveTestId ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-amber-900">Live Test Currently Active</p>
-                  <p className="text-[11px] text-slate-600">Students have been prompted to participate.</p>
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-red-600 border-red-200 hover:bg-red-50 text-xs font-semibold"
-                  onClick={async () => {
-                    await stopLiveTest(classId);
-                    setTestPickerOpen(false);
-                    setNotificationToast("Live Test unlinked.");
-                    setTimeout(() => setNotificationToast(null), 3000);
-                  }}
-                >
-                  Unlink Test
-                </Button>
-              </div>
-            ) : null}
-
-            <div className="max-h-60 space-y-2 overflow-y-auto pr-1">
-              {availableTests.length === 0 ? (
-                <p className="text-center py-6 text-slate-400">
-                  No published CBT exams found matching this class batch.
-                </p>
-              ) : (
-                availableTests.map((t) => {
-                  const isLaunched = cls.liveTestId === t.id && (cls.liveTestStartedAt || (cls as any).liveTestActive);
-                  return (
-                    <div
-                      key={t.id}
-                      className={`flex items-center justify-between rounded-xl border p-3 bg-white transition-all ${isLaunched ? "border-emerald-300 bg-emerald-50/40" : "border-slate-200 hover:border-amber-300"
-                        }`}
-                    >
-                      <div>
-                        <p className="font-bold text-slate-900">{t.title}</p>
-                        <p className="text-[11px] text-slate-500">{t.subject} · {t.durationMinutes} mins · {t.totalQuestions} Qs</p>
-                      </div>
-                      {isLaunched ? (
-                        <Button
-                          size="sm"
-                          disabled
-                          className="bg-emerald-600 text-white font-bold text-xs border border-emerald-500 opacity-100 cursor-default shadow-xs"
-                        >
-                          <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> Test Launched
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="bg-amber-600 hover:bg-amber-700 font-semibold text-xs text-white shadow-xs"
-                          onClick={() => void launchTest(t.id)}
-                        >
-                          Launch Now
-                        </Button>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setTestPickerOpen(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Confirmation Dialog when ending/leaving class while recording is active */}
       <Dialog open={confirmEndRecordingOpen} onOpenChange={setConfirmEndRecordingOpen}>

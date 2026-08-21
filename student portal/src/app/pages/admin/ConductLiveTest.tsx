@@ -933,10 +933,11 @@ export default function ConductLiveTest() {
                               setSelectedSessionId(s.id);
                               setViewingSessionMode("detail");
                             }}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium h-9 text-xs shadow-xs"
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-9 text-xs shadow-xs flex items-center justify-center gap-1.5"
                           >
-                            <Eye className="mr-1.5 h-4 w-4" />
-                            View & Monitor Test
+                            <Video className="h-4 w-4 text-emerald-300" />
+                            <Eye className="h-4 w-4" />
+                            Live Test Alert & Cam Monitor
                           </Button>
                         </CardContent>
                       </Card>
@@ -1649,11 +1650,25 @@ export default function ConductLiveTest() {
                               )}
                             </div>
 
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="h-7 text-[11px] bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-xs flex items-center gap-1"
+                                onClick={() => {
+                                  setSelectedSessionId(s.id);
+                                  setViewingSessionMode("detail");
+                                  setActiveTab("room");
+                                }}
+                              >
+                                <Eye className="h-3.5 w-3.5" />
+                                Alert & Cam Monitor
+                              </Button>
+
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 text-[11px] text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+                                className="h-7 text-[11px] text-emerald-700 hover:bg-emerald-50 border-emerald-200 font-semibold"
                                 onClick={() => void handleStartScheduledNow(s)}
                               >
                                 <PlayCircle className="mr-1 h-3.5 w-3.5 text-emerald-600" />
