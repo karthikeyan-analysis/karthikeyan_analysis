@@ -125,23 +125,29 @@ export function useLiveTestPresence(params: {
   const camera = useMemo(() => getCamera(), []);
 
   useEffect(() => {
-    if (!partyTracks) return;
     try {
-      if (role === "student") {
-        camera.enableSource();
-        camera.startBroadcasting();
-        setCameraStatus("active");
-      } else {
-        // Admin
+      camera.enableSource();
+      if (role === "admin") {
         mic.enableSource();
-        camera.enableSource();
-        mic.startBroadcasting();
-        camera.startBroadcasting();
-        setCameraStatus("active");
       }
+      setCameraStatus("active");
     } catch (err) {
       console.warn("Camera auto-start error", err);
       setCameraStatus("permission_denied");
+    }
+  }, [mic, camera, role]);
+
+  useEffect(() => {
+    if (!partyTracks) return;
+    try {
+      if (role === "student") {
+        camera.startBroadcasting();
+      } else {
+        mic.startBroadcasting();
+        camera.startBroadcasting();
+      }
+    } catch (err) {
+      console.warn("Camera broadcasting start error", err);
     }
   }, [partyTracks, mic, camera, role]);
 

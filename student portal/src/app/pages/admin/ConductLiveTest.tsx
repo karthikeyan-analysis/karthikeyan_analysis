@@ -11,6 +11,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { cn } from "../../components/ui/utils";
 import StudentAvatar from "../../components/StudentAvatar";
+import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
 import { listExamTestsForAdmin } from "../../features/exams/examApi";
 import type { ExamTest } from "../../features/exams/types";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
@@ -1179,23 +1180,20 @@ export default function ConductLiveTest() {
                             >
                               {/* Student Live Video Tile */}
                               <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center">
-                                <div className="flex flex-col items-center justify-center text-center text-white p-2">
-                                  <StudentAvatar name={p.name} className="h-10 w-10 text-xs font-bold border border-white/20 mb-1" />
-                                  <p className="text-xs font-semibold">{p.name}</p>
-                                  <span className="mt-1 flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-                                    Camera Live
-                                  </span>
-                                </div>
+                                <ParticipantVideoTile
+                                  presence={p}
+                                  partyTracks={partyTracks || (undefined as any)}
+                                  isLocal={false}
+                                />
 
                                 {p.tabSwitchCount > 0 && (
-                                  <div className="absolute top-2 left-2 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                                  <div className="absolute top-2 left-2 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs z-10">
                                     ⚠️ {p.tabSwitchCount} Tab Switch{p.tabSwitchCount > 1 ? "es" : ""}
                                   </div>
                                 )}
 
                                 {p.isSubmitted && (
-                                  <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-white">
+                                  <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10">
                                     <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-1" />
                                     <p className="text-xs font-bold">Exam Submitted</p>
                                   </div>

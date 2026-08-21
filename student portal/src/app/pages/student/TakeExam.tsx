@@ -1428,17 +1428,26 @@ export default function TakeExam({
                   </Badge>
                 </div>
                 <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
-                  <video
-                    ref={studentCamVideoRef}
-                    autoPlay
-                    muted
-                    playsInline
-                    className="h-full w-full object-cover"
+                  <ParticipantVideoTile
+                    presence={
+                      myPresence || {
+                        id: user?.id || "local",
+                        uid: user?.id || "local",
+                        name: user?.name || "Student",
+                        role: "student",
+                        sessionId: liveSession?.id || "",
+                        cameraStatus: cameraStatus,
+                        tabSwitchCount: tabSwitchCount,
+                        isTabActive: true,
+                        currentQuestionIndex: currentIndex,
+                        totalAnswered: totalAnsweredCount,
+                        totalQuestions: questions.length,
+                      }
+                    }
+                    partyTracks={partyTracks || (undefined as any)}
+                    isLocal={true}
+                    localVideoTrack$={camera.broadcastTrack$}
                   />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-1.5 text-center">
-                    <p className="text-[11px] font-semibold text-slate-200">{user?.name || "Student"}</p>
-                    <p className="text-[9px] text-slate-400">Webcam Stream Monitored Live</p>
-                  </div>
                 </div>
               </div>
             )}
@@ -1462,17 +1471,17 @@ export default function TakeExam({
 
                 {showAdminStream && (
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-indigo-950/60 border border-indigo-900/50 flex items-center justify-center">
-                    {partyTracks && proctorPresence ? (
+                    {proctorPresence ? (
                       <ParticipantVideoTile
                         presence={proctorPresence}
-                        partyTracks={partyTracks}
+                        partyTracks={partyTracks || (undefined as any)}
                         isLocal={false}
                       />
                     ) : (
                       <div className="text-center p-2">
                         <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1 animate-pulse" />
                         <p className="text-[11px] font-semibold text-indigo-200">
-                          {liveSession.adminName || proctorPresence?.name || "Proctor / Instructor"}
+                          {liveSession.adminName || "Proctor / Instructor"}
                         </p>
                         <p className="text-[9px] text-indigo-300/80">Live Video Broadcast Active</p>
                       </div>
