@@ -32,31 +32,32 @@ function hasTurnServer(servers: IceServer[]): boolean {
  * iceServers so partytracks skips that broken call.
  */
 async function fetchIceServers(classId: string, idToken: string): Promise<IceServer[]> {
-  const url = `${REALTIME_PROXY_PATH}/generate-ice-servers?classId=${encodeURIComponent(classId)}`;
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${idToken}` },
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      body.trim() || `ICE server error (HTTP ${res.status})`,
-    );
+  const DEFAULT_ICE_SERVERS: IceServer[] = [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ];
+
+  try {
+    const url = `${REALTIME_PROXY_PATH}/generate-ice-servers?classId=${encodeURIComponent(classId)}`;
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
+    if (!res.ok) {
+      return DEFAULT_ICE_SERVERS;
+    }
+    const text = await res.text();
+    if (!text || text.trim().startsWith("<")) {
+      return DEFAULT_ICE_SERVERS;
+    }
+    const data = JSON.parse(text) as { iceServers?: IceServer[] };
+    if (!Array.isArray(data.iceServers) || data.iceServers.length === 0) {
+      return DEFAULT_ICE_SERVERS;
+    }
+    return data.iceServers;
+  } catch (err) {
+    console.warn("[live-class] Using default STUN servers due to proxy fetch error:", err);
+    return DEFAULT_ICE_SERVERS;
   }
-  const data = (await res.json()) as { iceServers?: IceServer[] };
-  if (!Array.isArray(data.iceServers) || data.iceServers.length === 0) {
-    throw new Error(
-      "Live class media servers returned no ICE configuration. Confirm Cloudflare TURN secrets are set on realtimeProxy.",
-    );
-  }
-  if (!hasTurnServer(data.iceServers)) {
-    // STUN-only works on some LANs but fails on mobile / symmetric NAT — the
-    // classic source of tracks/new 410 "Session appears to be disconnected".
-    console.error(
-      "[live-class] ICE servers have no TURN relay. WebRTC will fail for many students. Set CF_TURN_APP_ID / CF_TURN_APP_TOKEN on realtimeProxy.",
-      data.iceServers,
-    );
-  }
-  return data.iceServers;
 }
 
 export type PartyTracksClientHandle = {

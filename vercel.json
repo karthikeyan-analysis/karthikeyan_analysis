@@ -4,6 +4,10 @@
   "framework": null,
   "rewrites": [
     {
+      "source": "/api/realtime/:path*",
+      "destination": "https://us-central1-karthikeyan-analysis.cloudfunctions.net/realtimeProxy/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
