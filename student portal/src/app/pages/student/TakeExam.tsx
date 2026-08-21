@@ -223,26 +223,64 @@ export default function TakeExam({
   }, [camera.broadcastTrack$]);
 
   const proctorPresence = useMemo(() => {
-    return (
-      roster.find((p) => p.role === "admin" || p.uid === liveSession?.startedByUid) ||
-      (liveSession
-        ? {
-            id: liveSession.startedByUid || "proctor",
-            uid: liveSession.startedByUid || "proctor",
-            name: liveSession.adminName || "Proctor / Instructor",
-            role: "admin" as const,
-            sessionId: liveSession.id,
-            cameraStatus: "active" as const,
-            tabSwitchCount: 0,
-            isTabActive: true,
-            currentQuestionIndex: 0,
-            totalAnswered: 0,
-            totalQuestions: 0,
-            isSubmitted: false,
-            updatedAt: new Date().toISOString(),
-          }
-        : null)
+    if (!liveSession) return null;
+
+    const hasCohostAssigned = Boolean(
+      liveSession.coHostId ||
+      liveSession.coHostEmail ||
+      (liveSession.coHostName && liveSession.coHostName.trim().length > 0)
     );
+
+    if (hasCohostAssigned) {
+      // Co-Host is assigned to this session — prioritize Co-Host stream
+      const cohostEntry = roster.find(
+        (p) =>
+          p.role === "cohost" ||
+          (liveSession.coHostId && p.uid === liveSession.coHostId) ||
+          (liveSession.coHostEmail && p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase())
+      );
+
+      if (cohostEntry) return cohostEntry;
+
+      return {
+        id: liveSession.coHostId || "cohost",
+        uid: liveSession.coHostId || "cohost",
+        name: liveSession.coHostName || "Co-Host Proctor",
+        role: "cohost" as const,
+        sessionId: liveSession.id,
+        cameraStatus: "active" as const,
+        tabSwitchCount: 0,
+        isTabActive: true,
+        currentQuestionIndex: 0,
+        totalAnswered: 0,
+        totalQuestions: 0,
+        isSubmitted: false,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+
+    // No Co-Host assigned — fallback to Admin stream
+    const adminEntry = roster.find(
+      (p) => p.role === "admin" || p.uid === liveSession.startedByUid
+    );
+
+    if (adminEntry) return adminEntry;
+
+    return {
+      id: liveSession.startedByUid || "proctor",
+      uid: liveSession.startedByUid || "proctor",
+      name: liveSession.adminName || "Proctor / Instructor",
+      role: "admin" as const,
+      sessionId: liveSession.id,
+      cameraStatus: "active" as const,
+      tabSwitchCount: 0,
+      isTabActive: true,
+      currentQuestionIndex: 0,
+      totalAnswered: 0,
+      totalQuestions: 0,
+      isSubmitted: false,
+      updatedAt: new Date().toISOString(),
+    };
   }, [roster, liveSession]);
 
   // Tab Switch / Focus Loss Proctoring Detector
@@ -1480,7 +1518,7 @@ export default function TakeExam({
                       <div className="text-center p-2">
                         <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1 animate-pulse" />
                         <p className="text-[11px] font-semibold text-indigo-200">
-                          {liveSession.adminName || "Proctor / Instructor"}
+                          {liveSession.coHostName || liveSession.adminName || "Proctor / Instructor"}
                         </p>
                         <p className="text-[9px] text-indigo-300/80">Live Video Broadcast Active</p>
                       </div>
