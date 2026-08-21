@@ -219,6 +219,15 @@ export default function ConductLiveTest() {
     return unsub;
   }, [selectedSessionId]);
 
+  // Auto-dismiss session monitor when session ends (e.g. ended by Co-Host or Admin)
+  useEffect(() => {
+    if (currentSession && currentSession.status === "ended") {
+      setSelectedSessionId(null);
+      setCurrentSession(null);
+      setViewingSessionMode("list");
+    }
+  }, [currentSession]);
+
   // Subscribe to live test presence roster for current session
   useEffect(() => {
     if (!selectedSessionId) {
@@ -877,15 +886,19 @@ export default function ConductLiveTest() {
                   <Radio className="h-10 w-10 text-slate-300 mb-2" />
                   <p className="font-semibold text-slate-700">No Ongoing Live Tests</p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                    There are currently no active live test sessions running. Go to tab &quot;1. Select & Configure Test&quot; to launch a session.
+                    {isCohost
+                      ? "There are currently no active live test sessions assigned to you for proctoring."
+                      : 'There are currently no active live test sessions running. Go to tab "1. Select & Configure Test" to launch a session.'}
                   </p>
-                  <Button
-                    size="sm"
-                    className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
-                    onClick={() => setActiveTab("setup")}
-                  >
-                    Launch a Live Test Session
-                  </Button>
+                  {!isCohost && (
+                    <Button
+                      size="sm"
+                      className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium"
+                      onClick={() => setActiveTab("setup")}
+                    >
+                      Launch a Live Test Session
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -980,26 +993,6 @@ export default function ConductLiveTest() {
                     </Button>
                   )}
                 </div>
-
-                {activeSessions.length > 1 && (
-                  <div className="flex items-center gap-2 rounded-xl bg-slate-100 p-1.5 text-xs">
-                    <span className="font-semibold text-slate-600">Switch Session:</span>
-                    {activeSessions.map((s) => (
-                      <button
-                        key={s.id}
-                        onClick={() => setSelectedSessionId(s.id)}
-                        className={cn(
-                          "rounded-lg px-2.5 py-1 font-medium transition-all text-xs",
-                          selectedSessionId === s.id
-                            ? "bg-indigo-600 text-white shadow-xs"
-                            : "bg-white text-slate-700 hover:bg-slate-200",
-                        )}
-                      >
-                        {s.testTitle}
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
 
               {currentSession && (

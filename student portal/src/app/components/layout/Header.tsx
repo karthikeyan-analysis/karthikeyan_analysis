@@ -18,10 +18,11 @@ interface HeaderProps {
   onMenuClick?: () => void;
 }
 
-function resolvePageTitle(pathname: string): { panel: string; title: string } {
+function resolvePageTitle(pathname: string, isCohost?: boolean): { panel: string; title: string } {
   if (pathname.startsWith("/admin")) {
-    const panel = "Admin";
+    const panel = isCohost ? "Co-Host" : "Admin";
     if (pathname.startsWith("/admin/live-classes")) return { panel, title: "Live Classes" };
+    if (pathname.startsWith("/admin/live-tests")) return { panel, title: isCohost ? "Live Test Monitor" : "Live Test Engine" };
     if (pathname.startsWith("/admin/co-hosts")) return { panel, title: "Co-Host Management" };
     if (pathname.startsWith("/admin/tests/live-monitor")) return { panel, title: "Live Monitor" };
     if (pathname.startsWith("/admin/tests/analytics")) return { panel, title: "Test Analytics" };
@@ -35,7 +36,7 @@ function resolvePageTitle(pathname: string): { panel: string; title: string } {
     if (pathname.startsWith("/admin/public-registrations")) return { panel, title: "Public Registrations" };
     if (pathname.startsWith("/admin/portal-settings")) return { panel, title: "Portal Settings" };
     if (pathname === "/admin") return { panel, title: "Dashboard" };
-    return { panel, title: "Admin" };
+    return { panel, title: isCohost ? "Co-Host" : "Admin" };
   }
 
   const panel = "Student";
@@ -52,9 +53,10 @@ export default function Header({ onMenuClick }: HeaderProps) {
   const location = useLocation();
   const { displaySrc: avatarSrc } = useStudentPhoto();
 
+  const isCohost = user?.adminKind === "cohost";
   const { panel, title } = useMemo(
-    () => resolvePageTitle(location.pathname),
-    [location.pathname],
+    () => resolvePageTitle(location.pathname, isCohost),
+    [location.pathname, isCohost],
   );
 
   const handleLogout = () => {

@@ -17,6 +17,9 @@ function pullSafe(
   label: string,
   peerName: string,
 ): Observable<MediaStreamTrack> {
+  if (!partyTracks || typeof partyTracks.pull !== "function") {
+    return NEVER;
+  }
   return partyTracks.pull(meta$).pipe(
     catchError((err, caught) => {
       console.warn(`[live-class] ${label} pull failed`, peerName, err);
