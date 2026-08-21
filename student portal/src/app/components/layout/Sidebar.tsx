@@ -242,6 +242,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         { to: "/admin/live-classes?tab=meetings", icon: Video, label: "Meeting Links" },
         { to: "/admin/live-classes?tab=recordings", icon: Download, label: "Recordings" },
         { to: "/admin/live-classes?tab=attendance", icon: FileText, label: "Attendance" },
+        { to: "/admin/live-tests", icon: Award, label: "Live Test Monitor" },
       ],
     },
   ];

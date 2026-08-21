@@ -360,8 +360,8 @@ function LiveClassRoomInner({
         partyTracks={partyTracks}
         isLocal={isLocal}
         mediaReady={isConnected}
-        localVideoTrack$={isLocal && isCameraOn ? camera.broadcastTrack$ : undefined}
-        localAudioTrack$={isLocal && isMicOn ? mic.broadcastTrack$ : undefined}
+        localVideoTrack$={isLocal ? camera.broadcastTrack$ : undefined}
+        localAudioTrack$={isLocal ? mic.broadcastTrack$ : undefined}
         localScreenshareTrack$={isLocal && isScreenOn ? screenshare.video.broadcastTrack$ : undefined}
         spotlighted={spotlighted}
         actions={

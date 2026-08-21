@@ -110,14 +110,21 @@ export function useLiveClassPresence(params: {
   // Wait until partyTracks exists so the first push uses live tracks and
   // completes SDP — that is what brings PeerConnection to "connected".
   useEffect(() => {
-    if (!partyTracks) return;
     try {
       mic.enableSource();
       camera.enableSource();
+    } catch (err) {
+      console.warn("Could not auto-enable mic/camera sources", err);
+    }
+  }, [mic, camera]);
+
+  useEffect(() => {
+    if (!partyTracks) return;
+    try {
       mic.startBroadcasting();
       camera.startBroadcasting();
     } catch (err) {
-      console.warn("Could not auto-enable mic/camera", err);
+      console.warn("Could not auto-start broadcasting", err);
     }
   }, [partyTracks, mic, camera]);
 
