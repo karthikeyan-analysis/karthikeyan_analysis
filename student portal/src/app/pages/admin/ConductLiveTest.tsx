@@ -149,11 +149,36 @@ export default function ConductLiveTest() {
     });
   }, []);
 
+  const isCohost = user?.adminKind === "cohost";
+
+  // Filter active & scheduled sessions for Co-Host (only show sessions explicitly assigned to this co-host)
+  const displayActiveSessions = useMemo(() => {
+    if (!isCohost) return activeSessions;
+    return activeSessions.filter((s) => {
+      if (s.coHostId && s.coHostId === user?.id) return true;
+      if (s.coHostEmail && user?.email && s.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      if (s.scheduledByUid && s.scheduledByUid === user?.id) return true;
+      if (s.startedByUid && s.startedByUid === user?.id) return true;
+      return false;
+    });
+  }, [activeSessions, isCohost, user]);
+
+  const displayScheduledSessions = useMemo(() => {
+    if (!isCohost) return scheduledSessions;
+    return scheduledSessions.filter((s) => {
+      if (s.coHostId && s.coHostId === user?.id) return true;
+      if (s.coHostEmail && user?.email && s.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      if (s.scheduledByUid && s.scheduledByUid === user?.id) return true;
+      if (s.startedByUid && s.startedByUid === user?.id) return true;
+      return false;
+    });
+  }, [scheduledSessions, isCohost, user]);
+
   // Compute whether currently logged in user has operating access to currentSession
   const hasOperatingAccess = useMemo(() => {
     if (!user) return false;
     if (user.role === "admin" && user.adminKind !== "cohost") return true;
-    if (!currentSession) return true;
+    if (!currentSession) return false;
     if (currentSession.startedByUid === user.id || currentSession.scheduledByUid === user.id) return true;
     if (currentSession.coHostId && currentSession.coHostId === user.id) return true;
     if (currentSession.coHostEmail && user.email && currentSession.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
@@ -241,7 +266,6 @@ export default function ConductLiveTest() {
   }, [selectedSessionId]);
 
   // Hook into WebRTC for Admin / Co-Host in the active session
-  const isCohost = user?.adminKind === "cohost";
   const adminUid = user?.id || (isCohost ? "cohost" : "admin");
   const adminName = user?.name || (isCohost ? "Co-Host Proctor" : "Admin Proctor");
   const { partyTracks, camera, mic } = useLiveTestPresence({
@@ -510,9 +534,9 @@ export default function ConductLiveTest() {
             className="font-semibold relative text-xs sm:text-sm"
           >
             {isCohost ? "Live Student Proctoring Monitor" : "2. Ongoing Live Tests"}
-            {activeSessions.length > 0 && (
+            {displayActiveSessions.length > 0 && (
               <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] text-white font-bold">
-                {activeSessions.length}
+                {displayActiveSessions.length}
               </span>
             )}
           </TabsTrigger>
@@ -520,9 +544,9 @@ export default function ConductLiveTest() {
           {!isCohost && (
             <TabsTrigger value="schedule" className="font-semibold text-xs sm:text-sm">
               3. Scheduled Tests
-              {scheduledSessions.length > 0 && (
+              {displayScheduledSessions.length > 0 && (
                 <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white font-bold">
-                  {scheduledSessions.length}
+                  {displayScheduledSessions.length}
                 </span>
               )}
             </TabsTrigger>
@@ -873,7 +897,7 @@ export default function ConductLiveTest() {
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                     <Radio className="h-5 w-5 text-emerald-500 animate-pulse" />
-                    Ongoing Live Test Sessions ({activeSessions.length})
+                    Ongoing Live Test Sessions ({displayActiveSessions.length})
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
                     Select an ongoing test below to view its live proctoring grid and broadcast controls.
@@ -881,7 +905,7 @@ export default function ConductLiveTest() {
                 </div>
               </div>
 
-              {activeSessions.length === 0 ? (
+              {displayActiveSessions.length === 0 ? (
                 <div className="flex h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 shadow-xs">
                   <Radio className="h-10 w-10 text-slate-300 mb-2" />
                   <p className="font-semibold text-slate-700">No Ongoing Live Tests</p>
@@ -902,7 +926,7 @@ export default function ConductLiveTest() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {activeSessions.map((s) => {
+                  {displayActiveSessions.map((s) => {
                     const testBatches = s.batchIds?.length
                       ? batches
                           .filter((b) => s.batchIds!.includes(b.id))
@@ -1607,11 +1631,11 @@ export default function ConductLiveTest() {
             <CardHeader className="border-b border-slate-100 pb-3">
               <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Calendar className="h-5 w-5 text-indigo-600" />
-                Scheduled Tests Roster ({scheduledSessions.length})
+                Scheduled Tests Roster ({displayScheduledSessions.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-4">
-              {scheduledSessions.length === 0 ? (
+              {displayScheduledSessions.length === 0 ? (
                 <div className="flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-slate-500">
                   <CalendarClock className="h-8 w-8 text-slate-300 mb-1.5" />
                   <p className="font-semibold text-slate-700">No Scheduled Tests</p>
@@ -1621,7 +1645,7 @@ export default function ConductLiveTest() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {scheduledSessions.map((s) => {
+                  {displayScheduledSessions.map((s) => {
                     const testBatches = s.batchIds?.length
                       ? batches
                           .filter((b) => s.batchIds!.includes(b.id))
