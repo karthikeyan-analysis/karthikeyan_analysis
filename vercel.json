@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build",
-  "outputDirectory": "dist",
+  "buildCommand": "cd \"student portal\" && npm install && npm run build",
+  "outputDirectory": "student portal/dist",
   "framework": "vite",
   "rewrites": [
     {
