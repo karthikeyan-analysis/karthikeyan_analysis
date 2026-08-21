@@ -252,7 +252,6 @@ export default function TakeExam({
     const handleBlur = () => {
       setTabSwitchCount((prev) => {
         const next = prev + 1;
-        setShowTabWarningModal(true);
         if (liveSession?.id && user?.id) {
           void upsertLiveTestPresence(liveSession.id, user.id, {
             name: user.name || "Student",
@@ -1658,34 +1657,6 @@ export default function TakeExam({
       </div>
       </div>
 
-      {/* TAB SWITCH WARNING MODAL */}
-      {showTabWarningModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl space-y-4 border border-rose-200">
-            <div className="flex items-center gap-3 text-rose-600">
-              <ShieldAlert className="h-8 w-8 shrink-0" />
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Proctoring Alert: Tab Switched</h3>
-                <p className="text-xs text-rose-700 font-semibold">
-                  Warning #{tabSwitchCount} of {liveSession?.proctoringSettings?.maxTabSwitchWarnings || 3}
-                </p>
-              </div>
-            </div>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              You left the exam window or switched tabs. Live AI &amp; Admin proctors are monitoring your camera feed and browser focus.
-              Continued tab switching may result in immediate test termination.
-            </p>
-            <div className="flex justify-end">
-              <Button
-                className="bg-rose-600 hover:bg-rose-700 text-white font-semibold"
-                onClick={() => setShowTabWarningModal(false)}
-              >
-                Return to Exam Immediately
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* PROCTOR DIRECT WARNING MESSAGE MODAL */}
       {myPresence?.warningMessage && (
