@@ -181,40 +181,45 @@ function LiveClassRoomInner({
         },
         onUploaded: async (result) => {
           setRecordingHandle(null);
-          const newRecordingItem: LiveClassRecordingItem = {
-            id: `rec_${Date.now()}`,
-            key: result.key,
-            durationSec: result.durationSec,
-            sizeBytes: result.sizeBytes,
-            createdAt: new Date().toISOString(),
-            downloadUrl: result.downloadUrl,
-          };
+          try {
+            const newRecordingItem: LiveClassRecordingItem = {
+              id: `rec_${Date.now()}`,
+              key: result.key,
+              durationSec: result.durationSec || 0,
+              sizeBytes: result.sizeBytes || 0,
+              createdAt: new Date().toISOString(),
+              ...(result.downloadUrl ? { downloadUrl: result.downloadUrl } : {}),
+            };
 
-          const existingRecordings: LiveClassRecordingItem[] = Array.isArray(cls.recordings) ? [...cls.recordings] : [];
-          if (cls.recordingKey && !existingRecordings.some((r) => r.key === cls.recordingKey)) {
-            existingRecordings.unshift({
-              id: "rec_legacy",
-              key: cls.recordingKey,
-              durationSec: cls.recordingDurationSec,
-              sizeBytes: cls.recordingSizeBytes,
-              createdAt: cls.activeSince || cls.createdAt || new Date().toISOString(),
-              downloadUrl: cls.recordingDownloadUrl,
-            });
+            const existingRecordings: LiveClassRecordingItem[] = Array.isArray(cls.recordings) ? [...cls.recordings] : [];
+            if (cls.recordingKey && !existingRecordings.some((r) => r.key === cls.recordingKey)) {
+              existingRecordings.unshift({
+                id: "rec_legacy",
+                key: cls.recordingKey,
+                durationSec: cls.recordingDurationSec || 0,
+                sizeBytes: cls.recordingSizeBytes || 0,
+                createdAt: cls.activeSince || cls.createdAt || new Date().toISOString(),
+                ...(cls.recordingDownloadUrl ? { downloadUrl: cls.recordingDownloadUrl } : {}),
+              });
+            }
+
+            const updatedRecordings = [...existingRecordings, newRecordingItem];
+
+            const updatePayload: Record<string, any> = {
+              recordingStatus: "ready",
+              recordingKey: result.key,
+              recordingDurationSec: result.durationSec || 0,
+              recordingSizeBytes: result.sizeBytes || 0,
+              recordings: updatedRecordings,
+            };
+            if (result.downloadUrl) {
+              updatePayload.recordingDownloadUrl = result.downloadUrl;
+            }
+            await updateLiveClass(classId, updatePayload);
+          } catch (uploadErr) {
+            console.error("Error saving recording data to Firestore:", uploadErr);
+            await updateLiveClass(classId, { recordingStatus: "ready" });
           }
-
-          const updatedRecordings = [...existingRecordings, newRecordingItem];
-
-          const updatePayload: Record<string, any> = {
-            recordingStatus: "ready",
-            recordingKey: result.key,
-            recordingDurationSec: result.durationSec,
-            recordingSizeBytes: result.sizeBytes,
-            recordings: updatedRecordings,
-          };
-          if (result.downloadUrl) {
-            updatePayload.recordingDownloadUrl = result.downloadUrl;
-          }
-          await updateLiveClass(classId, updatePayload);
         },
         onError: async (err) => {
           setRecordingHandle(null);

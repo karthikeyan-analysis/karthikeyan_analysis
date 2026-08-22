@@ -165,6 +165,23 @@ export function subscribeToLiveClass(
   });
 }
 
+function removeUndefinedFields(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (Array.isArray(obj)) {
+    return obj.map(removeUndefinedFields);
+  }
+  if (typeof obj === "object") {
+    const clean: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      if (obj[key] !== undefined) {
+        clean[key] = removeUndefinedFields(obj[key]);
+      }
+    }
+    return clean;
+  }
+  return obj;
+}
+
 export async function updateLiveClass(id: string, updates: Partial<LiveClass>): Promise<void> {
   const u = updates as Partial<LiveClass> & { batchIds?: string[] };
   const payload: Record<string, any> = { ...u, updatedAt: new Date().toISOString() };
@@ -173,7 +190,8 @@ export async function updateLiveClass(id: string, updates: Partial<LiveClass>): 
     payload.batchId = fields.batchId;
     payload.batchIds = fields.batchIds;
   }
-  await updateDoc(liveClassRef(id), payload);
+  const cleanPayload = removeUndefinedFields(payload);
+  await updateDoc(liveClassRef(id), cleanPayload);
 }
 
 export async function endLiveClass(id: string): Promise<void> {
