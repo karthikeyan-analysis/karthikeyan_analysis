@@ -486,45 +486,44 @@ export default function LiveClassManagement() {
     setPreviewOpen(true);
     setPreviewUrl("");
 
-    let rawUrl = rec?.downloadUrl || (!rec ? cls.recordingDownloadUrl : undefined);
+    let targetUrl = rec?.downloadUrl || (!rec ? cls.recordingDownloadUrl : undefined);
 
-    if (!rawUrl) {
+    if (!targetUrl) {
       try {
         const { url } = await requestRecordingPlaybackUrl(cls.id, {
           recordingKey: rec?.key || cls.recordingKey,
         });
         if (url) {
-          rawUrl = url;
+          targetUrl = url;
         }
       } catch (e: any) {
-        console.warn("Playback URL generation warning:", e);
+        console.warn("Playback URL generation notice:", e);
       }
     }
 
-    if (!rawUrl) {
-      alert("Recording video URL is unavailable.");
+    if (!targetUrl) {
+      alert("Recording video stream is currently processing or unavailable.");
       setPreviewOpen(false);
       setLoadingPreview(false);
       return;
     }
 
-    const cleanUrl = rawUrl.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "").trim();
+    const cleanUrl = targetUrl.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "").trim();
+
+    setPreviewUrl(cleanUrl);
+    setLoadingPreview(false);
 
     try {
-      // Fetch media blob and create local blob: URL to eliminate CORS/Range browser video playback blocks
-      const response = await fetch(cleanUrl);
-      if (response.ok) {
-        const videoBlob = await response.blob();
-        const objectUrl = URL.createObjectURL(videoBlob);
-        setPreviewUrl(objectUrl);
-      } else {
-        setPreviewUrl(cleanUrl);
+      const res = await fetch(cleanUrl, { mode: "cors" });
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob.size > 0) {
+          const blobUrl = URL.createObjectURL(blob);
+          setPreviewUrl(blobUrl);
+        }
       }
-    } catch (fetchErr) {
-      console.warn("Direct blob stream notice, using fallback URL:", fetchErr);
-      setPreviewUrl(cleanUrl);
-    } finally {
-      setLoadingPreview(false);
+    } catch {
+      // Fallback cleanUrl remains active
     }
   };
 
