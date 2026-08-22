@@ -208,12 +208,22 @@ export default function TakeExam({
 
   const studentCamVideoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    const sub = camera.broadcastTrack$.subscribe((track) => {
+    try {
+      camera.enableSource();
+      camera.startBroadcasting();
+    } catch (e) {
+      console.warn("Student camera start notice:", e);
+    }
+  }, [camera]);
+
+  useEffect(() => {
+    const sub = camera.broadcastTrack$.subscribe((bt) => {
       const el = studentCamVideoRef.current;
       if (!el) return;
+      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
       if (track) {
         const ms = new MediaStream();
-        ms.addTrack(track);
+        ms.addTrack(track as MediaStreamTrack);
         el.srcObject = ms;
       } else {
         el.srcObject = null;
@@ -266,11 +276,11 @@ export default function TakeExam({
     };
   }, [roster, liveSession]);
 
-  // Real-time listener for force-submit trigger from Admin/Co-Host
+  // Real-time listener for force-submit trigger or session end from Admin/Co-Host
   const forceSubmittedHandled = useRef(false);
   useEffect(() => {
     if (!liveSession?.id || !user?.id || attemptStatus === "submitted") return;
-    const unsub = subscribeToLiveTestPresence(liveSession.id, (list) => {
+    const unsubPresence = subscribeToLiveTestPresence(liveSession.id, (list) => {
       const selfPres = list.find((p) => p.uid === user.id);
       if (selfPres?.forceSubmittedByAdmin && !forceSubmittedHandled.current) {
         forceSubmittedHandled.current = true;
@@ -278,7 +288,17 @@ export default function TakeExam({
         void handleFinalSubmit();
       }
     });
-    return unsub;
+    const unsubSession = subscribeToLiveTestSession(liveSession.id, (sess) => {
+      if (sess?.status === "ended" && !forceSubmittedHandled.current) {
+        forceSubmittedHandled.current = true;
+        setNotificationToast("⚠️ The instructor has ended this live test session.");
+        void handleFinalSubmit();
+      }
+    });
+    return () => {
+      unsubPresence();
+      unsubSession();
+    };
   }, [liveSession?.id, user?.id, attemptStatus]);
 
   // Tab Switch / Focus Loss Proctoring Detector
@@ -1674,28 +1694,7 @@ export default function TakeExam({
               </div>
             </div>
 
-            <div className="shrink-0 pt-3 border-t border-slate-200 mt-2 pb-4">
-              <Button
-                size="sm"
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 shadow-md text-xs"
-                onClick={() => {
-                  if (confirm("Are you sure you want to submit your exam now?")) {
-                    void handleSubmit();
-                  }
-                }}
-                disabled={!isAttemptActive || submitting || saving}
-              >
-                {submitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting Exam...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Exam Now
-                  </>
-                )}
-              </Button>
-            </div>
+
           </CardContent>
         </Card>
       </div>

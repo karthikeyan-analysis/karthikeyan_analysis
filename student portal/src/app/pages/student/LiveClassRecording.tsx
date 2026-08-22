@@ -208,72 +208,16 @@ export default function LiveClassRecording() {
             ) : null}
           </div>
 
-          <div className="border-t border-slate-200 bg-slate-50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="border-t border-slate-200 bg-slate-50 p-4 flex items-center justify-between gap-3">
             <div className="flex items-start gap-3">
-              <Shield className="mt-0.5 h-5 w-5 flex-shrink-0 text-slate-500" />
+              <Shield className="mt-0.5 h-5 w-5 flex-shrink-0 text-indigo-600" />
               <div>
-                <p className="text-sm font-medium text-slate-900">Recorded Session Playback</p>
+                <p className="text-sm font-semibold text-slate-900">Secure Recorded Session Playback</p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Stream securely or download the raw recording file directly to your device.
+                  Protected stream. Downloads and video saving are disabled.
                 </p>
               </div>
             </div>
-            {playbackUrl ? (
-              <Button
-                size="sm"
-                className="bg-indigo-600 hover:bg-indigo-700 font-medium self-start sm:self-auto"
-                onClick={async () => {
-                  if (!cls?.id) return;
-                  const safeName = (cls?.name || "recording").replace(/[^a-z0-9_-]/gi, "_");
-                  const filename = `${safeName}_recording.webm`;
-                  try {
-                    let downloadUrl = "";
-                    try {
-                      const res = await requestRecordingPlaybackUrl(cls.id, {
-                        disposition: "attachment",
-                        filename,
-                      });
-                      if (res.url) downloadUrl = res.url;
-                    } catch {
-                      downloadUrl = playbackUrl;
-                    }
-
-                    try {
-                      const response = await fetch(downloadUrl);
-                      if (response.ok) {
-                        const blob = await response.blob();
-                        const blobUrl = URL.createObjectURL(blob);
-                        const a = document.createElement("a");
-                        a.href = blobUrl;
-                        a.download = filename;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                        setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-                        return;
-                      }
-                    } catch {}
-
-                    const a = document.createElement("a");
-                    a.href = downloadUrl;
-                    a.download = filename;
-                    a.target = "_blank";
-                    a.rel = "noopener noreferrer";
-                    document.body.appendChild(a);
-                    a.click();
-                    setTimeout(() => {
-                      try {
-                        document.body.removeChild(a);
-                      } catch {}
-                    }, 2000);
-                  } catch (err) {
-                    console.error("Student download error", err);
-                  }
-                }}
-              >
-                <Download className="mr-1.5 h-4 w-4" /> Download Recording
-              </Button>
-            ) : null}
           </div>
         </CardContent>
       </Card>

@@ -281,12 +281,13 @@ export default function ConductLiveTest() {
   // Wire admin's local camera stream into the <video> element
   const adminVideoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
-    const sub = camera.broadcastTrack$.subscribe((track) => {
+    const sub = camera.broadcastTrack$.subscribe((bt) => {
       const el = adminVideoRef.current;
       if (!el) return;
+      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
       if (track) {
         const ms = new MediaStream();
-        ms.addTrack(track);
+        ms.addTrack(track as MediaStreamTrack);
         el.srcObject = ms;
       } else {
         el.srcObject = null;
