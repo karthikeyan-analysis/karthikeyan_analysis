@@ -52,7 +52,10 @@ exports.getRecordingPlaybackUrl = (0, https_1.onCall)({ cors: true, secrets: [r2
     if (!classSnap.exists)
         throw new https_1.HttpsError("not-found", "Class not found");
     const cls = classSnap.data();
-    const recordingKey = request.data?.recordingKey || cls.recordingKey;
+    let recordingKey = request.data?.recordingKey || cls.recordingKey;
+    if (!recordingKey && Array.isArray(cls.recordings) && cls.recordings.length > 0) {
+        recordingKey = cls.recordings[0]?.key || cls.recordings[0]?.recordingKey;
+    }
     if (!recordingKey) {
         throw new https_1.HttpsError("failed-precondition", "Recording is not ready yet.");
     }

@@ -20,7 +20,11 @@ export const getRecordingPlaybackUrl = onCall(
     if (!classSnap.exists) throw new HttpsError("not-found", "Class not found");
     const cls = classSnap.data() as Record<string, any>;
 
-    const recordingKey = (request.data?.recordingKey as string) || cls.recordingKey;
+    let recordingKey = (request.data?.recordingKey as string) || cls.recordingKey;
+
+    if (!recordingKey && Array.isArray(cls.recordings) && cls.recordings.length > 0) {
+      recordingKey = cls.recordings[0]?.key || cls.recordings[0]?.recordingKey;
+    }
 
     if (!recordingKey) {
       throw new HttpsError("failed-precondition", "Recording is not ready yet.");

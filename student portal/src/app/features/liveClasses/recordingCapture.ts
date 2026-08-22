@@ -219,7 +219,7 @@ export async function startRecordingCapture(params: {
               .replace(/[\r\n]/g, "");
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
 
             const cleanHeaderContentType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
             const putRes = await fetch(cleanUploadUrl, {
