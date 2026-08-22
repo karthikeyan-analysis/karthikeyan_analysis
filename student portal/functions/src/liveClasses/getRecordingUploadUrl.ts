@@ -27,8 +27,8 @@ export const getRecordingUploadUrl = onCall(
     const cls = classSnap.data() as Record<string, any>;
 
     const access = await resolveCallerAccess(db, uid, cls);
-    if (access.kind !== "host" && access.kind !== "co-host") {
-      throw new HttpsError("permission-denied", "Only the host or co-host can upload a recording.");
+    if (access.kind !== "host" && access.kind !== "co-host" && access.kind !== "admin") {
+      throw new HttpsError("permission-denied", "Only the host, co-host, or admin can upload a recording.");
     }
 
     const cleanContentType = contentType.includes("mp4") ? "video/mp4" : "video/webm";

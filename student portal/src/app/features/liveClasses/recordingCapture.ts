@@ -205,13 +205,18 @@ export async function startRecordingCapture(params: {
 
         // Tier 1: Cloudflare R2 Upload
         try {
-          const uploadData =
-            prefetchedUploadData ||
-            (await Promise.race([
-              prefetchedPromise,
-              new Promise<null>((r) => setTimeout(() => r(null), 3000)),
-            ])) ||
-            (await getUploadUrl({ classId: params.classId, contentType: mimeType })).data;
+          let uploadData: any = prefetchedUploadData;
+          if (!uploadData) {
+            try {
+              const res = await Promise.race([
+                prefetchedPromise,
+                getUploadUrl({ classId: params.classId, contentType: mimeType }),
+              ]);
+              uploadData = (res as any)?.data;
+            } catch (getErr) {
+              console.warn("R2 presigned upload URL notice:", getErr);
+            }
+          }
 
           if (uploadData?.url) {
             const cleanUploadUrl = (uploadData.url || "")

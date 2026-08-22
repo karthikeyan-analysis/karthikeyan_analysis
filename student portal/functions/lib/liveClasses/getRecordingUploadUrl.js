@@ -60,8 +60,8 @@ exports.getRecordingUploadUrl = (0, https_1.onCall)({ cors: true, secrets: [r2Cl
         throw new https_1.HttpsError("not-found", "Class not found");
     const cls = classSnap.data();
     const access = await (0, access_1.resolveCallerAccess)(db, uid, cls);
-    if (access.kind !== "host" && access.kind !== "co-host") {
-        throw new https_1.HttpsError("permission-denied", "Only the host or co-host can upload a recording.");
+    if (access.kind !== "host" && access.kind !== "co-host" && access.kind !== "admin") {
+        throw new https_1.HttpsError("permission-denied", "Only the host, co-host, or admin can upload a recording.");
     }
     const cleanContentType = contentType.includes("mp4") ? "video/mp4" : "video/webm";
     const ext = cleanContentType.includes("mp4") ? "mp4" : "webm";
