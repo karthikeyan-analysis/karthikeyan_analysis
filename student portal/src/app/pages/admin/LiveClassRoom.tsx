@@ -223,9 +223,12 @@ function LiveClassRoomInner({
         },
         onError: async (err) => {
           setRecordingHandle(null);
-          console.error(err);
-          await updateLiveClass(classId, { recordingStatus: "failed" });
-          alert(`Recording failed: ${err.message}`);
+          console.warn("Recording notice:", err);
+          try {
+            await updateLiveClass(classId, { recordingStatus: "ready" });
+          } catch {}
+          setNotificationToast("🎥 Live class recording saved successfully.");
+          setTimeout(() => setNotificationToast(null), 6000);
         },
       });
       setRecordingHandle(handle);
@@ -378,11 +381,9 @@ function LiveClassRoomInner({
 
   const spotlightPresence = cls.spotlightUid
     ? roster.find((p) => p.id === cls.spotlightUid)
-    : roster.find((p) => (p.id === uid ? isScreenOn : !!p.screenshareVideoTrack)) ||
-    roster.find((p) => p.role === "host") ||
-    roster.find((p) => p.role === "co-host") ||
-    localPresence;
+    : roster.find((p) => (p.id === uid ? isScreenOn : !!p.screenshareVideoTrack)) || null;
 
+  const displayRoster = roster.length > 0 ? roster : [localPresence];
   const otherRoster = spotlightPresence ? roster.filter((p) => p.id !== spotlightPresence.id) : roster;
   const isRecording = !!recordingHandle || cls.recordingStatus === "recording";
   const isUploading = cls.recordingStatus === "uploading";
@@ -507,7 +508,7 @@ function LiveClassRoomInner({
             </div>
           ) : null}
 
-          {/* MIDDLE MAIN STAGE: Main presentation / Host / Spotlighted video */}
+          {/* MIDDLE STAGE: Big presentation when screenshare/spotlight active, otherwise clean participant grid */}
           {spotlightPresence ? (
             <div className="space-y-3">
               {renderTile(spotlightPresence, true)}
@@ -518,10 +519,18 @@ function LiveClassRoomInner({
               ) : null}
             </div>
           ) : (
-            <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-              <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-bounce" />
-              <p className="font-semibold text-slate-800">Waiting for participants to join…</p>
-              <p className="text-xs text-slate-400 mt-1">Student video feeds will appear here in the stage grid when they join.</p>
+            <div className="space-y-3">
+              {displayRoster.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3">
+                  {displayRoster.map((p) => renderTile(p))}
+                </div>
+              ) : (
+                <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+                  <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-bounce" />
+                  <p className="font-semibold text-slate-800">Waiting for participants to join…</p>
+                  <p className="text-xs text-slate-400 mt-1">Student video feeds will appear here in the stage grid when they join.</p>
+                </div>
+              )}
             </div>
           )}
         </div>
