@@ -974,7 +974,9 @@ export default function ConductLiveTest() {
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-slate-500">Proctor:</span>
-                              <span className="font-semibold text-slate-800">{s.adminName || "Admin"}</span>
+                              <span className="font-semibold text-slate-800">
+                                {s.coHostName || s.coHostEmail || s.adminName || "Admin"}
+                              </span>
                             </div>
                           </div>
 

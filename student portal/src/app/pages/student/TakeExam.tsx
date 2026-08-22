@@ -510,7 +510,15 @@ export default function TakeExam({
         ]);
         if (cancelled) return;
 
-        if (!attempt) {
+        const isLiveActiveSession = Boolean(liveSession && liveSession.status === "active" && liveSession.startedAt);
+        const isStaleAttemptFromPreviousRun = Boolean(
+          attempt &&
+          isLiveActiveSession &&
+          attempt.startedAt &&
+          new Date(attempt.startedAt).getTime() < new Date(liveSession!.startedAt!).getTime()
+        );
+
+        if (!attempt || isStaleAttemptFromPreviousRun) {
           const isLiveActive = Boolean(
             (liveSession && liveSession.status === "active") ||
             test.status === "published" ||
