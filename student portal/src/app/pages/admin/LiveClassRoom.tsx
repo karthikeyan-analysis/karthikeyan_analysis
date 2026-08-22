@@ -499,29 +499,21 @@ function LiveClassRoomInner({
             </div>
           ) : null}
 
-          {/* MIDDLE MAIN STAGE: Student video screens as elements */}
-          {spotlightPresence && spotlightPresence.id !== uid ? (
+          {/* MIDDLE MAIN STAGE: Main presentation / Host / Spotlighted video */}
+          {spotlightPresence ? (
             <div className="space-y-3">
               {renderTile(spotlightPresence, true)}
-              {otherRoster.filter((p) => p.id !== uid).length > 0 ? (
+              {otherRoster.length > 0 ? (
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-                  {otherRoster.filter((p) => p.id !== uid).map((p) => renderTile(p))}
+                  {otherRoster.map((p) => renderTile(p))}
                 </div>
               ) : null}
             </div>
           ) : (
-            <div className="space-y-3">
-              {roster.filter((p) => p.id !== uid).length > 0 ? (
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {roster.filter((p) => p.id !== uid).map((p) => renderTile(p))}
-                </div>
-              ) : (
-                <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
-                  <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-bounce" />
-                  <p className="font-semibold text-slate-800">Waiting for students to join…</p>
-                  <p className="text-xs text-slate-400 mt-1">Student video feeds will appear here in the middle stage when they join.</p>
-                </div>
-              )}
+            <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
+              <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-bounce" />
+              <p className="font-semibold text-slate-800">Waiting for participants to join…</p>
+              <p className="text-xs text-slate-400 mt-1">Student video feeds will appear here in the stage grid when they join.</p>
             </div>
           )}
         </div>
@@ -598,27 +590,29 @@ function LiveClassRoomInner({
             </div>
           </div>
 
-          {/* HOST'S OWN VIDEO PREVIEW TILE IN BOTTOM RIGHT CORNER BELOW CHAT/DOUBTS */}
-          <div className="rounded-xl border border-indigo-200 bg-white p-3 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
-                Your Video (Host)
-              </p>
-              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">Self</span>
+          {/* HOST'S OWN VIDEO PREVIEW TILE WHEN NOT SPOTLIGHTED ON MAIN STAGE */}
+          {spotlightPresence?.id !== uid ? (
+            <div className="rounded-xl border border-indigo-200 bg-white p-3 shadow-sm space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
+                  Your Video ({role})
+                </p>
+                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">Self</span>
+              </div>
+              <div className="overflow-hidden rounded-lg">
+                {renderTile(
+                  roster.find((p) => p.id === uid) || {
+                    id: uid,
+                    name,
+                    role,
+                    mutedByHost: false,
+                    videoDisabledByHost: false,
+                  },
+                )}
+              </div>
             </div>
-            <div className="overflow-hidden rounded-lg">
-              {renderTile(
-                roster.find((p) => p.id === uid) || {
-                  id: uid,
-                  name,
-                  role,
-                  mutedByHost: false,
-                  videoDisabledByHost: false,
-                },
-              )}
-            </div>
-          </div>
+          ) : null}
         </div>
       </div>
 

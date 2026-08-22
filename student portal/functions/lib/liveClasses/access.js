@@ -13,13 +13,21 @@ async function resolveCallerAccess(db, uid, cls) {
     ]);
     const userDoc = userSnap.data();
     const adminDoc = adminSnap.data();
-    // Mirror firestore.rules isAdmin(): users.role OR admins profile.
-    const isAdminCaller = userDoc?.role === "admin" || adminDoc?.role === "admin";
-    if (isAdminCaller) {
-        if ((cls.hostUids || []).includes(uid))
-            return { kind: "host" };
-        if ((cls.coHostUids || []).includes(uid))
-            return { kind: "co-host" };
+    // Check explicit host / co-host assignment on the live class first
+    if ((cls.hostUids || []).includes(uid))
+        return { kind: "host" };
+    if ((cls.coHostUids || []).includes(uid))
+        return { kind: "co-host" };
+    // Mirror firestore.rules isAdmin(): users.role OR admins profile OR cohost profile.
+    const isStaffCaller = userDoc?.role === "admin" ||
+        adminDoc?.role === "admin" ||
+        userDoc?.role === "cohost" ||
+        adminDoc?.role === "cohost" ||
+        userDoc?.adminKind === "cohost" ||
+        adminDoc?.adminKind === "cohost" ||
+        userDoc?.kind === "cohost" ||
+        adminDoc?.kind === "cohost";
+    if (isStaffCaller) {
         return { kind: "admin" };
     }
     const studentRecordId = userDoc?.studentRecordId;

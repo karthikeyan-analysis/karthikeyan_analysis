@@ -141,24 +141,24 @@ export function useLiveClassPresence(params: {
 
   const audioMeta$ = useMemo(
     () =>
-      partyTracks && isPcConnected
+      partyTracks
         ? partyTracks.push(mic.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, mic, isPcConnected],
+    [partyTracks, mic],
   );
   const videoMeta$ = useMemo(
     () =>
-      partyTracks && isPcConnected
+      partyTracks
         ? partyTracks.push(camera.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, camera, isPcConnected],
+    [partyTracks, camera],
   );
   const screenMeta$ = useMemo(
     () =>
-      partyTracks && isScreenOn && isPcConnected
+      partyTracks && isScreenOn
         ? partyTracks.push(screenshare.video.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, screenshare, isScreenOn, isPcConnected],
+    [partyTracks, screenshare, isScreenOn],
   );
 
   const audioMeta = useObservableAsValue(audioMeta$);
