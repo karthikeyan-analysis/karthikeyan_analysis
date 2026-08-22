@@ -12,14 +12,20 @@ exports.r2AccountId = (0, params_1.defineSecret)("R2_ACCOUNT_ID");
 exports.r2AccessKeyId = (0, params_1.defineSecret)("R2_ACCESS_KEY_ID");
 exports.r2SecretAccessKey = (0, params_1.defineSecret)("R2_SECRET_ACCESS_KEY");
 exports.r2Bucket = (0, params_1.defineSecret)("R2_BUCKET");
+function cleanString(val) {
+    return (val || "")
+        .replace(/%0D%0A/gi, "")
+        .replace(/[\r\n\t\f\v]/g, "")
+        .trim();
+}
 function getCleanSecret(secret, fallback = "") {
     try {
         const val = secret.value();
         if (val)
-            return val.trim().replace(/[\r\n]/g, "");
+            return cleanString(val);
     }
     catch { }
-    return fallback;
+    return cleanString(fallback);
 }
 function getR2Client() {
     return new client_s3_1.S3Client({
@@ -36,7 +42,7 @@ function getR2Client() {
 async function ensureR2BucketCors() {
     try {
         const client = getR2Client();
-        const bucketName = getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings");
+        const bucketName = cleanString(getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings"));
         await client.send(new client_s3_1.PutBucketCorsCommand({
             Bucket: bucketName,
             CORSConfiguration: {
@@ -64,8 +70,8 @@ async function ensureR2BucketCors() {
  */
 async function getPresignedUploadUrl(key, contentType, expiresInSeconds = 3600) {
     void ensureR2BucketCors();
-    const bucketName = getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings");
-    const cleanKey = key.trim().replace(/[\r\n]/g, "");
+    const bucketName = cleanString(getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings"));
+    const cleanKey = cleanString(key);
     const commandInput = { Bucket: bucketName, Key: cleanKey };
     if (contentType) {
         commandInput.ContentType = contentType;
@@ -74,8 +80,8 @@ async function getPresignedUploadUrl(key, contentType, expiresInSeconds = 3600) 
     return (0, s3_request_presigner_1.getSignedUrl)(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
 async function getPresignedDownloadUrl(key, expiresInSeconds, options) {
-    const bucketName = getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings");
-    const cleanKey = key.trim().replace(/[\r\n]/g, "");
+    const bucketName = cleanString(getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings"));
+    const cleanKey = cleanString(key);
     const commandInput = { Bucket: bucketName, Key: cleanKey };
     if (options?.disposition === "attachment" || options?.filename) {
         const safeFilename = (options.filename || "recording.webm").replace(/[^a-zA-Z0-9_\.-]/g, "_");

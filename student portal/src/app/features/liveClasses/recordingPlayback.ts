@@ -26,5 +26,11 @@ export async function requestRecordingPlaybackUrl(
     filename: options?.filename,
     recordingKey: options?.recordingKey,
   });
-  return data;
+
+  const cleanUrl = (data.url || "")
+    .replace(/%0D%0A/gi, "")
+    .replace(/[\r\n]/g, "")
+    .trim();
+
+  return { url: cleanUrl, expiresIn: data.expiresIn };
 }

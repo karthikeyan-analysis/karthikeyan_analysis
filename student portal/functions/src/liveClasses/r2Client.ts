@@ -7,12 +7,19 @@ export const r2AccessKeyId = defineSecret("R2_ACCESS_KEY_ID");
 export const r2SecretAccessKey = defineSecret("R2_SECRET_ACCESS_KEY");
 export const r2Bucket = defineSecret("R2_BUCKET");
 
+function cleanString(val: string): string {
+  return (val || "")
+    .replace(/%0D%0A/gi, "")
+    .replace(/[\r\n\t\f\v]/g, "")
+    .trim();
+}
+
 function getCleanSecret(secret: ReturnType<typeof defineSecret>, fallback = ""): string {
   try {
     const val = secret.value();
-    if (val) return val.trim().replace(/[\r\n]/g, "");
+    if (val) return cleanString(val);
   } catch {}
-  return fallback;
+  return cleanString(fallback);
 }
 
 export function getR2Client(): S3Client {
@@ -31,7 +38,7 @@ export function getR2Client(): S3Client {
 export async function ensureR2BucketCors(): Promise<void> {
   try {
     const client = getR2Client();
-    const bucketName = getCleanSecret(r2Bucket, "kasc-live-class-recordings");
+    const bucketName = cleanString(getCleanSecret(r2Bucket, "kasc-live-class-recordings"));
     await client.send(
       new PutBucketCorsCommand({
         Bucket: bucketName,
@@ -61,8 +68,8 @@ export async function ensureR2BucketCors(): Promise<void> {
  */
 export async function getPresignedUploadUrl(key: string, contentType?: string, expiresInSeconds = 3600) {
   void ensureR2BucketCors();
-  const bucketName = getCleanSecret(r2Bucket, "kasc-live-class-recordings");
-  const cleanKey = key.trim().replace(/[\r\n]/g, "");
+  const bucketName = cleanString(getCleanSecret(r2Bucket, "kasc-live-class-recordings"));
+  const cleanKey = cleanString(key);
   const commandInput: Record<string, any> = { Bucket: bucketName, Key: cleanKey };
   if (contentType) {
     commandInput.ContentType = contentType;
@@ -76,8 +83,8 @@ export async function getPresignedDownloadUrl(
   expiresInSeconds: number,
   options?: { disposition?: "inline" | "attachment"; filename?: string },
 ) {
-  const bucketName = getCleanSecret(r2Bucket, "kasc-live-class-recordings");
-  const cleanKey = key.trim().replace(/[\r\n]/g, "");
+  const bucketName = cleanString(getCleanSecret(r2Bucket, "kasc-live-class-recordings"));
+  const cleanKey = cleanString(key);
   const commandInput: Record<string, any> = { Bucket: bucketName, Key: cleanKey };
 
   if (options?.disposition === "attachment" || options?.filename) {
