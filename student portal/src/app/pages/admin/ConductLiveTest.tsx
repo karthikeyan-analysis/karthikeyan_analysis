@@ -505,7 +505,6 @@ export default function ConductLiveTest() {
 
   const handleForceSubmit = async (p: LiveTestPresence) => {
     if (!selectedSessionId) return;
-    if (!confirm(`Force submit ${p.name}'s test attempt immediately?`)) return;
     try {
       await forceSubmitStudentAttempt(selectedSessionId, p.uid);
     } catch (err) {

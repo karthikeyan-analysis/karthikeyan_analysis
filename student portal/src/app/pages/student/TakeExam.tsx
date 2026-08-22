@@ -225,52 +225,35 @@ export default function TakeExam({
   const proctorPresence = useMemo(() => {
     if (!liveSession) return null;
 
-    const hasCohostAssigned = Boolean(
-      liveSession.coHostId ||
-      liveSession.coHostEmail ||
-      (liveSession.coHostName && liveSession.coHostName.trim().length > 0)
-    );
+    // Rule 1: Admin priority — if an active Admin is in room roster, prioritize Admin stream!
+    const adminInRoster = roster.find(
+      (p) => (p.role === "admin" || p.uid === liveSession.startedByUid) && p.videoTrack
+    ) || roster.find((p) => p.role === "admin" || p.uid === liveSession.startedByUid);
 
-    if (hasCohostAssigned) {
-      // Co-Host is assigned to this session — prioritize Co-Host stream
-      const cohostEntry = roster.find(
-        (p) =>
-          p.role === "cohost" ||
+    if (adminInRoster) return adminInRoster;
+
+    // Rule 2: Co-Host priority — if Co-Host assigned/present, show Co-Host stream
+    const cohostInRoster = roster.find(
+      (p) =>
+        (p.role === "cohost" ||
           (liveSession.coHostId && p.uid === liveSession.coHostId) ||
-          (liveSession.coHostEmail && p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase())
-      );
-
-      if (cohostEntry) return cohostEntry;
-
-      return {
-        id: liveSession.coHostId || "cohost",
-        uid: liveSession.coHostId || "cohost",
-        name: liveSession.coHostName || "Co-Host Proctor",
-        role: "cohost" as const,
-        sessionId: liveSession.id,
-        cameraStatus: "active" as const,
-        tabSwitchCount: 0,
-        isTabActive: true,
-        currentQuestionIndex: 0,
-        totalAnswered: 0,
-        totalQuestions: 0,
-        isSubmitted: false,
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    // No Co-Host assigned — fallback to Admin stream
-    const adminEntry = roster.find(
-      (p) => p.role === "admin" || p.uid === liveSession.startedByUid
+          (liveSession.coHostEmail && p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase())) &&
+        p.videoTrack
+    ) || roster.find(
+      (p) =>
+        p.role === "cohost" ||
+        (liveSession.coHostId && p.uid === liveSession.coHostId) ||
+        (liveSession.coHostEmail && p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase())
     );
 
-    if (adminEntry) return adminEntry;
+    if (cohostInRoster) return cohostInRoster;
 
+    // Rule 3: Fallback proctor
     return {
-      id: liveSession.startedByUid || "proctor",
-      uid: liveSession.startedByUid || "proctor",
-      name: liveSession.adminName || "Proctor / Instructor",
-      role: "admin" as const,
+      id: liveSession.coHostId || liveSession.startedByUid || "proctor",
+      uid: liveSession.coHostId || liveSession.startedByUid || "proctor",
+      name: liveSession.coHostName || liveSession.adminName || "Proctor / Instructor",
+      role: (liveSession.coHostId ? "cohost" : "admin") as any,
       sessionId: liveSession.id,
       cameraStatus: "active" as const,
       tabSwitchCount: 0,
@@ -282,6 +265,21 @@ export default function TakeExam({
       updatedAt: new Date().toISOString(),
     };
   }, [roster, liveSession]);
+
+  // Real-time listener for force-submit trigger from Admin/Co-Host
+  const forceSubmittedHandled = useRef(false);
+  useEffect(() => {
+    if (!liveSession?.id || !user?.id || attemptStatus === "submitted") return;
+    const unsub = subscribeToLiveTestPresence(liveSession.id, (list) => {
+      const selfPres = list.find((p) => p.uid === user.id);
+      if (selfPres?.forceSubmittedByAdmin && !forceSubmittedHandled.current) {
+        forceSubmittedHandled.current = true;
+        setNotificationToast("⚠️ Your exam has been force-submitted by the instructor.");
+        void handleFinalSubmit();
+      }
+    });
+    return unsub;
+  }, [liveSession?.id, user?.id, attemptStatus]);
 
   // Tab Switch / Focus Loss Proctoring Detector
   useEffect(() => {

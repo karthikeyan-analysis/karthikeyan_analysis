@@ -162,17 +162,17 @@ export function useLiveTestPresence(params: {
 
   const audioMeta$ = useMemo(
     () =>
-      partyTracks && isPcConnected && (role === "admin" || role === "cohost")
+      partyTracks && (role === "admin" || role === "cohost")
         ? partyTracks.push(mic.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, mic, role, isPcConnected],
+    [partyTracks, mic, role],
   );
   const videoMeta$ = useMemo(
     () =>
-      partyTracks && isPcConnected
+      partyTracks
         ? partyTracks.push(camera.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, camera, isPcConnected],
+    [partyTracks, camera],
   );
 
   const audioTrackMeta = useObservableAsValue(audioMeta$, undefined);
