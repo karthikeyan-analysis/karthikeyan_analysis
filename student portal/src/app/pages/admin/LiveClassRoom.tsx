@@ -337,6 +337,7 @@ function LiveClassRoomInner({
       }
     } catch (err) {
       console.warn("Screenshare toggle error", err);
+      alert("Could not start screen share — please ensure screen share permissions are granted in your browser.");
     }
   };
 

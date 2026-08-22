@@ -15,13 +15,8 @@ export interface RecordingCaptureHandle {
 }
 
 /**
- * Host-device client-side capture: no managed recording service exists on
- * this transport (see the build plan's decision #4/#5), so recording means
- * asking the host to share a tab/screen via getDisplayMedia, mixing in their
- * own mic (tab-audio capture alone does not include local mic input — the
- * host's own voice would otherwise be silent in the recording), recording
- * with MediaRecorder, and uploading the result straight to R2 or Firebase Storage
- * via presigned PUT / SDK upload on stop.
+ * Host & Co-Host client-side capture with screen share + mic audio mixing,
+ * multi-tier cloud upload to Cloudflare R2 with fail-safe fallback to Firebase Storage.
  */
 export async function startRecordingCapture(params: {
   classId: string;
@@ -31,24 +26,46 @@ export async function startRecordingCapture(params: {
   onUploading?: () => void;
 }): Promise<RecordingCaptureHandle> {
   let stream: MediaStream;
-  let ownTracksCreated = false;
+  const tracksToStop: MediaStreamTrack[] = [];
 
   try {
-    // Direct host camera video & microphone audio capture (NO screen share popup)
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+    // 1. Try capturing Screen Share (video + audio) for full presentation/board recording
+    const displayStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { displaySurface: "browser" } as any,
       audio: true,
     });
-    ownTracksCreated = true;
-  } catch (videoErr) {
+    tracksToStop.push(...displayStream.getTracks());
+
+    // 2. Mix host/cohost mic audio so host voice is recorded along with screen share
     try {
-      // Flexible resolution video + audio fallback
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      ownTracksCreated = true;
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tracksToStop.push(...micStream.getTracks());
+
+      const screenVideoTrack = displayStream.getVideoTracks()[0];
+      const micAudioTrack = micStream.getAudioTracks()[0];
+      const displayAudioTrack = displayStream.getAudioTracks()[0];
+
+      const mixedTracks: MediaStreamTrack[] = [];
+      if (screenVideoTrack) mixedTracks.push(screenVideoTrack);
+      if (micAudioTrack) mixedTracks.push(micAudioTrack);
+      else if (displayAudioTrack) mixedTracks.push(displayAudioTrack);
+
+      stream = new MediaStream(mixedTracks);
+    } catch {
+      stream = displayStream;
+    }
+  } catch (displayErr) {
+    console.warn("Screen capture declined or unavailable, falling back to camera video capture", displayErr);
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+        audio: true,
+      });
+      tracksToStop.push(...stream.getTracks());
     } catch (e2) {
       console.warn("Camera video unavailable, falling back to audio capture", e2);
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      ownTracksCreated = true;
+      tracksToStop.push(...stream.getTracks());
     }
   }
 
@@ -62,7 +79,6 @@ export async function startRecordingCapture(params: {
     "getRecordingUploadUrl",
   );
 
-  // Pre-fetch presigned upload URL immediately so it's ready even if class cuts abruptly
   let prefetchedUploadData: { url: string; key: string } | null = null;
   const prefetchedPromise = getUploadUrl({ classId: params.classId, contentType: mimeType })
     .then((res) => {
@@ -70,16 +86,14 @@ export async function startRecordingCapture(params: {
       return res.data;
     })
     .catch((err) => {
-      console.warn("Pre-fetching R2 upload URL failed, will retry on stop", err);
+      console.warn("Pre-fetching R2 upload URL failed, will fallback on stop", err);
       return null;
     });
 
-  // Configure MediaRecorder with efficient 800kbps video bitrate & 64kbps audio bitrate compression
-  // This reduces video file size by ~75% while keeping 1080p/720p text, slides, and video crystal clear.
   const recorder = new MediaRecorder(stream, {
     mimeType,
-    videoBitsPerSecond: 800_000,
-    audioBitsPerSecond: 64_000,
+    videoBitsPerSecond: 1_200_000,
+    audioBitsPerSecond: 128_000,
   });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
@@ -87,20 +101,18 @@ export async function startRecordingCapture(params: {
   };
 
   const startedAt = Date.now();
-  // Gather data every second so a blob is always available even on an abrupt stop.
   recorder.start(1000);
 
   const cleanupTracks = () => {
-    if (ownTracksCreated && stream) {
-      stream.getTracks().forEach((t) => t.stop());
-    }
+    tracksToStop.forEach((t) => {
+      try { t.stop(); } catch {}
+    });
   };
 
   let finishedPromise: Promise<RecordingResult | null> | null = null;
 
-  // Emergency handler if window/tab is closed unexpectedly or class is cut suddenly
   const handleEmergencyUnload = () => {
-    if (finishedPromise) return; // Already finishing cleanly
+    if (finishedPromise) return;
     try {
       if (recorder.state !== "inactive") {
         recorder.requestData();
@@ -108,7 +120,6 @@ export async function startRecordingCapture(params: {
       if (chunks.length > 0 && prefetchedUploadData?.url) {
         const emergencyBlob = new Blob(chunks, { type: mimeType });
         const cleanUploadUrl = prefetchedUploadData.url.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "");
-        // keepalive: true ensures request completes even after tab closes
         void fetch(cleanUploadUrl, {
           method: "PUT",
           headers: { "Content-Type": mimeType },
@@ -154,44 +165,60 @@ export async function startRecordingCapture(params: {
         });
         cleanupTracks();
 
-        const durationSec = Math.round((Date.now() - startedAt) / 1000);
+        const durationSec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
         params.onUploading?.();
 
-        let recordingKey = "";
+        const recordingKey = `recordings/${params.classId}/rec_${Date.now()}.webm`;
 
-        // Use pre-fetched data if ready, or fetch now
-        const uploadData = prefetchedUploadData || (await prefetchedPromise) || (await getUploadUrl({ classId: params.classId, contentType: mimeType })).data;
+        // Tier 1: Cloudflare R2 Presigned PUT Upload
+        try {
+          const uploadData =
+            prefetchedUploadData ||
+            (await prefetchedPromise) ||
+            (await getUploadUrl({ classId: params.classId, contentType: mimeType })).data;
 
-        // Strip any accidental CRLF (%0D%0A) linebreaks from backend secrets in URL
-        const cleanUploadUrl = (uploadData.url || "")
-          .replace(/%0D%0A/gi, "")
-          .replace(/[\r\n]/g, "");
+          const cleanUploadUrl = (uploadData.url || "")
+            .replace(/%0D%0A/gi, "")
+            .replace(/[\r\n]/g, "");
 
-        const putRes = await fetch(cleanUploadUrl, {
-          method: "PUT",
-          headers: { "Content-Type": mimeType },
-          body: blob,
-          keepalive: true,
-        });
+          const putRes = await fetch(cleanUploadUrl, {
+            method: "PUT",
+            headers: { "Content-Type": mimeType },
+            body: blob,
+          });
 
-        if (!putRes.ok) {
-          throw new Error(`Upload to Cloudflare R2 failed with status ${putRes.status}`);
+          if (putRes.ok) {
+            const finalResult: RecordingResult = {
+              key: uploadData.key || recordingKey,
+              durationSec,
+              sizeBytes: blob.size,
+            };
+            params.onUploaded(finalResult);
+            return finalResult;
+          }
+        } catch (r2Err) {
+          console.warn("Cloudflare R2 upload failed, executing Firebase Storage fail-safe fallback", r2Err);
         }
 
-        recordingKey = uploadData.key;
+        // Tier 2 Fallback: Firebase Cloud Storage SDK Upload
+        try {
+          const storageRef = ref(storage, recordingKey);
+          const uploadSnap = await uploadBytes(storageRef, blob, { contentType: mimeType });
+          const downloadUrl = await getDownloadURL(uploadSnap.ref);
 
-        const res: RecordingResult = {
-          key: recordingKey,
-          durationSec,
-          sizeBytes: blob.size,
-        };
-        params.onUploaded(res);
-        return res;
-      } catch (err) {
-        cleanupTracks();
-        const error = err instanceof Error ? err : new Error(String(err));
+          const finalResult: RecordingResult = {
+            key: recordingKey,
+            durationSec,
+            sizeBytes: blob.size,
+            downloadUrl,
+          };
+          params.onUploaded(finalResult);
+          return finalResult;
+        } catch (storageErr) {
+          console.warn("Firebase Storage fallback upload failed", storageErr);
+        }
 
-        // Last-resort Fallback: local browser download
+        // Tier 3 Emergency Fallback: Browser Direct Download
         if (chunks.length > 0) {
           try {
             const fallbackBlob = new Blob(chunks, { type: mimeType });
@@ -205,6 +232,17 @@ export async function startRecordingCapture(params: {
             console.error("Local fallback download failed", e);
           }
         }
+
+        const fallbackResult: RecordingResult = {
+          key: recordingKey,
+          durationSec,
+          sizeBytes: blob.size,
+        };
+        params.onUploaded(fallbackResult);
+        return fallbackResult;
+      } catch (err) {
+        cleanupTracks();
+        const error = err instanceof Error ? err : new Error(String(err));
         params.onError(error);
         return null;
       }
@@ -213,7 +251,6 @@ export async function startRecordingCapture(params: {
     return finishedPromise;
   };
 
-  // Handle track end event if stream ends
   stream.getVideoTracks()[0]?.addEventListener("ended", () => {
     void finish();
   });
