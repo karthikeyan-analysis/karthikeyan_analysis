@@ -64,43 +64,38 @@ export function useLiveTestPresence(params: {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     let retryCount = 0;
-    const MAX_RETRIES = 3;
-    const RETRY_DELAY_MS = 3000;
-    setPartyTracks(null);
-    setConnectError(null);
+    const MAX_RETRIES = 12;
+    const RETRY_DELAY_MS = 2500;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     function attemptConnect() {
+      if (cancelled) return;
+      sessionHoldRef.current?.unsubscribe();
+      sessionHoldRef.current = null;
+      disposeClientRef.current?.();
+      disposeClientRef.current = null;
+
       createPartyTracksClient(sessionId)
-        .then((handle) => {
+        .then(({ client, dispose, sessionHold }) => {
           if (cancelled) {
-            handle.dispose();
+            sessionHold.unsubscribe();
+            dispose();
             return;
           }
-          disposeClientRef.current = handle.dispose;
-
-          sessionHoldRef.current = handle.partyTracks.session$.subscribe({
-            error: (err) => {
-              if (cancelled) return;
-              const message = err instanceof Error ? err.message : "Media session connection error.";
-              setConnectError(message);
-            },
-          });
-
-          setPartyTracks(handle.partyTracks);
+          disposeClientRef.current = dispose;
+          sessionHoldRef.current = sessionHold;
+          setPartyTracks(client);
+          setConnectError(null);
         })
-        .catch((err) => {
+        .catch((err: unknown) => {
           if (cancelled) return;
-          const msg = err?.message || "";
-          const isNotFound = msg.includes("not found") || msg.includes("404") || msg.includes("Class not found");
-
+          const msg = err instanceof Error ? err.message : String(err);
+          const isNotFound = msg.includes("404") || msg.includes("not found");
           if (isNotFound && retryCount < MAX_RETRIES) {
-            // Session may not be propagated yet — retry silently
             retryCount++;
             retryTimer = setTimeout(() => { if (!cancelled) attemptConnect(); }, RETRY_DELAY_MS);
           } else if (isNotFound) {
-            // Exhausted retries for a missing session — stay quiet
             setConnectError("Waiting for live test session...");
           } else {
             console.warn("[liveTest] WebRTC setup warning", err);
@@ -127,7 +122,7 @@ export function useLiveTestPresence(params: {
   useEffect(() => {
     try {
       camera.enableSource();
-      if (role === "admin") {
+      if (role === "admin" || role === "cohost") {
         mic.enableSource();
       }
       setCameraStatus("active");
@@ -165,7 +160,7 @@ export function useLiveTestPresence(params: {
   const connectionState = useObservableAsValue(pcState$, "new");
 
   const audioMeta$ = useMemo(
-    () => (partyTracks && role === "admin" ? partyTracks.push(mic.broadcastTrack$) : NEVER),
+    () => (partyTracks && (role === "admin" || role === "cohost") ? partyTracks.push(mic.broadcastTrack$) : NEVER),
     [partyTracks, mic, role],
   );
   const videoMeta$ = useMemo(

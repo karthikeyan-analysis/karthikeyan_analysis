@@ -41,7 +41,7 @@ export interface LiveTestPresence {
   uid: string;
   name: string;
   email?: string;
-  role: "admin" | "student";
+  role: "admin" | "cohost" | "student";
   sessionId: string;
   batchId?: string;
   batchName?: string;

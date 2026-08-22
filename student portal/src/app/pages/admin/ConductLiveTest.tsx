@@ -355,7 +355,10 @@ export default function ConductLiveTest() {
           ? customDurationMinutes
           : selectedTest.durationMinutes;
 
-      const coHostProfile = adminProfiles.find((p) => p.uid === selectedCoHostId);
+      const coHostProfile =
+        selectedCoHostId && selectedCoHostId !== "none"
+          ? adminProfiles.find((p) => p.uid === selectedCoHostId)
+          : undefined;
 
       const newSessionId = await createLiveTestSession({
         testId: selectedTest.id,
@@ -405,7 +408,10 @@ export default function ConductLiveTest() {
 
     setScheduling(true);
     try {
-      const coHostProfile = adminProfiles.find((p) => p.uid === selectedCoHostId);
+      const coHostProfile =
+        selectedCoHostId && selectedCoHostId !== "none"
+          ? adminProfiles.find((p) => p.uid === selectedCoHostId)
+          : undefined;
 
       await scheduleLiveTestSession({
         testId: scheduleTest.id,
