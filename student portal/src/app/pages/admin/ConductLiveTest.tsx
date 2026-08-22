@@ -1156,7 +1156,7 @@ export default function ConductLiveTest() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center justify-between gap-2 pt-1">
                           <Button
                             size="sm"
                             variant={isAdminMicOn ? "default" : "outline"}
@@ -1175,16 +1175,6 @@ export default function ConductLiveTest() {
                           >
                             {isAdminCamOn ? <Camera className="mr-1.5 h-4 w-4" /> : <CameraOff className="mr-1.5 h-4 w-4" />}
                             {isAdminCamOn ? "Camera On" : "Cam Off"}
-                          </Button>
-
-                          <Button
-                            size="sm"
-                            variant={isScreenOn ? "default" : "outline"}
-                            className={isScreenOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
-                            onClick={() => void handleToggleScreenshare()}
-                          >
-                            {isScreenOn ? <ScreenShareOff className="mr-1.5 h-4 w-4" /> : <ScreenShare className="mr-1.5 h-4 w-4" />}
-                            {isScreenOn ? "Sharing Screen" : "Share Screen"}
                           </Button>
                         </div>
                       </CardContent>

@@ -374,7 +374,20 @@ function LiveClassRoomInner({
   const toggleScreenshare = async () => {
     try {
       if (!isScreenOn) {
-        await screenshare.enableSource();
+        try {
+          await screenshare.enableSource();
+        } catch (e) {
+          console.warn("Screenshare enableSource fallback:", e);
+          if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function") {
+            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+            const track = stream.getVideoTracks()[0];
+            if (track) {
+              (screenshare.video as any).broadcastTrack$.next(track);
+            }
+          } else {
+            throw e;
+          }
+        }
         screenshare.startBroadcasting();
       } else {
         screenshare.stopBroadcasting();

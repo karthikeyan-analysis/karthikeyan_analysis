@@ -130,6 +130,7 @@ export default function ParticipantVideoTile({
       const ms = new MediaStream();
       ms.addTrack(audioTrack);
       el.srcObject = ms;
+      el.play().catch((err) => console.warn("Audio play notice:", err));
     } else {
       el.srcObject = null;
     }
