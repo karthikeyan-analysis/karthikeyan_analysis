@@ -133,6 +133,8 @@ export function useLiveClassPresence(params: {
     () => (partyTracks ? peerConnectionState$(partyTracks) : NEVER),
     [partyTracks],
   );
+  const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
+  const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
   const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
 
   const session = useObservableAsValue(session$);
@@ -141,17 +143,17 @@ export function useLiveClassPresence(params: {
 
   const audioMeta$ = useMemo(
     () =>
-      partyTracks
+      partyTracks && isMicOn
         ? partyTracks.push(mic.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, mic],
+    [partyTracks, mic, isMicOn],
   );
   const videoMeta$ = useMemo(
     () =>
-      partyTracks
+      partyTracks && isCameraOn
         ? partyTracks.push(camera.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, camera],
+    [partyTracks, camera, isCameraOn],
   );
   const screenMeta$ = useMemo(
     () =>
@@ -221,9 +223,6 @@ export function useLiveClassPresence(params: {
       screenSub.unsubscribe();
     };
   }, [partyTracks, mic, camera, screenshare]);
-
-  const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
-  const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
 
   // Keep our own presence doc in sync with the current session + published tracks.
   // Wait until the PeerConnection is connected so we never advertise tracks for a
