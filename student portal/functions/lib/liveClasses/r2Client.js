@@ -27,13 +27,29 @@ function getCleanSecret(secret, fallback = "") {
     catch { }
     return cleanString(fallback);
 }
+function cleanAccessKeyId(val) {
+    const s = cleanString(val).replace(/["']/g, "").trim();
+    const match = s.match(/[a-f0-9]{32}/i);
+    return match ? match[0] : s.substring(0, 32);
+}
+function cleanSecretAccessKey(val) {
+    return cleanString(val).replace(/["']/g, "").trim();
+}
+function cleanAccountId(val) {
+    const s = cleanString(val).replace(/["']/g, "").trim();
+    const match = s.match(/[a-f0-9]{32}/i);
+    return match ? match[0] : s;
+}
 function getR2Client() {
+    const accountId = cleanAccountId(getCleanSecret(exports.r2AccountId));
+    const accessKeyId = cleanAccessKeyId(getCleanSecret(exports.r2AccessKeyId));
+    const secretAccessKey = cleanSecretAccessKey(getCleanSecret(exports.r2SecretAccessKey));
     return new client_s3_1.S3Client({
         region: "auto",
-        endpoint: `https://${getCleanSecret(exports.r2AccountId)}.r2.cloudflarestorage.com`,
+        endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
         credentials: {
-            accessKeyId: getCleanSecret(exports.r2AccessKeyId),
-            secretAccessKey: getCleanSecret(exports.r2SecretAccessKey),
+            accessKeyId,
+            secretAccessKey,
         },
         requestChecksumCalculation: "WHEN_REQUIRED",
         responseChecksumValidation: "WHEN_REQUIRED",
