@@ -221,9 +221,10 @@ export async function startRecordingCapture(params: {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 8000);
 
+            const cleanHeaderContentType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
             const putRes = await fetch(cleanUploadUrl, {
               method: "PUT",
-              headers: { "Content-Type": mimeType },
+              headers: { "Content-Type": cleanHeaderContentType },
               body: blob,
               signal: controller.signal,
             });

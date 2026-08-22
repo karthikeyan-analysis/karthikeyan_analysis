@@ -63,8 +63,9 @@ exports.getRecordingUploadUrl = (0, https_1.onCall)({ cors: true, secrets: [r2Cl
     if (access.kind !== "host" && access.kind !== "co-host") {
         throw new https_1.HttpsError("permission-denied", "Only the host or co-host can upload a recording.");
     }
-    const ext = contentType.includes("mp4") ? "mp4" : "webm";
+    const cleanContentType = contentType.includes("mp4") ? "video/mp4" : "video/webm";
+    const ext = cleanContentType.includes("mp4") ? "mp4" : "webm";
     const key = `liveClasses/${classId}/${Date.now()}.${ext}`;
-    const url = await (0, r2Client_1.getPresignedUploadUrl)(key, contentType);
+    const url = await (0, r2Client_1.getPresignedUploadUrl)(key, cleanContentType);
     return { url, key };
 });

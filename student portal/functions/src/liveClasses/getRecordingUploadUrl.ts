@@ -31,9 +31,10 @@ export const getRecordingUploadUrl = onCall(
       throw new HttpsError("permission-denied", "Only the host or co-host can upload a recording.");
     }
 
-    const ext = contentType.includes("mp4") ? "mp4" : "webm";
+    const cleanContentType = contentType.includes("mp4") ? "video/mp4" : "video/webm";
+    const ext = cleanContentType.includes("mp4") ? "mp4" : "webm";
     const key = `liveClasses/${classId}/${Date.now()}.${ext}`;
-    const url = await getPresignedUploadUrl(key, contentType);
+    const url = await getPresignedUploadUrl(key, cleanContentType);
     return { url, key };
   },
 );

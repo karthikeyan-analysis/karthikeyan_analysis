@@ -2,14 +2,24 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
 import { useNavigate } from "react-router";
+import { collection, onSnapshot, query } from "firebase/firestore";
+import { db } from "../../../config/firebase";
+import { requestRecordingPlaybackUrl } from "../../features/liveClasses/recordingPlayback";
 import {
   Card,
   CardContent,
 } from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { ChevronDown, ChevronRight, FileText, Film, Folder, FolderOpen, Lock, Eye } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Film, Folder, FolderOpen, Lock, Eye, PlayCircle, Download } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "../../components/ui/dialog";
 
 export default function MediaLibrary() {
   const { user } = useAuth();
@@ -17,6 +27,77 @@ export default function MediaLibrary() {
   const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement>(null);
   const [openSubjects, setOpenSubjects] = useState<Set<string>>(new Set());
+
+  const [liveClassRecordings, setLiveClassRecordings] = useState<any[]>([]);
+
+  // Student Video Preview Modal state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewTitle, setPreviewTitle] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [loadingPreview, setLoadingPreview] = useState(false);
+
+  // Subscribe to Live Class recordings from Firestore
+  useEffect(() => {
+    const q = query(collection(db, "liveClasses"));
+    const unsub = onSnapshot(q, (snap) => {
+      const recs: any[] = [];
+      snap.docs.forEach((docSnap) => {
+        const data = docSnap.data();
+        const classId = docSnap.id;
+        const subject = data.subject || "Test Discussion";
+        const title = data.name || "Live Class Session";
+        const batchId = data.batchId;
+        const batchIds = Array.isArray(data.batchIds) ? data.batchIds : [];
+
+        // Check if student belongs to this batch (if restricted)
+        if (
+          user?.batchId &&
+          batchId &&
+          batchId !== user.batchId &&
+          batchIds.length > 0 &&
+          !batchIds.includes(user.batchId)
+        ) {
+          return;
+        }
+
+        if (Array.isArray(data.recordings) && data.recordings.length > 0) {
+          data.recordings.forEach((r: any) => {
+            recs.push({
+              id: r.id || `${classId}_${r.key}`,
+              classId,
+              title: r.name ? `${title} (${r.name})` : title,
+              subject,
+              uploadDate: r.createdAt
+                ? new Date(r.createdAt).toLocaleDateString("en-IN")
+                : new Date().toLocaleDateString("en-IN"),
+              downloadUrl: r.downloadUrl,
+              recordingKey: r.key,
+              visibilityType: "ALL",
+              isLiveRecording: true,
+              description: `Recorded live session (${Math.round((r.durationSec || 0) / 60)} mins)`,
+            });
+          });
+        } else if (data.recordingKey || data.recordingDownloadUrl) {
+          recs.push({
+            id: `rec_${classId}`,
+            classId,
+            title,
+            subject,
+            uploadDate: data.endedAt
+              ? new Date(data.endedAt).toLocaleDateString("en-IN")
+              : new Date().toLocaleDateString("en-IN"),
+            downloadUrl: data.recordingDownloadUrl,
+            recordingKey: data.recordingKey,
+            visibilityType: "ALL",
+            isLiveRecording: true,
+            description: "Recorded live class session",
+          });
+        }
+      });
+      setLiveClassRecordings(recs);
+    });
+    return () => unsub();
+  }, [user?.batchId]);
 
   // Get current batch name
   const currentBatch = batches.find((b) => b.id === user?.batchId);
@@ -53,16 +134,14 @@ export default function MediaLibrary() {
   const batchVideos = videos.filter((v) => canAccessItem(v));
 
   const allMedia = useMemo(() => {
-    return [...batchContent, ...batchVideos].sort(
+    return [...batchContent, ...batchVideos, ...liveClassRecordings].sort(
       (a, b) =>
         new Date(b.uploadDate).getTime() - new Date(a.uploadDate).getTime(),
     );
-  }, [batchContent, batchVideos]);
+  }, [batchContent, batchVideos, liveClassRecordings]);
 
   const availableSubjects = useMemo(() => {
     const batchSubjects = (currentBatch?.subjects || []).map((s) => s.trim()).filter(Boolean);
-    // Deduplicate by lowercase so batch "Maths" and media "maths" map to one folder.
-    // Batch subjects take priority for the canonical display name.
     const seenNorm = new Set(batchSubjects.map((s) => s.toLowerCase()));
     const extraSubjects: string[] = [];
     for (const item of allMedia) {
@@ -78,7 +157,6 @@ export default function MediaLibrary() {
   }, [currentBatch?.subjects, allMedia]);
 
   const groupedMediaBySubject = useMemo(() => {
-    // Case-insensitive lookup so "Maths" and "maths" map to the same folder.
     const normalise = (v?: string) => v?.trim().toLowerCase() || "";
     const subjectByNorm = new Map(availableSubjects.map((s) => [normalise(s), s]));
 
@@ -94,6 +172,35 @@ export default function MediaLibrary() {
     return availableSubjects.map((s) => [s, groups.get(s) || []] as const);
   }, [allMedia, availableSubjects]);
 
+  const handleStudentPreview = async (item: any) => {
+    setPreviewTitle(item.title);
+    setLoadingPreview(true);
+    setPreviewOpen(true);
+    setPreviewUrl("");
+
+    let rawUrl = item.downloadUrl;
+    if (!rawUrl && item.classId) {
+      try {
+        const { url } = await requestRecordingPlaybackUrl(item.classId, {
+          recordingKey: item.recordingKey,
+        });
+        if (url) rawUrl = url;
+      } catch (e) {
+        console.warn("Student playback URL error:", e);
+      }
+    }
+
+    if (!rawUrl) {
+      alert("Recording video is currently processing or unavailable.");
+      setPreviewOpen(false);
+      setLoadingPreview(false);
+      return;
+    }
+
+    const cleanUrl = rawUrl.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "").trim();
+    setPreviewUrl(cleanUrl);
+    setLoadingPreview(false);
+  };
 
   // Disable right-click, copying, and keyboard shortcuts for security
   useEffect(() => {
@@ -111,7 +218,6 @@ export default function MediaLibrary() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Disable Ctrl+S, Ctrl+Shift+I, Ctrl+I, F12, Ctrl+C, Ctrl+X
       if (
         (e.ctrlKey && e.key === "s") ||
         (e.ctrlKey && e.shiftKey && e.key === "i") ||
@@ -157,8 +263,7 @@ export default function MediaLibrary() {
         <Lock className="h-4 w-4 text-amber-600" />
         <AlertTitle className="text-amber-900">Secured Content</AlertTitle>
         <AlertDescription className="text-amber-800">
-          This content is protected. Downloads, screenshots, and screen
-          recording are disabled. Content is for viewing only.
+          This content is protected. Content is for viewing only.
         </AlertDescription>
       </Alert>
 
@@ -201,8 +306,8 @@ export default function MediaLibrary() {
                       </p>
                     ) : (
                       <div className="divide-y divide-slate-100">
-                        {items.map((item) => {
-                          const isVideo = "videoUrl" in item;
+                        {items.map((item: any) => {
+                          const isVideo = "videoUrl" in item || item.isLiveRecording;
                           return (
                             <div
                               key={item.id}
@@ -231,7 +336,7 @@ export default function MediaLibrary() {
                                     {item.title}
                                   </h3>
                                   <Badge variant={isVideo ? "default" : "secondary"}>
-                                    {isVideo ? "Video" : "PDF"}
+                                    {item.isLiveRecording ? "Live Class Recording" : isVideo ? "Video" : "PDF"}
                                   </Badge>
                                 </div>
                                 <p className="text-sm text-slate-600 mb-1">
@@ -239,9 +344,6 @@ export default function MediaLibrary() {
                                 </p>
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
                                   <span>Uploaded: {item.uploadDate}</span>
-                                  {isVideo && "duration" in item && (
-                                    <span>Duration: {item.duration}</span>
-                                  )}
                                 </div>
                               </div>
 
@@ -249,6 +351,10 @@ export default function MediaLibrary() {
                               <div className="flex-shrink-0 sm:self-auto self-stretch">
                                 <Button
                                   onClick={() => {
+                                    if (item.isLiveRecording) {
+                                      void handleStudentPreview(item);
+                                      return;
+                                    }
                                     if (isVideo) {
                                       navigate(`/student/video/${item.id}`);
                                       return;
@@ -257,10 +363,10 @@ export default function MediaLibrary() {
                                       navigate(`/student/pdf/${item.id}`);
                                     }
                                   }}
-                                  className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto"
+                                  className="bg-indigo-600 hover:bg-indigo-700 whitespace-nowrap w-full sm:w-auto font-medium"
                                 >
                                   <Eye className="w-4 h-4 mr-2" />
-                                  View
+                                  View Content
                                 </Button>
                               </div>
                             </div>
@@ -285,6 +391,61 @@ export default function MediaLibrary() {
           </CardContent>
         </Card>
       )}
+
+      {/* Student Video Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <PlayCircle className="h-5 w-5 text-indigo-600" />
+              Recording Preview: {previewTitle}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            {loadingPreview ? (
+              <div className="flex h-64 items-center justify-center text-sm text-slate-500">
+                Loading live class video stream…
+              </div>
+            ) : previewUrl ? (
+              <div className="overflow-hidden rounded-xl bg-black border border-slate-800 aspect-video flex items-center justify-center">
+                <video
+                  src={previewUrl}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="auto"
+                  className="w-full h-full max-h-[480px]"
+                />
+              </div>
+            ) : (
+              <div className="py-8 text-center text-sm text-slate-500">
+                Recording video is currently processing or unavailable.
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            {previewUrl ? (
+              <Button
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 font-medium"
+                onClick={() => {
+                  const a = document.createElement("a");
+                  a.href = previewUrl;
+                  a.download = `${previewTitle}_recording.webm`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                }}
+              >
+                <Download className="mr-1.5 h-3.5 w-3.5" /> Download Video File
+              </Button>
+            ) : <div />}
+            <Button variant="outline" size="sm" onClick={() => setPreviewOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
