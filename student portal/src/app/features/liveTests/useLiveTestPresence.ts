@@ -160,10 +160,10 @@ export function useLiveTestPresence(params: {
 
   const audioMeta$ = useMemo(
     () =>
-      partyTracks && (role === "admin" || role === "cohost")
+      partyTracks
         ? partyTracks.push(mic.broadcastTrack$).pipe(catchError(() => EMPTY))
         : NEVER,
-    [partyTracks, mic, role],
+    [partyTracks, mic],
   );
   const videoMeta$ = useMemo(
     () =>

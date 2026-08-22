@@ -278,6 +278,18 @@ export default function ConductLiveTest() {
   const [isAdminMicOn, setIsAdminMicOn] = useState(true);
   const [isAdminCamOn, setIsAdminCamOn] = useState(true);
 
+  // Auto-enable camera & mic broadcasting on proctor mount
+  useEffect(() => {
+    try {
+      camera.enableSource();
+      camera.startBroadcasting();
+      mic.enableSource();
+      mic.startBroadcasting();
+    } catch (e) {
+      console.warn("Proctor camera/mic start notice:", e);
+    }
+  }, [camera, mic]);
+
   // Wire admin's local camera stream into the <video> element
   const adminVideoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
