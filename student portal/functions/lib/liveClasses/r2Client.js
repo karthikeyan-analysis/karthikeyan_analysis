@@ -73,13 +73,11 @@ async function getPresignedUploadUrl(key, contentType, expiresInSeconds = 3600) 
     const bucketName = cleanString(getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings"));
     const cleanKey = cleanString(key);
     const commandInput = { Bucket: bucketName, Key: cleanKey };
-    if (contentType) {
-        commandInput.ContentType = contentType;
-    }
     const command = new client_s3_1.PutObjectCommand(commandInput);
     return (0, s3_request_presigner_1.getSignedUrl)(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
 async function getPresignedDownloadUrl(key, expiresInSeconds, options) {
+    void ensureR2BucketCors();
     const bucketName = cleanString(getCleanSecret(exports.r2Bucket, "kasc-live-class-recordings"));
     const cleanKey = cleanString(key);
     const commandInput = { Bucket: bucketName, Key: cleanKey };

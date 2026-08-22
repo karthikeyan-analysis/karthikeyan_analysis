@@ -71,9 +71,6 @@ export async function getPresignedUploadUrl(key: string, contentType?: string, e
   const bucketName = cleanString(getCleanSecret(r2Bucket, "kasc-live-class-recordings"));
   const cleanKey = cleanString(key);
   const commandInput: Record<string, any> = { Bucket: bucketName, Key: cleanKey };
-  if (contentType) {
-    commandInput.ContentType = contentType;
-  }
   const command = new PutObjectCommand(commandInput as any);
   return getSignedUrl(getR2Client(), command, { expiresIn: expiresInSeconds });
 }
@@ -83,6 +80,7 @@ export async function getPresignedDownloadUrl(
   expiresInSeconds: number,
   options?: { disposition?: "inline" | "attachment"; filename?: string },
 ) {
+  void ensureR2BucketCors();
   const bucketName = cleanString(getCleanSecret(r2Bucket, "kasc-live-class-recordings"));
   const cleanKey = cleanString(key);
   const commandInput: Record<string, any> = { Bucket: bucketName, Key: cleanKey };
