@@ -1,20 +1,15 @@
 import { httpsCallable } from "firebase/functions";
 import { functions } from "../../../config/firebase";
-import { getLiveClass } from "./liveClassApi";
 
+/**
+ * Always requests a fresh Cloudflare R2 presigned URL from Firebase Functions.
+ * Firebase Storage download URLs are NOT cross-origin streamable in <video> tags.
+ * R2 presigned URLs include correct Content-Type and CORS headers for browser playback.
+ */
 export async function requestRecordingPlaybackUrl(
   classId: string,
   options?: { disposition?: "inline" | "attachment"; filename?: string; recordingKey?: string },
 ): Promise<{ url: string; expiresIn: number }> {
-  try {
-    const cls = await getLiveClass(classId);
-    if (cls?.recordingDownloadUrl && options?.disposition !== "attachment" && (!options?.recordingKey || options.recordingKey === cls.recordingKey)) {
-      return { url: cls.recordingDownloadUrl, expiresIn: 86400 };
-    }
-  } catch (e) {
-    console.warn("Could not fetch recordingDownloadUrl directly", e);
-  }
-
   const call = httpsCallable<
     { classId: string; disposition?: "inline" | "attachment"; filename?: string; recordingKey?: string },
     { url: string; expiresIn: number }

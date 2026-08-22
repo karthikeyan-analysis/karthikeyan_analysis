@@ -486,19 +486,26 @@ export default function LiveClassManagement() {
     setPreviewOpen(true);
     setPreviewUrl("");
 
-    let targetUrl = rec?.downloadUrl || (!rec ? cls.recordingDownloadUrl : undefined);
+    // Always prefer a freshly signed Cloudflare R2 presigned URL for video streaming.
+    // Firebase Storage download URLs are NOT directly streamable in <video> cross-origin.
+    const targetKey = rec?.key || cls.recordingKey;
 
-    if (!targetUrl) {
-      try {
-        const { url } = await requestRecordingPlaybackUrl(cls.id, {
-          recordingKey: rec?.key || cls.recordingKey,
-        });
-        if (url) {
-          targetUrl = url;
-        }
-      } catch (e: any) {
-        console.warn("Playback URL generation notice:", e);
-      }
+    let targetUrl: string | undefined;
+
+    // Step 1: Try R2 presigned URL (always fresh, 2h TTL, CORS-allowed)
+    try {
+      const { url } = await requestRecordingPlaybackUrl(cls.id, {
+        recordingKey: targetKey,
+        disposition: "inline",
+      });
+      if (url) targetUrl = url;
+    } catch (e: any) {
+      console.warn("R2 presigned playback URL generation notice:", e);
+    }
+
+    // Step 2: Fallback to stored download URL only if no R2 key exists
+    if (!targetUrl && !targetKey) {
+      targetUrl = rec?.downloadUrl || cls.recordingDownloadUrl;
     }
 
     if (!targetUrl) {
@@ -509,22 +516,8 @@ export default function LiveClassManagement() {
     }
 
     const cleanUrl = targetUrl.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "").trim();
-
     setPreviewUrl(cleanUrl);
     setLoadingPreview(false);
-
-    try {
-      const res = await fetch(cleanUrl, { mode: "cors" });
-      if (res.ok) {
-        const blob = await res.blob();
-        if (blob.size > 0) {
-          const blobUrl = URL.createObjectURL(blob);
-          setPreviewUrl(blobUrl);
-        }
-      }
-    } catch {
-      // Fallback cleanUrl remains active
-    }
   };
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
