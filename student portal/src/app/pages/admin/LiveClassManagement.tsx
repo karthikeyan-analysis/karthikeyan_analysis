@@ -1618,7 +1618,15 @@ export default function LiveClassManagement() {
               </div>
             ) : previewUrl ? (
               <div className="overflow-hidden rounded-xl bg-black border border-slate-800 aspect-video flex items-center justify-center">
-                <video src={previewUrl} controls autoPlay className="w-full h-full max-h-[480px]" />
+                <video
+                  src={previewUrl}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="auto"
+                  crossOrigin="anonymous"
+                  className="w-full h-full max-h-[480px]"
+                />
               </div>
             ) : (
               <div className="py-8 text-center text-sm text-slate-500">

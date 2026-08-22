@@ -12,11 +12,13 @@ export interface RecordingResult {
 export interface RecordingCaptureHandle {
   /** Explicitly stop and upload. Returns a promise resolving when upload completes. */
   stop: () => Promise<RecordingResult | null>;
+  /** Dynamically switch the video track (e.g., when toggling screenshare mid-recording) */
+  updateVideoTrack?: (newTrack: MediaStreamTrack) => void;
 }
 
 /**
  * Host & Co-Host client-side capture with screen share + mic audio mixing,
- * multi-tier cloud upload to Cloudflare R2 with fail-safe fallback to Firebase Storage.
+ * multi-tier cloud upload to Cloudflare R2 with fast 8s timeout and fail-safe fallback to Firebase Storage.
  */
 export async function startRecordingCapture(params: {
   classId: string;
@@ -24,48 +26,34 @@ export async function startRecordingCapture(params: {
   onError: (error: Error) => void;
   /** Fired once capture stops and the upload is about to begin. */
   onUploading?: () => void;
+  /** Initial video track if screenshare or camera is already active */
+  initialVideoTrack?: MediaStreamTrack | null;
+  /** Initial audio track (mic) */
+  initialAudioTrack?: MediaStreamTrack | null;
 }): Promise<RecordingCaptureHandle> {
-  let stream: MediaStream;
   const tracksToStop: MediaStreamTrack[] = [];
+  let stream: MediaStream;
 
-  try {
-    // 1. Try capturing Screen Share (video + audio) for full presentation/board recording
-    const displayStream = await navigator.mediaDevices.getDisplayMedia({
-      video: { displaySurface: "browser" } as any,
-      audio: true,
-    });
-    tracksToStop.push(...displayStream.getTracks());
-
-    // 2. Mix host/cohost mic audio so host voice is recorded along with screen share
-    try {
-      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      tracksToStop.push(...micStream.getTracks());
-
-      const screenVideoTrack = displayStream.getVideoTracks()[0];
-      const micAudioTrack = micStream.getAudioTracks()[0];
-      const displayAudioTrack = displayStream.getAudioTracks()[0];
-
-      const mixedTracks: MediaStreamTrack[] = [];
-      if (screenVideoTrack) mixedTracks.push(screenVideoTrack);
-      if (micAudioTrack) mixedTracks.push(micAudioTrack);
-      else if (displayAudioTrack) mixedTracks.push(displayAudioTrack);
-
-      stream = new MediaStream(mixedTracks);
-    } catch {
-      stream = displayStream;
-    }
-  } catch (displayErr) {
-    console.warn("Screen capture declined or unavailable, falling back to camera video capture", displayErr);
+  // 1. Build initial recording stream using provided live tracks or new getUserMedia
+  if (params.initialVideoTrack || params.initialAudioTrack) {
+    const tracks: MediaStreamTrack[] = [];
+    if (params.initialVideoTrack) tracks.push(params.initialVideoTrack);
+    if (params.initialAudioTrack) tracks.push(params.initialAudioTrack);
+    stream = new MediaStream(tracks);
+  } else {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
         audio: true,
       });
       tracksToStop.push(...stream.getTracks());
-    } catch (e2) {
-      console.warn("Camera video unavailable, falling back to audio capture", e2);
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      tracksToStop.push(...stream.getTracks());
+    } catch {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        tracksToStop.push(...stream.getTracks());
+      } catch (err) {
+        throw new Error("Could not access microphone/camera for live recording.");
+      }
     }
   }
 
@@ -92,8 +80,8 @@ export async function startRecordingCapture(params: {
 
   const recorder = new MediaRecorder(stream, {
     mimeType,
-    videoBitsPerSecond: 1_200_000,
-    audioBitsPerSecond: 128_000,
+    videoBitsPerSecond: 1_000_000,
+    audioBitsPerSecond: 96_000,
   });
   const chunks: Blob[] = [];
   recorder.ondataavailable = (e) => {
@@ -170,34 +158,44 @@ export async function startRecordingCapture(params: {
 
         const recordingKey = `recordings/${params.classId}/rec_${Date.now()}.webm`;
 
-        // Tier 1: Cloudflare R2 Presigned PUT Upload
+        // Tier 1: Cloudflare R2 Presigned PUT Upload with strict 8-second timeout
         try {
           const uploadData =
             prefetchedUploadData ||
-            (await prefetchedPromise) ||
+            (await Promise.race([
+              prefetchedPromise,
+              new Promise<null>((r) => setTimeout(() => r(null), 3000)),
+            ])) ||
             (await getUploadUrl({ classId: params.classId, contentType: mimeType })).data;
 
-          const cleanUploadUrl = (uploadData.url || "")
-            .replace(/%0D%0A/gi, "")
-            .replace(/[\r\n]/g, "");
+          if (uploadData?.url) {
+            const cleanUploadUrl = (uploadData.url || "")
+              .replace(/%0D%0A/gi, "")
+              .replace(/[\r\n]/g, "");
 
-          const putRes = await fetch(cleanUploadUrl, {
-            method: "PUT",
-            headers: { "Content-Type": mimeType },
-            body: blob,
-          });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-          if (putRes.ok) {
-            const finalResult: RecordingResult = {
-              key: uploadData.key || recordingKey,
-              durationSec,
-              sizeBytes: blob.size,
-            };
-            params.onUploaded(finalResult);
-            return finalResult;
+            const putRes = await fetch(cleanUploadUrl, {
+              method: "PUT",
+              headers: { "Content-Type": mimeType },
+              body: blob,
+              signal: controller.signal,
+            });
+            clearTimeout(timeoutId);
+
+            if (putRes.ok) {
+              const finalResult: RecordingResult = {
+                key: uploadData.key || recordingKey,
+                durationSec,
+                sizeBytes: blob.size,
+              };
+              params.onUploaded(finalResult);
+              return finalResult;
+            }
           }
         } catch (r2Err) {
-          console.warn("Cloudflare R2 upload failed, executing Firebase Storage fail-safe fallback", r2Err);
+          console.warn("Cloudflare R2 upload timed out or failed, executing Firebase Storage fail-safe fallback", r2Err);
         }
 
         // Tier 2 Fallback: Firebase Cloud Storage SDK Upload
@@ -251,9 +249,22 @@ export async function startRecordingCapture(params: {
     return finishedPromise;
   };
 
+  const updateVideoTrack = (newTrack: MediaStreamTrack) => {
+    try {
+      const oldTracks = stream.getVideoTracks();
+      oldTracks.forEach((t) => stream.removeTrack(t));
+      stream.addTrack(newTrack);
+    } catch (err) {
+      console.warn("Could not dynamically update recording video track", err);
+    }
+  };
+
   stream.getVideoTracks()[0]?.addEventListener("ended", () => {
     void finish();
   });
 
-  return { stop: () => finish() };
+  return {
+    stop: () => finish(),
+    updateVideoTrack,
+  };
 }

@@ -142,17 +142,39 @@ function LiveClassRoomInner({
     setTestPickerOpen(true);
   };
 
+  useEffect(() => {
+    if (!recordingHandle) return;
+    try {
+      const activeVideoTrack = isScreenOn
+        ? screenshare.video.broadcastTrack$.value?.track || camera.broadcastTrack$.value?.track
+        : camera.broadcastTrack$.value?.track;
+
+      if (activeVideoTrack && typeof recordingHandle.updateVideoTrack === "function") {
+        recordingHandle.updateVideoTrack(activeVideoTrack);
+      }
+    } catch (e) {
+      console.warn("Error syncing video track to recorder:", e);
+    }
+  }, [isScreenOn, recordingHandle, screenshare, camera]);
+
   const toggleRecording = async () => {
     if (recordingHandle) {
       const handle = recordingHandle;
       setRecordingHandle(null);
-      await updateLiveClass(classId, { recordingStatus: "uploading" });
+      void updateLiveClass(classId, { recordingStatus: "uploading" });
       await handle.stop();
       return;
     }
     try {
+      const activeVideoTrack = isScreenOn
+        ? screenshare.video.broadcastTrack$.value?.track || camera.broadcastTrack$.value?.track
+        : camera.broadcastTrack$.value?.track;
+      const activeAudioTrack = mic.broadcastTrack$.value?.track;
+
       const handle = await startRecordingCapture({
         classId,
+        initialVideoTrack: activeVideoTrack,
+        initialAudioTrack: activeAudioTrack,
         onUploading: () => {
           setRecordingHandle(null);
           void updateLiveClass(classId, { recordingStatus: "uploading" });
@@ -205,7 +227,7 @@ function LiveClassRoomInner({
       await updateLiveClass(classId, { recordingStatus: "recording" });
     } catch (err) {
       console.error(err);
-      alert("Could not start recording — screen-share permission may have been denied.");
+      alert("Could not start recording.");
     }
   };
 
