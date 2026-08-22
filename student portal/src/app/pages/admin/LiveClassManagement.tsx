@@ -1639,7 +1639,6 @@ export default function LiveClassManagement() {
                   autoPlay
                   playsInline
                   preload="auto"
-                  crossOrigin="anonymous"
                   className="w-full h-full max-h-[480px]"
                 />
               </div>

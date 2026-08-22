@@ -34,28 +34,68 @@ export async function startRecordingCapture(params: {
   const tracksToStop: MediaStreamTrack[] = [];
   let stream: MediaStream;
 
-  // 1. Build initial recording stream using provided live tracks or new getUserMedia
-  if (params.initialVideoTrack || params.initialAudioTrack) {
-    const tracks: MediaStreamTrack[] = [];
-    if (params.initialVideoTrack) tracks.push(params.initialVideoTrack);
-    if (params.initialAudioTrack) tracks.push(params.initialAudioTrack);
-    stream = new MediaStream(tracks);
+  // 1. Build initial 30FPS Canvas Video Stream Compositor for guaranteed video keyframes
+  const canvas = document.createElement("canvas");
+  canvas.width = 1280;
+  canvas.height = 720;
+  const ctx = canvas.getContext("2d");
+
+  const videoElement = document.createElement("video");
+  videoElement.autoplay = true;
+  videoElement.muted = true;
+  videoElement.playsInline = true;
+
+  let currentVideoTrack = params.initialVideoTrack || null;
+  if (currentVideoTrack) {
+    videoElement.srcObject = new MediaStream([currentVideoTrack]);
+    void videoElement.play().catch(() => {});
   } else {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
+      const userMediaStream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
         audio: true,
       });
-      tracksToStop.push(...stream.getTracks());
-    } catch {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        tracksToStop.push(...stream.getTracks());
-      } catch (err) {
-        throw new Error("Could not access microphone/camera for live recording.");
+      tracksToStop.push(...userMediaStream.getTracks());
+      const vTrack = userMediaStream.getVideoTracks()[0];
+      const aTrack = userMediaStream.getAudioTracks()[0];
+      if (vTrack) {
+        currentVideoTrack = vTrack;
+        videoElement.srcObject = new MediaStream([vTrack]);
+        void videoElement.play().catch(() => {});
       }
+      if (aTrack && !params.initialAudioTrack) {
+        params.initialAudioTrack = aTrack;
+      }
+    } catch {
+      console.warn("Camera fallback not accessible for canvas compositor");
     }
   }
+
+  let animFrameId: number | null = null;
+  const renderFrame = () => {
+    if (ctx) {
+      ctx.fillStyle = "#0f172a";
+      ctx.fillRect(0, 0, 1280, 720);
+
+      if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
+        ctx.drawImage(videoElement, 0, 0, 1280, 720);
+      } else {
+        ctx.fillStyle = "#818cf8";
+        ctx.font = "bold 28px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("KASC Live Class Recording", 640, 360);
+      }
+    }
+    animFrameId = requestAnimationFrame(renderFrame);
+  };
+  renderFrame();
+
+  const canvasStream = canvas.captureStream(30);
+  if (params.initialAudioTrack) {
+    canvasStream.addTrack(params.initialAudioTrack);
+  }
+
+  stream = canvasStream;
 
   const mimeType =
     ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((t) =>
@@ -92,6 +132,8 @@ export async function startRecordingCapture(params: {
   recorder.start(1000);
 
   const cleanupTracks = () => {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+    try { videoElement.pause(); videoElement.srcObject = null; } catch {}
     tracksToStop.forEach((t) => {
       try { t.stop(); } catch {}
     });
@@ -240,9 +282,9 @@ export async function startRecordingCapture(params: {
 
   const updateVideoTrack = (newTrack: MediaStreamTrack) => {
     try {
-      const oldTracks = stream.getVideoTracks();
-      oldTracks.forEach((t) => stream.removeTrack(t));
-      stream.addTrack(newTrack);
+      currentVideoTrack = newTrack;
+      videoElement.srcObject = new MediaStream([newTrack]);
+      void videoElement.play().catch(() => {});
     } catch (err) {
       console.warn("Could not dynamically update recording video track", err);
     }
