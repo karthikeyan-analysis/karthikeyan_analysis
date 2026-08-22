@@ -64,7 +64,11 @@ export default function ParticipantVideoTile({
   const videoRef = useRef<HTMLVideoElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  const canPull = !isLocal && mediaReady && Boolean(partyTracks);
+  const canPull =
+    !isLocal &&
+    mediaReady &&
+    Boolean(partyTracks) &&
+    (presence.role === "host" || presence.role === "co-host" || actions !== undefined);
 
   const remoteScreenMeta$ = useMemo(() => {
     const meta = toTrackMetadata(presence.screenshareVideoTrack);

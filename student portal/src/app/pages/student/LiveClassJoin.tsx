@@ -217,10 +217,9 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
 
   const hostPresence =
     (cls.spotlightUid ? roster.find((p) => p.id === cls.spotlightUid) : null) ||
-    roster.find((p) => p.screenshareVideoTrack && p.id !== user!.id) ||
+    roster.find((p) => !!p.screenshareVideoTrack && (p.role === "host" || p.role === "co-host")) ||
     roster.find((p) => p.role === "host") ||
     roster.find((p) => p.role === "co-host") ||
-    roster.find((p) => p.id !== user!.id) ||
     null;
 
   const renderTile = (p: LiveClassPresence, spotlighted?: boolean) => {

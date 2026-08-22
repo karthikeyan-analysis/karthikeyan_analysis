@@ -368,12 +368,20 @@ function LiveClassRoomInner({
     }
   };
 
+  const localPresence: LiveClassPresence = roster.find((p) => p.id === uid) || {
+    id: uid,
+    name,
+    role,
+    mutedByHost: false,
+    videoDisabledByHost: false,
+  };
+
   const spotlightPresence = cls.spotlightUid
     ? roster.find((p) => p.id === cls.spotlightUid)
     : roster.find((p) => (p.id === uid ? isScreenOn : !!p.screenshareVideoTrack)) ||
     roster.find((p) => p.role === "host") ||
     roster.find((p) => p.role === "co-host") ||
-    (roster.length > 0 ? roster[0] : null);
+    localPresence;
 
   const otherRoster = spotlightPresence ? roster.filter((p) => p.id !== spotlightPresence.id) : roster;
   const isRecording = !!recordingHandle || cls.recordingStatus === "recording";
