@@ -36,6 +36,7 @@ export interface LiveClass {
   /** Pointer into the existing examTests engine for the Live Test Module. */
   liveTestId?: string;
   liveTestStartedAt?: string;
+  liveTestActive?: boolean;
   recordingStatus?: RecordingStatus;
   /** Cloudflare R2 or Firebase Storage object key once the recording is ready. */
   recordingKey?: string;
@@ -89,6 +90,8 @@ export interface LiveClassDoubt {
   resolved?: boolean;
   resolvedBy?: string;
   resolvedAt?: string;
+  replyText?: string;
+  repliedByName?: string;
 }
 
 export interface LiveClassAttendanceSession {

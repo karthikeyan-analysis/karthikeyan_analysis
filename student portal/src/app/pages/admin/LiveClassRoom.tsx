@@ -145,9 +145,10 @@ function LiveClassRoomInner({
   useEffect(() => {
     if (!recordingHandle) return;
     try {
+      const getTrack = (obs: any) => obs?.value?.track || obs?._value?.track || obs?.track;
       const activeVideoTrack = isScreenOn
-        ? screenshare.video.broadcastTrack$.value?.track || camera.broadcastTrack$.value?.track
-        : camera.broadcastTrack$.value?.track;
+        ? getTrack(screenshare.video.broadcastTrack$) || getTrack(camera.broadcastTrack$)
+        : getTrack(camera.broadcastTrack$);
 
       if (activeVideoTrack && typeof recordingHandle.updateVideoTrack === "function") {
         recordingHandle.updateVideoTrack(activeVideoTrack);
@@ -166,10 +167,11 @@ function LiveClassRoomInner({
       return;
     }
     try {
+      const getTrack = (obs: any) => obs?.value?.track || obs?._value?.track || obs?.track;
       const activeVideoTrack = isScreenOn
-        ? screenshare.video.broadcastTrack$.value?.track || camera.broadcastTrack$.value?.track
-        : camera.broadcastTrack$.value?.track;
-      const activeAudioTrack = mic.broadcastTrack$.value?.track;
+        ? getTrack(screenshare.video.broadcastTrack$) || getTrack(camera.broadcastTrack$)
+        : getTrack(camera.broadcastTrack$);
+      const activeAudioTrack = getTrack(mic.broadcastTrack$);
 
       const handle = await startRecordingCapture({
         classId,
@@ -375,8 +377,10 @@ function LiveClassRoomInner({
     id: uid,
     name,
     role,
+    sessionId: classId,
     mutedByHost: false,
     videoDisabledByHost: false,
+    updatedAt: new Date().toISOString(),
   };
 
   const spotlightPresence = cls.spotlightUid
@@ -623,8 +627,10 @@ function LiveClassRoomInner({
                     id: uid,
                     name,
                     role,
+                    sessionId: classId,
                     mutedByHost: false,
                     videoDisabledByHost: false,
+                    updatedAt: new Date().toISOString(),
                   },
                 )}
               </div>

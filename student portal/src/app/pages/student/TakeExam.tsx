@@ -72,6 +72,8 @@ import {
   subscribeToActiveLiveTestForTest,
   upsertLiveTestPresence,
 } from "../../features/liveTests/liveTestApi";
+import { subscribeToLiveTestPresence, subscribeToLiveTestSession } from "../../features/liveTests/liveTestApi";
+import { toast } from "sonner";
 import { useLiveTestPresence } from "../../features/liveTests/useLiveTestPresence";
 import type { LiveTestSession } from "../../features/liveTests/liveTestTypes";
 import { enrolledStudentsCanAccessTest } from "../../features/exams/settings";
@@ -284,15 +286,15 @@ export default function TakeExam({
       const selfPres = list.find((p) => p.uid === user.id);
       if (selfPres?.forceSubmittedByAdmin && !forceSubmittedHandled.current) {
         forceSubmittedHandled.current = true;
-        setNotificationToast("⚠️ Your exam has been force-submitted by the instructor.");
-        void handleFinalSubmit();
+        toast.warning("⚠️ Your exam has been force-submitted by the instructor.");
+        void handleSubmit();
       }
     });
     const unsubSession = subscribeToLiveTestSession(liveSession.id, (sess) => {
       if (sess?.status === "ended" && !forceSubmittedHandled.current) {
         forceSubmittedHandled.current = true;
-        setNotificationToast("⚠️ The instructor has ended this live test session.");
-        void handleFinalSubmit();
+        toast.warning("⚠️ The instructor has ended this live test session.");
+        void handleSubmit();
       }
     });
     return () => {
@@ -1492,21 +1494,13 @@ export default function TakeExam({
                 </div>
                 <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
                   <ParticipantVideoTile
-                    presence={
-                      myPresence || {
-                        id: user?.id || "local",
-                        uid: user?.id || "local",
-                        name: user?.name || "Student",
-                        role: "student",
-                        sessionId: liveSession?.id || "",
-                        cameraStatus: cameraStatus,
-                        tabSwitchCount: tabSwitchCount,
-                        isTabActive: true,
-                        currentQuestionIndex: currentIndex,
-                        totalAnswered: totalAnsweredCount,
-                        totalQuestions: questions.length,
-                      }
-                    }
+                    presence={{
+                      id: myPresence?.uid || user?.id || "local",
+                      name: myPresence?.name || user?.name || "Student",
+                      role: "student",
+                      sessionId: liveSession?.id || "",
+                      updatedAt: new Date().toISOString(),
+                    }}
                     partyTracks={partyTracks || (undefined as any)}
                     isLocal={true}
                     localVideoTrack$={camera.broadcastTrack$}
@@ -1536,7 +1530,15 @@ export default function TakeExam({
                   <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-indigo-950/60 border border-indigo-900/50 flex items-center justify-center">
                     {proctorPresence ? (
                       <ParticipantVideoTile
-                        presence={proctorPresence}
+                        presence={{
+                          id: proctorPresence.uid || proctorPresence.id,
+                          name: proctorPresence.name,
+                          role: proctorPresence.role === "cohost" ? "co-host" : proctorPresence.role === "admin" ? "host" : "student",
+                          sessionId: liveSession?.id || "",
+                          updatedAt: proctorPresence.updatedAt || new Date().toISOString(),
+                          videoTrack: (proctorPresence as any).videoTrack,
+                          audioTrack: (proctorPresence as any).audioTrack,
+                        }}
                         partyTracks={partyTracks || (undefined as any)}
                         isLocal={false}
                       />

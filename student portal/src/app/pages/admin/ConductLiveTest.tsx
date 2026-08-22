@@ -1232,7 +1232,13 @@ export default function ConductLiveTest() {
                               {/* Student Live Video Tile */}
                               <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center">
                                 <ParticipantVideoTile
-                                  presence={p}
+                                  presence={{
+                                    ...p,
+                                    id: p.uid,
+                                    role: p.role === "cohost" ? "co-host" : p.role === "admin" ? "host" : "student",
+                                    sessionId: selectedSessionId || "",
+                                    updatedAt: p.updatedAt || new Date().toISOString(),
+                                  }}
                                   partyTracks={partyTracks || (undefined as any)}
                                   isLocal={false}
                                 />

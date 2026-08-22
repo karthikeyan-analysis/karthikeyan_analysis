@@ -227,7 +227,7 @@ export async function sendLiveTestAnnouncement(
 export async function upsertLiveTestPresence(
   sessionId: string,
   uid: string,
-  data: Partial<LiveTestPresence> & { name: string; role: "admin" | "student" },
+  data: Partial<LiveTestPresence> & { name: string; role: "admin" | "cohost" | "student" },
 ): Promise<void> {
   const ref = doc(db, "liveTestSessions", sessionId, "presence", uid);
   const snap = await getDoc(ref);

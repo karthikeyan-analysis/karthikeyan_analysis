@@ -36,7 +36,7 @@ export function useLiveTestPresence(params: {
   sessionId: string;
   uid: string;
   name: string;
-  role: "admin" | "student";
+  role: "admin" | "cohost" | "student";
   currentQuestionIndex?: number;
   totalAnswered?: number;
   totalQuestions?: number;
@@ -77,15 +77,13 @@ export function useLiveTestPresence(params: {
       disposeClientRef.current = null;
 
       createPartyTracksClient(sessionId)
-        .then(({ client, dispose, sessionHold }) => {
+        .then((handle) => {
           if (cancelled) {
-            sessionHold.unsubscribe();
-            dispose();
+            handle.dispose();
             return;
           }
-          disposeClientRef.current = dispose;
-          sessionHoldRef.current = sessionHold;
-          setPartyTracks(client);
+          disposeClientRef.current = handle.dispose;
+          setPartyTracks(handle.partyTracks);
           setConnectError(null);
         })
         .catch((err: unknown) => {

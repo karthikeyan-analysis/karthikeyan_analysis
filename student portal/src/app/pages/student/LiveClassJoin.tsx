@@ -399,8 +399,10 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                   id: user!.id,
                   name: user!.name,
                   role: "student",
+                  sessionId: cls.id,
                   mutedByHost: false,
                   videoDisabledByHost: false,
+                  updatedAt: new Date().toISOString(),
                 },
               )}
             </div>
