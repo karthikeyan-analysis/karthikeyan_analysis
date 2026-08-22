@@ -935,12 +935,12 @@ export default function ConductLiveTest() {
                   {displayActiveSessions.map((s) => {
                     const testBatches = s.batchIds?.length
                       ? batches
-                          .filter((b) => s.batchIds!.includes(b.id))
-                          .map((b) => b.name)
-                          .join(", ")
+                        .filter((b) => s.batchIds!.includes(b.id))
+                        .map((b) => b.name)
+                        .join(", ")
                       : s.batchId
-                      ? batches.find((b) => b.id === s.batchId)?.name || "All Batches"
-                      : "All Batches";
+                        ? batches.find((b) => b.id === s.batchId)?.name || "All Batches"
+                        : "All Batches";
 
                     return (
                       <Card
@@ -1001,9 +1001,9 @@ export default function ConductLiveTest() {
           ) : (
             /* DETAILED PROCTORING ROOM VIEW FOR SELECTED SESSION */
             <div className="space-y-6">
-              {/* Top Navigation & Back Button */}
+              {/* Top Navigation & End Session Control */}
               <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                   <Button
                     variant="outline"
                     size="sm"
@@ -1014,16 +1014,14 @@ export default function ConductLiveTest() {
                     Back to Ongoing Tests List
                   </Button>
 
-                  {hasOperatingAccess && (
-                    <Button
-                      size="sm"
-                      className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
-                      onClick={() => void handleEndSession()}
-                    >
-                      <StopCircle className="h-4 w-4" />
-                      End Live Test Session
-                    </Button>
-                  )}
+                  <Button
+                    size="sm"
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
+                    onClick={() => void handleEndSession()}
+                  >
+                    <StopCircle className="h-4 w-4" />
+                    End Live Test Session
+                  </Button>
                 </div>
               </div>
 
@@ -1031,13 +1029,20 @@ export default function ConductLiveTest() {
                 <div className="space-y-6">
                   {/* Live Session KPIs */}
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Card className="border-slate-200 shadow-xs">
+                    <Card className="border-slate-200 shadow-xs border-l-4 border-l-rose-500">
                       <CardContent className="pt-4 pb-3 flex items-center justify-between">
                         <div>
                           <p className="text-xs font-semibold text-slate-500 uppercase">Live Session</p>
                           <p className="text-lg font-bold text-slate-900 truncate max-w-[180px]">
                             {currentSession.testTitle}
                           </p>
+                          <button
+                            type="button"
+                            onClick={() => void handleEndSession()}
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-800 underline"
+                          >
+                            <StopCircle className="h-3 w-3" /> End Session
+                          </button>
                         </div>
                         <Radio className="h-7 w-7 text-emerald-500 animate-pulse shrink-0" />
                       </CardContent>
@@ -1656,23 +1661,23 @@ export default function ConductLiveTest() {
                   {displayScheduledSessions.map((s) => {
                     const testBatches = s.batchIds?.length
                       ? batches
-                          .filter((b) => s.batchIds!.includes(b.id))
-                          .map((b) => b.name)
-                          .join(", ")
+                        .filter((b) => s.batchIds!.includes(b.id))
+                        .map((b) => b.name)
+                        .join(", ")
                       : "All Batches";
 
                     const startFormatted = s.scheduledStartTime
                       ? new Date(s.scheduledStartTime).toLocaleString([], {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })
                       : "Not set";
 
                     const endFormatted = s.scheduledEndTime
                       ? new Date(s.scheduledEndTime).toLocaleString([], {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        })
+                        dateStyle: "short",
+                        timeStyle: "short",
+                      })
                       : "Not set";
 
                     return (

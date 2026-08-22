@@ -98,11 +98,17 @@ export default function ParticipantVideoTile({
     [canPull, partyTracks, remoteAudioMeta$, presence.name],
   );
 
-  const localScreenTrack = useObservableAsValue(localScreenshareTrack$ ?? NEVER);
-  const localCamTrack = useObservableAsValue(localVideoTrack$ ?? NEVER);
-  const pulledScreen = useObservableAsValue(pulledScreen$);
-  const pulledVideo = useObservableAsValue(pulledVideo$);
-  const audioTrack = useObservableAsValue(isLocal ? (localAudioTrack$ ?? NEVER) : pulledAudio$);
+  const rawLocalScreen = useObservableAsValue(localScreenshareTrack$ ?? NEVER);
+  const rawLocalCam = useObservableAsValue(localVideoTrack$ ?? NEVER);
+  const rawPulledScreen = useObservableAsValue(pulledScreen$);
+  const rawPulledVideo = useObservableAsValue(pulledVideo$);
+  const rawAudio = useObservableAsValue(isLocal ? (localAudioTrack$ ?? NEVER) : pulledAudio$);
+
+  const localScreenTrack = (rawLocalScreen && typeof rawLocalScreen === "object" && "track" in rawLocalScreen ? (rawLocalScreen as any).track : rawLocalScreen) as MediaStreamTrack | null;
+  const localCamTrack = (rawLocalCam && typeof rawLocalCam === "object" && "track" in rawLocalCam ? (rawLocalCam as any).track : rawLocalCam) as MediaStreamTrack | null;
+  const pulledScreen = (rawPulledScreen && typeof rawPulledScreen === "object" && "track" in rawPulledScreen ? (rawPulledScreen as any).track : rawPulledScreen) as MediaStreamTrack | null;
+  const pulledVideo = (rawPulledVideo && typeof rawPulledVideo === "object" && "track" in rawPulledVideo ? (rawPulledVideo as any).track : rawPulledVideo) as MediaStreamTrack | null;
+  const audioTrack = (rawAudio && typeof rawAudio === "object" && "track" in rawAudio ? (rawAudio as any).track : rawAudio) as MediaStreamTrack | null;
 
   const isSharing = isLocal ? !!localScreenTrack : !!presence.screenshareVideoTrack;
   const videoTrack = isLocal
