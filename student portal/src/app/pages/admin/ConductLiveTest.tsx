@@ -56,6 +56,8 @@ import {
   Radio,
   RefreshCw,
   Search,
+  ScreenShare,
+  ScreenShareOff,
   Send,
   ShieldAlert,
   ShieldCheck,
@@ -268,7 +270,7 @@ export default function ConductLiveTest() {
   // Hook into WebRTC for Admin / Co-Host in the active session
   const adminUid = user?.id || (isCohost ? "cohost" : "admin");
   const adminName = user?.name || (isCohost ? "Co-Host Proctor" : "Admin Proctor");
-  const { partyTracks, camera, mic } = useLiveTestPresence({
+  const { partyTracks, camera, mic, screenshare, isScreenOn } = useLiveTestPresence({
     sessionId: selectedSessionId || "",
     uid: adminUid,
     name: adminName,
@@ -308,7 +310,7 @@ export default function ConductLiveTest() {
     return () => sub.unsubscribe();
   }, [camera.broadcastTrack$]);
 
-  // Toggle mic/camera sources
+  // Toggle mic/camera/screenshare sources
   const handleToggleMic = () => {
     if (isAdminMicOn) { mic.disableSource(); } else { mic.enableSource(); mic.startBroadcasting(); }
     setIsAdminMicOn(!isAdminMicOn);
@@ -316,6 +318,20 @@ export default function ConductLiveTest() {
   const handleToggleCam = () => {
     if (isAdminCamOn) { camera.disableSource(); } else { camera.enableSource(); camera.startBroadcasting(); }
     setIsAdminCamOn(!isAdminCamOn);
+  };
+  const handleToggleScreenshare = async () => {
+    try {
+      if (!isScreenOn) {
+        await screenshare.enableSource();
+        screenshare.startBroadcasting();
+      } else {
+        screenshare.stopBroadcasting();
+        screenshare.disableSource();
+      }
+    } catch (err) {
+      console.warn("Screen share error:", err);
+      alert("Screen share could not be started — please ensure screen share permissions are allowed in your browser.");
+    }
   };
 
   const [selectedBatchTab, setSelectedBatchTab] = useState<string>("all");
@@ -1140,7 +1156,7 @@ export default function ConductLiveTest() {
                           </div>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2 pt-1">
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                           <Button
                             size="sm"
                             variant={isAdminMicOn ? "default" : "outline"}
@@ -1159,6 +1175,16 @@ export default function ConductLiveTest() {
                           >
                             {isAdminCamOn ? <Camera className="mr-1.5 h-4 w-4" /> : <CameraOff className="mr-1.5 h-4 w-4" />}
                             {isAdminCamOn ? "Camera On" : "Cam Off"}
+                          </Button>
+
+                          <Button
+                            size="sm"
+                            variant={isScreenOn ? "default" : "outline"}
+                            className={isScreenOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
+                            onClick={() => void handleToggleScreenshare()}
+                          >
+                            {isScreenOn ? <ScreenShareOff className="mr-1.5 h-4 w-4" /> : <ScreenShare className="mr-1.5 h-4 w-4" />}
+                            {isScreenOn ? "Sharing Screen" : "Share Screen"}
                           </Button>
                         </div>
                       </CardContent>

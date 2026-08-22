@@ -358,6 +358,19 @@ function LiveClassRoomInner({
     );
   }
 
+  useEffect(() => {
+    const sub = screenshare.video.broadcastTrack$.subscribe((bt) => {
+      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
+      if (track && track instanceof MediaStreamTrack) {
+        track.onended = () => {
+          screenshare.stopBroadcasting();
+          screenshare.disableSource();
+        };
+      }
+    });
+    return () => sub.unsubscribe();
+  }, [screenshare]);
+
   const toggleScreenshare = async () => {
     try {
       if (!isScreenOn) {

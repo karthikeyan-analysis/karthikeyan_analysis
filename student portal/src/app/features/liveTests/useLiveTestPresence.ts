@@ -173,11 +173,24 @@ export function useLiveTestPresence(params: {
     [partyTracks, camera],
   );
 
+  const screenshare = useMemo(() => getScreenshare(), []);
+  const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
+
+  const screenMeta$ = useMemo(
+    () =>
+      partyTracks && isScreenOn
+        ? partyTracks.push(screenshare.video.broadcastTrack$).pipe(catchError(() => EMPTY))
+        : NEVER,
+    [partyTracks, screenshare, isScreenOn],
+  );
+
   const audioTrackMeta = useObservableAsValue(audioMeta$, undefined);
   const videoTrackMeta = useObservableAsValue(videoMeta$, undefined);
+  const screenTrackMeta = useObservableAsValue(screenMeta$, undefined);
 
   const audioTrack = useMemo(() => toPublishedTrack(audioTrackMeta), [audioTrackMeta]);
   const videoTrack = useMemo(() => toPublishedTrack(videoTrackMeta), [videoTrackMeta]);
+  const screenshareVideoTrack = useMemo(() => toPublishedTrack(screenTrackMeta), [screenTrackMeta]);
 
   // Sync own presence
   useEffect(() => {
@@ -188,6 +201,7 @@ export function useLiveTestPresence(params: {
       role,
       audioTrack,
       videoTrack,
+      screenshareVideoTrack: isScreenOn ? screenshareVideoTrack : null,
       cameraStatus,
       currentQuestionIndex,
       totalAnswered,
@@ -201,6 +215,8 @@ export function useLiveTestPresence(params: {
     role,
     audioTrack,
     videoTrack,
+    screenshareVideoTrack,
+    isScreenOn,
     cameraStatus,
     currentQuestionIndex,
     totalAnswered,
@@ -237,6 +253,8 @@ export function useLiveTestPresence(params: {
     connectionState,
     mic,
     camera,
+    screenshare,
+    isScreenOn,
     roster,
     myPresence,
     cameraStatus,

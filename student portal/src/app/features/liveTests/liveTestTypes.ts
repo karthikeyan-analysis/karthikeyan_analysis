@@ -47,6 +47,7 @@ export interface LiveTestPresence {
   batchName?: string;
   audioTrack?: PublishedTrack | null;
   videoTrack?: PublishedTrack | null;
+  screenshareVideoTrack?: PublishedTrack | null;
   cameraStatus: "active" | "disabled" | "permission_denied";
   tabSwitchCount: number;
   isTabActive: boolean;
