@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NEVER, Observable, distinctUntilChanged, shareReplay, switchMap } from "rxjs";
+import { NEVER, Observable, EMPTY, catchError, distinctUntilChanged, shareReplay, switchMap } from "rxjs";
 import { PartyTracks, getMic, getCamera, getScreenshare, type TrackMetadata } from "partytracks/client";
 import { useObservableAsValue } from "partytracks/react";
 import { createPartyTracksClient } from "../liveClasses/realtimeClient";
@@ -158,14 +158,21 @@ export function useLiveTestPresence(params: {
     [partyTracks],
   );
   const connectionState = useObservableAsValue(pcState$, "new");
+  const isPcConnected = connectionState === "connected";
 
   const audioMeta$ = useMemo(
-    () => (partyTracks && (role === "admin" || role === "cohost") ? partyTracks.push(mic.broadcastTrack$) : NEVER),
-    [partyTracks, mic, role],
+    () =>
+      partyTracks && isPcConnected && (role === "admin" || role === "cohost")
+        ? partyTracks.push(mic.broadcastTrack$).pipe(catchError(() => EMPTY))
+        : NEVER,
+    [partyTracks, mic, role, isPcConnected],
   );
   const videoMeta$ = useMemo(
-    () => (partyTracks ? partyTracks.push(camera.broadcastTrack$) : NEVER),
-    [partyTracks, camera],
+    () =>
+      partyTracks && isPcConnected
+        ? partyTracks.push(camera.broadcastTrack$).pipe(catchError(() => EMPTY))
+        : NEVER,
+    [partyTracks, camera, isPcConnected],
   );
 
   const audioTrackMeta = useObservableAsValue(audioMeta$, undefined);

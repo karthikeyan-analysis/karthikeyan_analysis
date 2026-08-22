@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NEVER, Observable, distinctUntilChanged, shareReplay, switchMap } from "rxjs";
+import { NEVER, Observable, EMPTY, catchError, distinctUntilChanged, shareReplay, switchMap } from "rxjs";
 import { PartyTracks, getMic, getCamera, getScreenshare, type TrackMetadata } from "partytracks/client";
 import { useObservableAsValue } from "partytracks/react";
 import { createPartyTracksClient } from "./realtimeClient";
@@ -18,27 +18,18 @@ function toPublishedTrack(meta: TrackMetadata | undefined): PublishedTrack | nul
  */
 function peerConnectionState$(partyTracks: PartyTracks): Observable<RTCPeerConnectionState> {
   return partyTracks.peerConnection$.pipe(
-    switchMap(
-      (pc) =>
-        new Observable<RTCPeerConnectionState>((subscriber) => {
-          subscriber.next(pc.connectionState);
-          const onChange = () => subscriber.next(pc.connectionState);
-          pc.addEventListener("connectionstatechange", onChange);
-          return () => pc.removeEventListener("connectionstatechange", onChange);
-        }),
+    switchMap((pc) =>
+      new Observable<RTCPeerConnectionState>((subscriber) => {
+        subscriber.next(pc.connectionState);
+        const handler = () => subscriber.next(pc.connectionState);
+        pc.addEventListener("connectionstatechange", handler);
+        return () => pc.removeEventListener("connectionstatechange", handler);
+      }),
     ),
     distinctUntilChanged(),
     shareReplay({ bufferSize: 1, refCount: true }),
   );
 }
-
-/**
- * Owns the local device tracks, the Cloudflare Realtime connection, and this
- * participant's own presence doc (the thing every other client reads to know
- * what to render/pull). Does not own class-level business logic (flipping
- * `liveClasses.status` to "active", reacting to being kicked) — that's
- * page-specific and handled by the caller using the returned `myPresence`.
- */
 export function useLiveClassPresence(params: {
   classId: string;
   uid: string;
@@ -144,31 +135,35 @@ export function useLiveClassPresence(params: {
   );
   const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
 
-  const audioMeta$ = useMemo(
-    () => (partyTracks ? partyTracks.push(mic.broadcastTrack$) : NEVER),
-    [partyTracks, mic],
-  );
-  const videoMeta$ = useMemo(
-    () => (partyTracks ? partyTracks.push(camera.broadcastTrack$) : NEVER),
-    [partyTracks, camera],
-  );
-  // Only push screenshare while actively sharing — idle screenshare pushes
-  // were a common source of tracks/new 400 noise.
-  const screenMeta$ = useMemo(
-    () =>
-      partyTracks && isScreenOn
-        ? partyTracks.push(screenshare.video.broadcastTrack$)
-        : NEVER,
-    [partyTracks, screenshare, isScreenOn],
-  );
-
   const session = useObservableAsValue(session$);
   const connectionState = useObservableAsValue(pcState$, "new" as RTCPeerConnectionState);
+  const isPcConnected = connectionState === "connected";
+
+  const audioMeta$ = useMemo(
+    () =>
+      partyTracks && isPcConnected
+        ? partyTracks.push(mic.broadcastTrack$).pipe(catchError(() => EMPTY))
+        : NEVER,
+    [partyTracks, mic, isPcConnected],
+  );
+  const videoMeta$ = useMemo(
+    () =>
+      partyTracks && isPcConnected
+        ? partyTracks.push(camera.broadcastTrack$).pipe(catchError(() => EMPTY))
+        : NEVER,
+    [partyTracks, camera, isPcConnected],
+  );
+  const screenMeta$ = useMemo(
+    () =>
+      partyTracks && isScreenOn && isPcConnected
+        ? partyTracks.push(screenshare.video.broadcastTrack$).pipe(catchError(() => EMPTY))
+        : NEVER,
+    [partyTracks, screenshare, isScreenOn, isPcConnected],
+  );
+
   const audioMeta = useObservableAsValue(audioMeta$);
   const videoMeta = useObservableAsValue(videoMeta$);
   const screenMeta = useObservableAsValue(screenMeta$);
-
-  const isPcConnected = connectionState === "connected";
 
   // Recover automatically if partytracks brings the PC back before we give up.
   useEffect(() => {
