@@ -103,7 +103,12 @@ export async function getPresignedDownloadUrl(
   void ensureR2BucketCors();
   const bucketName = cleanString(getCleanSecret(r2Bucket, "kasc-live-class-recordings"));
   const cleanKey = cleanString(key);
-  const commandInput: Record<string, any> = { Bucket: bucketName, Key: cleanKey };
+  const commandInput: Record<string, any> = {
+    Bucket: bucketName,
+    Key: cleanKey,
+    // Always tell browsers this is a video/webm so they decode it correctly
+    ResponseContentType: cleanKey.endsWith(".mp4") ? "video/mp4" : "video/webm",
+  };
 
   if (options?.disposition === "attachment" || options?.filename) {
     const safeFilename = (options.filename || "recording.webm").replace(/[^a-zA-Z0-9_\.-]/g, "_");
