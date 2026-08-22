@@ -485,29 +485,44 @@ export default function LiveClassManagement() {
     setLoadingPreview(true);
     setPreviewOpen(true);
     setPreviewUrl("");
-    if (rec?.downloadUrl) {
-      setPreviewUrl(rec.downloadUrl);
-      setLoadingPreview(false);
-      return;
-    }
-    if (!rec && cls.recordingDownloadUrl) {
-      setPreviewUrl(cls.recordingDownloadUrl);
-      setLoadingPreview(false);
-      return;
-    }
-    try {
-      const { url } = await requestRecordingPlaybackUrl(cls.id, {
-        recordingKey: rec?.key || cls.recordingKey,
-      });
-      if (url) {
-        setPreviewUrl(url);
-      } else {
-        alert("Recording preview URL could not be generated.");
-        setPreviewOpen(false);
+
+    let rawUrl = rec?.downloadUrl || (!rec ? cls.recordingDownloadUrl : undefined);
+
+    if (!rawUrl) {
+      try {
+        const { url } = await requestRecordingPlaybackUrl(cls.id, {
+          recordingKey: rec?.key || cls.recordingKey,
+        });
+        if (url) {
+          rawUrl = url;
+        }
+      } catch (e: any) {
+        console.warn("Playback URL generation warning:", e);
       }
-    } catch (e: any) {
-      alert("Could not retrieve playback URL: " + (e?.message || e));
+    }
+
+    if (!rawUrl) {
+      alert("Recording video URL is unavailable.");
       setPreviewOpen(false);
+      setLoadingPreview(false);
+      return;
+    }
+
+    const cleanUrl = rawUrl.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "").trim();
+
+    try {
+      // Fetch media blob and create local blob: URL to eliminate CORS/Range browser video playback blocks
+      const response = await fetch(cleanUrl);
+      if (response.ok) {
+        const videoBlob = await response.blob();
+        const objectUrl = URL.createObjectURL(videoBlob);
+        setPreviewUrl(objectUrl);
+      } else {
+        setPreviewUrl(cleanUrl);
+      }
+    } catch (fetchErr) {
+      console.warn("Direct blob stream notice, using fallback URL:", fetchErr);
+      setPreviewUrl(cleanUrl);
     } finally {
       setLoadingPreview(false);
     }

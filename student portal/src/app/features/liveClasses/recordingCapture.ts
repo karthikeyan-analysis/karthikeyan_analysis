@@ -158,7 +158,10 @@ export async function startRecordingCapture(params: {
 
         const recordingKey = `recordings/${params.classId}/rec_${Date.now()}.webm`;
 
-        // Tier 1: Cloudflare R2 Presigned PUT Upload with strict 8-second timeout
+        let downloadUrl: string | undefined = undefined;
+        let r2Key: string | undefined = undefined;
+
+        // Tier 1: Cloudflare R2 Upload
         try {
           const uploadData =
             prefetchedUploadData ||
@@ -185,39 +188,24 @@ export async function startRecordingCapture(params: {
             clearTimeout(timeoutId);
 
             if (putRes.ok) {
-              const finalResult: RecordingResult = {
-                key: uploadData.key || recordingKey,
-                durationSec,
-                sizeBytes: blob.size,
-              };
-              params.onUploaded(finalResult);
-              return finalResult;
+              r2Key = uploadData.key;
             }
           }
         } catch (r2Err) {
-          console.warn("Cloudflare R2 upload timed out or failed, executing Firebase Storage fail-safe fallback", r2Err);
+          console.warn("Cloudflare R2 upload notice:", r2Err);
         }
 
-        // Tier 2 Fallback: Firebase Cloud Storage SDK Upload
+        // Firebase Cloud Storage Upload for instant HTML5 video streaming URL
         try {
           const storageRef = ref(storage, recordingKey);
           const uploadSnap = await uploadBytes(storageRef, blob, { contentType: mimeType });
-          const downloadUrl = await getDownloadURL(uploadSnap.ref);
-
-          const finalResult: RecordingResult = {
-            key: recordingKey,
-            durationSec,
-            sizeBytes: blob.size,
-            downloadUrl,
-          };
-          params.onUploaded(finalResult);
-          return finalResult;
+          downloadUrl = await getDownloadURL(uploadSnap.ref);
         } catch (storageErr) {
-          console.warn("Firebase Storage fallback upload failed", storageErr);
+          console.warn("Firebase Storage upload notice:", storageErr);
         }
 
-        // Tier 3 Emergency Fallback: Browser Direct Download
-        if (chunks.length > 0) {
+        // Tier 3 Emergency Fallback: Browser Direct Download if all cloud uploads fail
+        if (!r2Key && !downloadUrl && chunks.length > 0) {
           try {
             const fallbackBlob = new Blob(chunks, { type: mimeType });
             const a = document.createElement("a");
@@ -231,13 +219,14 @@ export async function startRecordingCapture(params: {
           }
         }
 
-        const fallbackResult: RecordingResult = {
-          key: recordingKey,
+        const finalResult: RecordingResult = {
+          key: r2Key || recordingKey,
           durationSec,
           sizeBytes: blob.size,
+          ...(downloadUrl ? { downloadUrl } : {}),
         };
-        params.onUploaded(fallbackResult);
-        return fallbackResult;
+        params.onUploaded(finalResult);
+        return finalResult;
       } catch (err) {
         cleanupTracks();
         const error = err instanceof Error ? err : new Error(String(err));
