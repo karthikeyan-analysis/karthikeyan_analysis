@@ -228,16 +228,16 @@ export function useLiveClassPresence(params: {
   // Wait until the PeerConnection is connected so we never advertise tracks for a
   // session peers cannot pull from (which produced tracks/new 410 spam).
   useEffect(() => {
-    if (!session?.sessionId || !isPcConnected) return;
+    if (!session?.sessionId) return;
     upsertOwnPresence({
       classId,
       uid,
       role,
       name,
       sessionId: session.sessionId,
-      audioTrack: isMicOn ? toPublishedTrack(audioMeta) : null,
-      videoTrack: isCameraOn ? toPublishedTrack(videoMeta) : null,
-      screenshareVideoTrack: isScreenOn ? toPublishedTrack(screenMeta) : null,
+      audioTrack: isMicOn && isPcConnected ? toPublishedTrack(audioMeta) : null,
+      videoTrack: isCameraOn && isPcConnected ? toPublishedTrack(videoMeta) : null,
+      screenshareVideoTrack: isScreenOn && isPcConnected ? toPublishedTrack(screenMeta) : null,
     }).catch(console.error);
   }, [
     classId,

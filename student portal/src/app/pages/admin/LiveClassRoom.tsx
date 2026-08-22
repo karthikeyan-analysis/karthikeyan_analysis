@@ -740,9 +740,11 @@ export default function LiveClassRoom() {
 
   const role: ParticipantRole | null = cls.hostUids.includes(user.id)
     ? "host"
-    : (cls.coHostUids || []).includes(user.id)
+    : (cls.coHostUids || []).includes(user.id) || (user as any).adminKind === "cohost" || (user as any).kind === "cohost"
       ? "co-host"
-      : null;
+      : user.role === "admin"
+        ? "host"
+        : null;
 
   if (!role) {
     return (

@@ -208,11 +208,8 @@ export async function startRecordingCapture(params: {
           let uploadData: any = prefetchedUploadData;
           if (!uploadData) {
             try {
-              const res = await Promise.race([
-                prefetchedPromise,
-                getUploadUrl({ classId: params.classId, contentType: mimeType }),
-              ]);
-              uploadData = (res as any)?.data;
+              const res = await getUploadUrl({ classId: params.classId, contentType: mimeType });
+              uploadData = res.data;
             } catch (getErr) {
               console.warn("R2 presigned upload URL notice:", getErr);
             }
@@ -226,17 +223,22 @@ export async function startRecordingCapture(params: {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-            const cleanHeaderContentType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
-            const putRes = await fetch(cleanUploadUrl, {
-              method: "PUT",
-              headers: { "Content-Type": cleanHeaderContentType },
-              body: blob,
-              signal: controller.signal,
-            });
-            clearTimeout(timeoutId);
+            try {
+              const cleanHeaderContentType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
+              const putRes = await fetch(cleanUploadUrl, {
+                method: "PUT",
+                headers: { "Content-Type": cleanHeaderContentType },
+                body: blob,
+                signal: controller.signal,
+              });
+              clearTimeout(timeoutId);
 
-            if (putRes.ok) {
-              r2Key = uploadData.key;
+              if (putRes.ok) {
+                r2Key = uploadData.key;
+              }
+            } catch (putErr) {
+              clearTimeout(timeoutId);
+              console.warn("Cloudflare R2 PUT fetch notice:", putErr);
             }
           }
         } catch (r2Err) {
