@@ -117,7 +117,7 @@ type ListFilter = "all" | "live" | "scheduled" | "ended" | "recordings";
 
 export default function LiveClassManagement() {
   const { user } = useAuth();
-  const { batches } = useData();
+  const { batches, exams } = useData() as any;
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get("tab") as SuiteTab | null;
@@ -203,7 +203,7 @@ export default function LiveClassManagement() {
 
   // Safe fallback arrays to prevent undefined.map / undefined.find crashes
   const safeBatches = useMemo(() => batches || [], [batches]);
-  const safeExams = useMemo(() => (useData() as any).exams || [], []);
+  const safeExams = useMemo(() => exams || [], [exams]);
   const safeClasses = useMemo(() => classes || [], [classes]);
   const safeAdmins = useMemo(() => admins || [], [admins]);
   const safeAttendanceRecords = useMemo(() => attendanceRecords || [], [attendanceRecords]);
