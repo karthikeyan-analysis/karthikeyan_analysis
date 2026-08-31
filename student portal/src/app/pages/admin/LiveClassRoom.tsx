@@ -12,7 +12,10 @@ import {
 } from "../../components/ui/dialog";
 import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
 import { useLiveClassPresence } from "../../features/liveClasses/useLiveClassPresence";
-import { startRecordingCapture, type RecordingCaptureHandle } from "../../features/liveClasses/recordingCapture";
+import {
+  startRecordingCapture,
+  type RecordingCaptureHandle,
+} from "../../features/liveClasses/recordingCapture";
 import {
   deactivateLiveClass,
   endLiveClass,
@@ -29,7 +32,13 @@ import {
 import { getLiveClassBatchIds } from "../../features/liveClasses/liveClassBatchUtils";
 import { examIncludesBatch } from "../../features/exams/examBatchUtils";
 import { listExamTestsForAdmin } from "../../features/exams/examApi";
-import type { LiveClass, LiveClassDoubt, LiveClassPresence, LiveClassRecordingItem, ParticipantRole } from "../../features/liveClasses/types";
+import type {
+  LiveClass,
+  LiveClassDoubt,
+  LiveClassPresence,
+  LiveClassRecordingItem,
+  ParticipantRole,
+} from "../../features/liveClasses/types";
 import type { ExamTest } from "../../features/exams/types";
 import {
   Mic,
@@ -65,20 +74,31 @@ function LiveClassRoomInner({
   name: string;
 }) {
   const navigate = useNavigate();
-  const { partyTracks, connectError, reconnect, isConnected, mic, camera, screenshare, roster } =
-    useLiveClassPresence({
-      classId,
-      uid,
-      name,
-      role,
-    });
+  const {
+    partyTracks,
+    connectError,
+    reconnect,
+    isConnected,
+    mic,
+    camera,
+    screenshare,
+    roster,
+  } = useLiveClassPresence({
+    classId,
+    uid,
+    name,
+    role,
+  });
 
   const [doubts, setDoubts] = useState<LiveClassDoubt[]>([]);
   const [replyTextMap, setReplyTextMap] = useState<Record<string, string>>({});
   const [testPickerOpen, setTestPickerOpen] = useState(false);
   const [availableTests, setAvailableTests] = useState<ExamTest[]>([]);
-  const [recordingHandle, setRecordingHandle] = useState<RecordingCaptureHandle | null>(null);
-  const [notificationToast, setNotificationToast] = useState<string | null>(null);
+  const [recordingHandle, setRecordingHandle] =
+    useState<RecordingCaptureHandle | null>(null);
+  const [notificationToast, setNotificationToast] = useState<string | null>(
+    null,
+  );
 
   const submitDoubtReply = async (doubtId: string) => {
     const text = replyTextMap[doubtId]?.trim();
@@ -134,23 +154,36 @@ function LiveClassRoomInner({
     const matching = all.filter((t) => {
       if (t.status && t.status !== "published") return false;
       if (!batchIds.length) return true;
-      const testBatches = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+      const testBatches = t.batchIds?.length
+        ? t.batchIds
+        : t.batchId
+          ? [t.batchId]
+          : [];
       if (!testBatches.length) return true;
       return batchIds.some((b) => examIncludesBatch(t, b));
     });
-    setAvailableTests(matching.length > 0 ? matching : all.filter((t) => t.status === "published"));
+    setAvailableTests(
+      matching.length > 0
+        ? matching
+        : all.filter((t) => t.status === "published"),
+    );
     setTestPickerOpen(true);
   };
 
   useEffect(() => {
     if (!recordingHandle) return;
     try {
-      const getTrack = (obs: any) => obs?.value?.track || obs?._value?.track || obs?.track;
+      const getTrack = (obs: any) =>
+        obs?.value?.track || obs?._value?.track || obs?.track;
       const activeVideoTrack = isScreenOn
-        ? getTrack(screenshare.video.broadcastTrack$) || getTrack(camera.broadcastTrack$)
+        ? getTrack(screenshare.video.broadcastTrack$) ||
+          getTrack(camera.broadcastTrack$)
         : getTrack(camera.broadcastTrack$);
 
-      if (activeVideoTrack && typeof recordingHandle.updateVideoTrack === "function") {
+      if (
+        activeVideoTrack &&
+        typeof recordingHandle.updateVideoTrack === "function"
+      ) {
         recordingHandle.updateVideoTrack(activeVideoTrack);
       }
     } catch (e) {
@@ -160,7 +193,8 @@ function LiveClassRoomInner({
 
   useEffect(() => {
     const sub = screenshare?.video?.broadcastTrack$?.subscribe((bt: any) => {
-      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
+      const track =
+        bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
       if (track && track instanceof MediaStreamTrack) {
         track.onended = () => {
           screenshare.stopBroadcasting();
@@ -180,9 +214,11 @@ function LiveClassRoomInner({
       return;
     }
     try {
-      const getTrack = (obs: any) => obs?.value?.track || obs?._value?.track || obs?.track;
+      const getTrack = (obs: any) =>
+        obs?.value?.track || obs?._value?.track || obs?.track;
       const activeVideoTrack = isScreenOn
-        ? getTrack(screenshare.video.broadcastTrack$) || getTrack(camera.broadcastTrack$)
+        ? getTrack(screenshare.video.broadcastTrack$) ||
+          getTrack(camera.broadcastTrack$)
         : getTrack(camera.broadcastTrack$);
       const activeAudioTrack = getTrack(mic.broadcastTrack$);
 
@@ -203,18 +239,30 @@ function LiveClassRoomInner({
               durationSec: result.durationSec || 0,
               sizeBytes: result.sizeBytes || 0,
               createdAt: new Date().toISOString(),
-              ...(result.downloadUrl ? { downloadUrl: result.downloadUrl } : {}),
+              ...(result.downloadUrl
+                ? { downloadUrl: result.downloadUrl }
+                : {}),
             };
 
-            const existingRecordings: LiveClassRecordingItem[] = Array.isArray(cls.recordings) ? [...cls.recordings] : [];
-            if (cls.recordingKey && !existingRecordings.some((r) => r.key === cls.recordingKey)) {
+            const existingRecordings: LiveClassRecordingItem[] = Array.isArray(
+              cls.recordings,
+            )
+              ? [...cls.recordings]
+              : [];
+            if (
+              cls.recordingKey &&
+              !existingRecordings.some((r) => r.key === cls.recordingKey)
+            ) {
               existingRecordings.unshift({
                 id: "rec_legacy",
                 key: cls.recordingKey,
                 durationSec: cls.recordingDurationSec || 0,
                 sizeBytes: cls.recordingSizeBytes || 0,
-                createdAt: cls.activeSince || cls.createdAt || new Date().toISOString(),
-                ...(cls.recordingDownloadUrl ? { downloadUrl: cls.recordingDownloadUrl } : {}),
+                createdAt:
+                  cls.activeSince || cls.createdAt || new Date().toISOString(),
+                ...(cls.recordingDownloadUrl
+                  ? { downloadUrl: cls.recordingDownloadUrl }
+                  : {}),
               });
             }
 
@@ -232,7 +280,10 @@ function LiveClassRoomInner({
             }
             await updateLiveClass(classId, updatePayload);
           } catch (uploadErr) {
-            console.error("Error saving recording data to Firestore:", uploadErr);
+            console.error(
+              "Error saving recording data to Firestore:",
+              uploadErr,
+            );
             await updateLiveClass(classId, { recordingStatus: "ready" });
           }
         },
@@ -264,16 +315,24 @@ function LiveClassRoomInner({
     setTestPickerOpen(false);
     const targetTest = availableTests.find((t) => t.id === testId);
     const testTitle = targetTest?.title ? `"${targetTest.title}"` : "Live Exam";
-    setNotificationToast(`🚀 ${testTitle} launched successfully! All students in the live class have been notified.`);
+    setNotificationToast(
+      `🚀 ${testTitle} launched successfully! All students in the live class have been notified.`,
+    );
     setTimeout(() => setNotificationToast(null), 5000);
   };
 
   const [confirmEndRecordingOpen, setConfirmEndRecordingOpen] = useState(false);
-  const [confirmActionType, setConfirmActionType] = useState<"end" | "leave" | null>(null);
+  const [confirmActionType, setConfirmActionType] = useState<
+    "end" | "leave" | null
+  >(null);
   const [isUploadingAndEnding, setIsUploadingAndEnding] = useState(false);
 
   const leaveRoom = async () => {
-    if (recordingHandle || cls.recordingStatus === "recording" || cls.recordingStatus === "uploading") {
+    if (
+      recordingHandle ||
+      cls.recordingStatus === "recording" ||
+      cls.recordingStatus === "uploading"
+    ) {
       setConfirmActionType("leave");
       setConfirmEndRecordingOpen(true);
       return;
@@ -296,13 +355,18 @@ function LiveClassRoomInner({
   };
 
   const endForEveryone = async () => {
-    if (recordingHandle || cls.recordingStatus === "recording" || cls.recordingStatus === "uploading") {
+    if (
+      recordingHandle ||
+      cls.recordingStatus === "recording" ||
+      cls.recordingStatus === "uploading"
+    ) {
       setConfirmActionType("end");
       setConfirmEndRecordingOpen(true);
       return;
     }
 
-    if (!confirm("End this class for everyone? This will stop the meeting.")) return;
+    if (!confirm("End this class for everyone? This will stop the meeting."))
+      return;
     await endLiveClass(classId);
     navigate("/admin/live-classes");
   };
@@ -355,7 +419,10 @@ function LiveClassRoomInner({
         <p className="max-w-md text-red-600">{connectError}</p>
         <div className="flex flex-wrap justify-center gap-2">
           <Button onClick={() => reconnect()}>Try again</Button>
-          <Button variant="outline" onClick={() => navigate("/admin/live-classes")}>
+          <Button
+            variant="outline"
+            onClick={() => navigate("/admin/live-classes")}
+          >
             Back
           </Button>
         </div>
@@ -378,8 +445,13 @@ function LiveClassRoomInner({
           await screenshare.enableSource();
         } catch (e) {
           console.warn("Screenshare enableSource fallback:", e);
-          if (navigator.mediaDevices && typeof navigator.mediaDevices.getDisplayMedia === "function") {
-            const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+          if (
+            navigator.mediaDevices &&
+            typeof navigator.mediaDevices.getDisplayMedia === "function"
+          ) {
+            const stream = await navigator.mediaDevices.getDisplayMedia({
+              video: true,
+            });
             const track = stream.getVideoTracks()[0];
             if (track) {
               (screenshare.video as any).broadcastTrack$.next(track);
@@ -395,7 +467,9 @@ function LiveClassRoomInner({
       }
     } catch (err) {
       console.warn("Screenshare toggle error", err);
-      alert("Could not start screen share — please ensure screen share permissions are granted in your browser.");
+      alert(
+        "Could not start screen share — please ensure screen share permissions are granted in your browser.",
+      );
     }
   };
 
@@ -411,10 +485,14 @@ function LiveClassRoomInner({
 
   const spotlightPresence = cls.spotlightUid
     ? roster.find((p) => p.id === cls.spotlightUid)
-    : roster.find((p) => (p.id === uid ? isScreenOn : !!p.screenshareVideoTrack)) || null;
+    : roster.find((p) =>
+        p.id === uid ? isScreenOn : !!p.screenshareVideoTrack,
+      ) || null;
 
   const displayRoster = roster.length > 0 ? roster : [localPresence];
-  const otherRoster = spotlightPresence ? roster.filter((p) => p.id !== spotlightPresence.id) : roster;
+  const otherRoster = spotlightPresence
+    ? roster.filter((p) => p.id !== spotlightPresence.id)
+    : roster;
   const isRecording = !!recordingHandle || cls.recordingStatus === "recording";
   const isUploading = cls.recordingStatus === "uploading";
 
@@ -429,7 +507,9 @@ function LiveClassRoomInner({
         mediaReady={isConnected}
         localVideoTrack$={isLocal ? camera.broadcastTrack$ : undefined}
         localAudioTrack$={isLocal ? mic.broadcastTrack$ : undefined}
-        localScreenshareTrack$={isLocal && isScreenOn ? screenshare.video.broadcastTrack$ : undefined}
+        localScreenshareTrack$={
+          isLocal && isScreenOn ? screenshare.video.broadcastTrack$ : undefined
+        }
         spotlighted={spotlighted}
         actions={
           !isLocal ? (
@@ -438,27 +518,52 @@ function LiveClassRoomInner({
                 type="button"
                 title={p.mutedByHost ? "Unmute" : "Mute"}
                 className="rounded bg-black/60 p-1 text-white hover:bg-black/80"
-                onClick={() => void setHostControlFlag(classId, p.id, "mutedByHost", !p.mutedByHost)}
+                onClick={() =>
+                  void setHostControlFlag(
+                    classId,
+                    p.id,
+                    "mutedByHost",
+                    !p.mutedByHost,
+                  )
+                }
               >
-                <MicOff className={`h-3 w-3 ${p.mutedByHost ? "text-red-400" : ""}`} />
+                <MicOff
+                  className={`h-3 w-3 ${p.mutedByHost ? "text-red-400" : ""}`}
+                />
               </button>
               <button
                 type="button"
                 title={p.videoDisabledByHost ? "Enable video" : "Disable video"}
                 className="rounded bg-black/60 p-1 text-white hover:bg-black/80"
                 onClick={() =>
-                  void setHostControlFlag(classId, p.id, "videoDisabledByHost", !p.videoDisabledByHost)
+                  void setHostControlFlag(
+                    classId,
+                    p.id,
+                    "videoDisabledByHost",
+                    !p.videoDisabledByHost,
+                  )
                 }
               >
-                <VideoOff className={`h-3 w-3 ${p.videoDisabledByHost ? "text-red-400" : ""}`} />
+                <VideoOff
+                  className={`h-3 w-3 ${p.videoDisabledByHost ? "text-red-400" : ""}`}
+                />
               </button>
               <button
                 type="button"
-                title={cls.spotlightUid === p.id ? "Clear spotlight" : "Spotlight"}
+                title={
+                  cls.spotlightUid === p.id ? "Clear spotlight" : "Spotlight"
+                }
                 className="rounded bg-black/60 p-1 text-white hover:bg-black/80"
-                onClick={() => void setSpotlight(classId, cls.spotlightUid === p.id ? null : p.id)}
+                onClick={() =>
+                  void setSpotlight(
+                    classId,
+                    cls.spotlightUid === p.id ? null : p.id,
+                  )
+                }
               >
-                <Sparkles className={`h-3 w-3 ${cls.spotlightUid === p.id ? "text-amber-300" : ""}`} />
+                <Sparkles
+                  className={`h-3 w-3 ${cls.spotlightUid === p.id ? "text-amber-300" : ""}`}
+                />
               </button>
               <button
                 type="button"
@@ -485,26 +590,46 @@ function LiveClassRoomInner({
               <p className="text-xs text-slate-500">
                 {cls.subject} · Role: {role} · {roster.length} in room
                 {isConnected ? "" : " · Connecting…"}
-                {isUploading ? " · Uploading recording…" : isRecording ? " · Recording" : ""}
+                {isUploading
+                  ? " · Uploading recording…"
+                  : isRecording
+                    ? " · Recording"
+                    : ""}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant={isMicOn ? "default" : "outline"} onClick={() => mic.toggleBroadcasting()}>
-                {isMicOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+              <Button
+                size="sm"
+                variant={isMicOn ? "default" : "outline"}
+                onClick={() => mic.toggleBroadcasting()}
+              >
+                {isMicOn ? (
+                  <Mic className="h-4 w-4" />
+                ) : (
+                  <MicOff className="h-4 w-4" />
+                )}
               </Button>
               <Button
                 size="sm"
                 variant={isCameraOn ? "default" : "outline"}
                 onClick={() => camera.toggleBroadcasting()}
               >
-                {isCameraOn ? <VideoIcon className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+                {isCameraOn ? (
+                  <VideoIcon className="h-4 w-4" />
+                ) : (
+                  <VideoOff className="h-4 w-4" />
+                )}
               </Button>
               <Button
                 size="sm"
                 variant={isScreenOn ? "default" : "outline"}
                 onClick={() => void toggleScreenshare()}
               >
-                {isScreenOn ? <ScreenShareOff className="h-4 w-4" /> : <ScreenShare className="h-4 w-4" />}
+                {isScreenOn ? (
+                  <ScreenShareOff className="h-4 w-4" />
+                ) : (
+                  <ScreenShare className="h-4 w-4" />
+                )}
               </Button>
               <Button
                 size="sm"
@@ -513,13 +638,29 @@ function LiveClassRoomInner({
                 disabled={isUploading}
                 onClick={() => void toggleRecording()}
               >
-                {isRecording ? <Square className="mr-1 h-4 w-4" /> : <Circle className="mr-1 h-4 w-4" />}
-                {isUploading ? "Uploading…" : isRecording ? "Stop Recording" : "Record"}
+                {isRecording ? (
+                  <Square className="mr-1 h-4 w-4" />
+                ) : (
+                  <Circle className="mr-1 h-4 w-4" />
+                )}
+                {isUploading
+                  ? "Uploading…"
+                  : isRecording
+                    ? "Stop Recording"
+                    : "Record"}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => void leaveRoom()}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void leaveRoom()}
+              >
                 Leave
               </Button>
-              <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={() => void endForEveryone()}>
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700"
+                onClick={() => void endForEveryone()}
+              >
                 <PhoneOff className="mr-1 h-4 w-4" />
                 End Class
               </Button>
@@ -532,7 +673,10 @@ function LiveClassRoomInner({
                 <Sparkles className="h-4 w-4 text-emerald-600 animate-spin" />
                 <span>{notificationToast}</span>
               </div>
-              <button onClick={() => setNotificationToast(null)} className="text-emerald-700 hover:text-emerald-950 font-bold text-xs">
+              <button
+                onClick={() => setNotificationToast(null)}
+                className="text-emerald-700 hover:text-emerald-950 font-bold text-xs"
+              >
                 ✕
               </button>
             </div>
@@ -557,8 +701,13 @@ function LiveClassRoomInner({
               ) : (
                 <div className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
                   <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-bounce" />
-                  <p className="font-semibold text-slate-800">Waiting for participants to join…</p>
-                  <p className="text-xs text-slate-400 mt-1">Student video feeds will appear here in the stage grid when they join.</p>
+                  <p className="font-semibold text-slate-800">
+                    Waiting for participants to join…
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Student video feeds will appear here in the stage grid when
+                    they join.
+                  </p>
                 </div>
               )}
             </div>
@@ -579,13 +728,23 @@ function LiveClassRoomInner({
                 doubts.map((d) => (
                   <div
                     key={d.id}
-                    className={`rounded-lg border p-2.5 text-xs space-y-1.5 ${d.resolved ? "border-slate-200 bg-slate-50 text-slate-600" : "border-indigo-200 bg-indigo-50/60"
-                      }`}
+                    className={`rounded-lg border p-2.5 text-xs space-y-1.5 ${
+                      d.resolved
+                        ? "border-slate-200 bg-slate-50 text-slate-600"
+                        : "border-indigo-200 bg-indigo-50/60"
+                    }`}
                   >
                     <div className="flex items-center justify-between">
-                      <p className="font-bold text-slate-800">{d.studentName}</p>
+                      <p className="font-bold text-slate-800">
+                        {d.studentName}
+                      </p>
                       <span className="text-[10px] text-slate-400">
-                        {d.createdAt ? new Date(d.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ""}
+                        {d.createdAt
+                          ? new Date(d.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })
+                          : ""}
                       </span>
                     </div>
                     <p className="text-slate-900">{d.text}</p>
@@ -596,7 +755,9 @@ function LiveClassRoomInner({
                           <MessageSquare className="h-3 w-3" />
                           {d.repliedByName || "Instructor"}'s Reply:
                         </p>
-                        <p className="mt-0.5 text-xs text-slate-800">{d.replyText}</p>
+                        <p className="mt-0.5 text-xs text-slate-800">
+                          {d.replyText}
+                        </p>
                       </div>
                     ) : null}
 
@@ -606,7 +767,12 @@ function LiveClassRoomInner({
                         className="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500"
                         placeholder="Type reply..."
                         value={replyTextMap[d.id] || ""}
-                        onChange={(e) => setReplyTextMap((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        onChange={(e) =>
+                          setReplyTextMap((prev) => ({
+                            ...prev,
+                            [d.id]: e.target.value,
+                          }))
+                        }
                         onKeyDown={(e) => {
                           if (e.key === "Enter") void submitDoubtReply(d.id);
                         }}
@@ -645,7 +811,9 @@ function LiveClassRoomInner({
                   <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
                   Your Video ({role})
                 </p>
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">Self</span>
+                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                  Self
+                </span>
               </div>
               <div className="overflow-hidden rounded-lg">
                 {renderTile(
@@ -665,10 +833,11 @@ function LiveClassRoomInner({
         </div>
       </div>
 
-
-
       {/* Confirmation Dialog when ending/leaving class while recording is active */}
-      <Dialog open={confirmEndRecordingOpen} onOpenChange={setConfirmEndRecordingOpen}>
+      <Dialog
+        open={confirmEndRecordingOpen}
+        onOpenChange={setConfirmEndRecordingOpen}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base font-bold text-red-600">
@@ -680,15 +849,26 @@ function LiveClassRoomInner({
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-900 font-medium space-y-1">
               <p className="font-bold">⚠️ Active Session Recording</p>
               <p className="text-xs text-red-700">
-                This class is currently being recorded. Ending or leaving the class now will automatically stop the recording and save all recorded video up to this moment directly to Cloudflare R2 storage.
+                This class is currently being recorded. Ending or leaving the
+                class now will automatically stop the recording and save all
+                recorded video up to this moment directly to Cloudflare R2
+                storage.
               </p>
             </div>
             <p className="text-slate-600">
-              Do you want to finalize the recording and proceed to {confirmActionType === "end" ? "end the class for everyone" : "leave the room"}?
+              Do you want to finalize the recording and proceed to{" "}
+              {confirmActionType === "end"
+                ? "end the class for everyone"
+                : "leave the room"}
+              ?
             </p>
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" size="sm" onClick={() => setConfirmEndRecordingOpen(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmEndRecordingOpen(false)}
+            >
               Cancel
             </Button>
             <Button
@@ -716,9 +896,12 @@ function LiveClassRoomInner({
           <div className="rounded-2xl border border-indigo-500/30 bg-slate-900 p-8 shadow-2xl space-y-4 max-w-md">
             <Loader2 className="mx-auto h-12 w-12 animate-spin text-indigo-400" />
             <div>
-              <p className="text-lg font-bold text-white">Saving Recording to Cloudflare R2...</p>
+              <p className="text-lg font-bold text-white">
+                Saving Recording to Cloudflare R2...
+              </p>
               <p className="mt-1 text-xs text-slate-400">
-                Your recorded class video is being uploaded to R2 storage. You can wait or switch to background upload.
+                Your recorded class video is being uploaded to R2 storage. You
+                can wait or switch to background upload.
               </p>
             </div>
             <div className="pt-2 flex justify-center gap-3">
@@ -769,7 +952,10 @@ export default function LiveClassRoom() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
         <p className="text-slate-600">Class not found.</p>
-        <Button variant="outline" onClick={() => navigate("/admin/live-classes")}>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/admin/live-classes")}
+        >
           Back
         </Button>
       </div>
@@ -780,7 +966,10 @@ export default function LiveClassRoom() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
         <p className="text-slate-700">This class has ended.</p>
-        <Button variant="outline" onClick={() => navigate("/admin/live-classes")}>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/admin/live-classes")}
+        >
           Back to Live Classes
         </Button>
       </div>
@@ -789,7 +978,9 @@ export default function LiveClassRoom() {
 
   const role: ParticipantRole | null = cls.hostUids.includes(user.id)
     ? "host"
-    : (cls.coHostUids || []).includes(user.id) || (user as any).adminKind === "cohost" || (user as any).kind === "cohost"
+    : (cls.coHostUids || []).includes(user.id) ||
+        (user as any).adminKind === "cohost" ||
+        (user as any).kind === "cohost"
       ? "co-host"
       : user.role === "admin"
         ? "host"
@@ -798,13 +989,26 @@ export default function LiveClassRoom() {
   if (!role) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
-        <p className="text-red-600">You&apos;re not assigned as a host or co-host for this class.</p>
-        <Button variant="outline" onClick={() => navigate("/admin/live-classes")}>
+        <p className="text-red-600">
+          You&apos;re not assigned as a host or co-host for this class.
+        </p>
+        <Button
+          variant="outline"
+          onClick={() => navigate("/admin/live-classes")}
+        >
           Back
         </Button>
       </div>
     );
   }
 
-  return <LiveClassRoomInner classId={id} cls={cls} role={role} uid={user.id} name={user.name} />;
+  return (
+    <LiveClassRoomInner
+      classId={id}
+      cls={cls}
+      role={role}
+      uid={user.id}
+      name={user.name}
+    />
+  );
 }
