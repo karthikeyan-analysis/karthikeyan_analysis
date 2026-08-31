@@ -158,6 +158,19 @@ function LiveClassRoomInner({
     }
   }, [isScreenOn, recordingHandle, screenshare, camera]);
 
+  useEffect(() => {
+    const sub = screenshare?.video?.broadcastTrack$?.subscribe((bt: any) => {
+      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
+      if (track && track instanceof MediaStreamTrack) {
+        track.onended = () => {
+          screenshare.stopBroadcasting();
+          screenshare.disableSource();
+        };
+      }
+    });
+    return () => sub?.unsubscribe?.();
+  }, [screenshare]);
+
   const toggleRecording = async () => {
     if (recordingHandle) {
       const handle = recordingHandle;
@@ -357,19 +370,6 @@ function LiveClassRoomInner({
       </div>
     );
   }
-
-  useEffect(() => {
-    const sub = screenshare.video.broadcastTrack$.subscribe((bt) => {
-      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
-      if (track && track instanceof MediaStreamTrack) {
-        track.onended = () => {
-          screenshare.stopBroadcasting();
-          screenshare.disableSource();
-        };
-      }
-    });
-    return () => sub.unsubscribe();
-  }, [screenshare]);
 
   const toggleScreenshare = async () => {
     try {
