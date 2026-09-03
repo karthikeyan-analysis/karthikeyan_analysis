@@ -192,8 +192,13 @@ export async function registerPublicStudent(data: Omit<PublicStudent, "id" | "us
   const passcode = generatePasscode();
   const sessionToken = generateSessionToken();
 
+  // Strip all undefined values so Firestore setDoc never throws on optional fields
+  const cleanData = Object.fromEntries(
+    Object.entries(data).filter(([_, v]) => v !== undefined && v !== null && v !== ""),
+  );
+
   const newDoc = {
-    ...data,
+    ...cleanData,
     username,
     passcode,
     activeSessionToken: sessionToken,
