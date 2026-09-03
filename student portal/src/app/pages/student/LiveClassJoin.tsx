@@ -255,8 +255,18 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                 size="sm"
                 variant={isMicOn ? "default" : "outline"}
                 disabled={!!myPresence?.mutedByHost}
-                onClick={() => mic.toggleBroadcasting()}
-                title={myPresence?.mutedByHost ? "Muted by host" : undefined}
+                onClick={() => {
+                  if (isMicOn) {
+                    mic.stopBroadcasting();
+                    mic.disableSource();
+                  } else {
+                    try {
+                      mic.enableSource();
+                    } catch {}
+                    mic.startBroadcasting();
+                  }
+                }}
+                title={myPresence?.mutedByHost ? "Muted by host" : isMicOn ? "Mute microphone" : "Unmute microphone"}
               >
                 {myPresence?.mutedByHost || !isMicOn ? (
                   <MicOff className="h-4 w-4" />
@@ -268,8 +278,18 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                 size="sm"
                 variant={isCameraOn ? "default" : "outline"}
                 disabled={!!myPresence?.videoDisabledByHost}
-                onClick={() => camera.toggleBroadcasting()}
-                title={myPresence?.videoDisabledByHost ? "Video disabled by host" : undefined}
+                onClick={() => {
+                  if (isCameraOn) {
+                    camera.stopBroadcasting();
+                    camera.disableSource();
+                  } else {
+                    try {
+                      camera.enableSource();
+                    } catch {}
+                    camera.startBroadcasting();
+                  }
+                }}
+                title={myPresence?.videoDisabledByHost ? "Video disabled by host" : isCameraOn ? "Turn camera off" : "Turn camera on"}
               >
                 {myPresence?.videoDisabledByHost || !isCameraOn ? (
                   <VideoOff className="h-4 w-4" />

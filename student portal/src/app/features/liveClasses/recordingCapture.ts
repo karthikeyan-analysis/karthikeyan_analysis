@@ -12,16 +12,19 @@ export interface RecordingResult {
 export interface RecordingCaptureHandle {
   /** Explicitly stop and upload. Returns a promise resolving when upload completes. */
   stop: () => Promise<RecordingResult | null>;
-  /** Dynamically switch the video track (e.g., when toggling screenshare mid-recording) */
-  updateVideoTrack?: (newTrack: MediaStreamTrack) => void;
+  /** Dynamically switch or mute the video track (e.g., when toggling camera or screenshare mid-recording) */
+  updateVideoTrack?: (newTrack: MediaStreamTrack | null) => void;
+  /** Dynamically update the audio track */
+  updateAudioTrack?: (newTrack: MediaStreamTrack | null) => void;
 }
 
 /**
  * Host & Co-Host client-side capture with screen share + mic audio mixing,
- * multi-tier cloud upload to Cloudflare R2 with fast 8s timeout and fail-safe fallback to Firebase Storage.
+ * multi-tier cloud upload to Cloudflare R2 with fast timeout and fail-safe fallback to Firebase Storage.
  */
 export async function startRecordingCapture(params: {
   classId: string;
+  className?: string;
   onUploaded: (result: RecordingResult) => void;
   onError: (error: Error) => void;
   /** Fired once capture stops and the upload is about to begin. */
@@ -45,45 +48,76 @@ export async function startRecordingCapture(params: {
   videoElement.muted = true;
   videoElement.playsInline = true;
 
-  let currentVideoTrack = params.initialVideoTrack || null;
-  if (currentVideoTrack) {
+  let currentVideoTrack: MediaStreamTrack | null = params.initialVideoTrack || null;
+  if (currentVideoTrack && currentVideoTrack.readyState === "live") {
     videoElement.srcObject = new MediaStream([currentVideoTrack]);
     void videoElement.play().catch(() => {});
   } else {
-    try {
-      const userMediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
-        audio: true,
-      });
-      tracksToStop.push(...userMediaStream.getTracks());
-      const vTrack = userMediaStream.getVideoTracks()[0];
-      const aTrack = userMediaStream.getAudioTracks()[0];
-      if (vTrack) {
-        currentVideoTrack = vTrack;
-        videoElement.srcObject = new MediaStream([vTrack]);
-        void videoElement.play().catch(() => {});
-      }
-      if (aTrack && !params.initialAudioTrack) {
-        params.initialAudioTrack = aTrack;
-      }
-    } catch {
-      console.warn("Camera fallback not accessible for canvas compositor");
-    }
+    currentVideoTrack = null;
+    videoElement.srcObject = null;
   }
 
   let animFrameId: number | null = null;
   const renderFrame = () => {
     if (ctx) {
-      ctx.fillStyle = "#0f172a";
-      ctx.fillRect(0, 0, 1280, 720);
+      const isVideoActive =
+        Boolean(currentVideoTrack) &&
+        currentVideoTrack!.readyState === "live" &&
+        currentVideoTrack!.enabled !== false &&
+        videoElement.srcObject !== null &&
+        videoElement.readyState >= 2 &&
+        videoElement.videoWidth > 0;
 
-      if (videoElement.readyState >= 2 && videoElement.videoWidth > 0) {
+      if (isVideoActive) {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, 1280, 720);
         ctx.drawImage(videoElement, 0, 0, 1280, 720);
       } else {
+        // Render branded audio-only / video muted standby screen
+        const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+        grad.addColorStop(0, "#090d16");
+        grad.addColorStop(0.5, "#1e1b4b");
+        grad.addColorStop(1, "#0f172a");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1280, 720);
+
+        // Center card
+        ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+        ctx.lineWidth = 1;
+        if (typeof (ctx as any).roundRect === "function") {
+          ctx.beginPath();
+          (ctx as any).roundRect(400, 200, 480, 320, 24);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          ctx.fillRect(400, 200, 480, 320);
+        }
+
+        // Icon circle
+        ctx.fillStyle = "rgba(99, 102, 241, 0.15)";
+        ctx.beginPath();
+        ctx.arc(640, 290, 40, 0, Math.PI * 2);
+        ctx.fill();
+
         ctx.fillStyle = "#818cf8";
-        ctx.font = "bold 28px sans-serif";
+        ctx.font = "bold 26px sans-serif";
         ctx.textAlign = "center";
-        ctx.fillText("KASC Live Class Recording", 640, 360);
+        ctx.fillText("🎙️", 640, 300);
+
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "bold 22px sans-serif";
+        ctx.fillText("Live Class Audio Session", 640, 370);
+
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "14px sans-serif";
+        ctx.fillText("Host video is currently paused", 640, 405);
+
+        if (params.className) {
+          ctx.fillStyle = "#a5b4fc";
+          ctx.font = "bold 15px sans-serif";
+          ctx.fillText(params.className, 640, 455);
+        }
       }
     }
     animFrameId = requestAnimationFrame(renderFrame);
@@ -288,13 +322,29 @@ export async function startRecordingCapture(params: {
     return finishedPromise;
   };
 
-  const updateVideoTrack = (newTrack: MediaStreamTrack) => {
+  const updateVideoTrack = (newTrack: MediaStreamTrack | null) => {
     try {
       currentVideoTrack = newTrack;
-      videoElement.srcObject = new MediaStream([newTrack]);
-      void videoElement.play().catch(() => {});
+      if (newTrack && newTrack.readyState === "live") {
+        videoElement.srcObject = new MediaStream([newTrack]);
+        void videoElement.play().catch(() => {});
+      } else {
+        videoElement.pause();
+        videoElement.srcObject = null;
+      }
     } catch (err) {
       console.warn("Could not dynamically update recording video track", err);
+    }
+  };
+
+  const updateAudioTrack = (newTrack: MediaStreamTrack | null) => {
+    try {
+      if (newTrack && newTrack.readyState === "live") {
+        canvasStream.getAudioTracks().forEach((t) => canvasStream.removeTrack(t));
+        canvasStream.addTrack(newTrack);
+      }
+    } catch (err) {
+      console.warn("Could not dynamically update recording audio track", err);
     }
   };
 
@@ -305,5 +355,6 @@ export async function startRecordingCapture(params: {
   return {
     stop: () => finish(),
     updateVideoTrack,
+    updateAudioTrack,
   };
 }

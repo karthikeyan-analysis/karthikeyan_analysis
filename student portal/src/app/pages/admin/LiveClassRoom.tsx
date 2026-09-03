@@ -177,19 +177,36 @@ function LiveClassRoomInner({
         obs?.value?.track || obs?._value?.track || obs?.track;
       const activeVideoTrack = isScreenOn
         ? getTrack(screenshare.video.broadcastTrack$) ||
-          getTrack(camera.broadcastTrack$)
-        : getTrack(camera.broadcastTrack$);
+          (isCameraOn ? getTrack(camera.broadcastTrack$) : null)
+        : isCameraOn
+          ? getTrack(camera.broadcastTrack$)
+          : null;
 
-      if (
-        activeVideoTrack &&
-        typeof recordingHandle.updateVideoTrack === "function"
-      ) {
-        recordingHandle.updateVideoTrack(activeVideoTrack);
+      if (typeof recordingHandle.updateVideoTrack === "function") {
+        recordingHandle.updateVideoTrack(activeVideoTrack || null);
       }
     } catch (e) {
       console.warn("Error syncing video track to recorder:", e);
     }
-  }, [isScreenOn, recordingHandle, screenshare, camera]);
+  }, [isScreenOn, isCameraOn, recordingHandle, screenshare, camera]);
+
+  useEffect(() => {
+    if (!recordingHandle) return;
+    const subCam = camera.broadcastTrack$.subscribe((bt: any) => {
+      if (!isScreenOn) {
+        const track = bt && typeof bt === "object" && "track" in bt ? bt.track : bt;
+        recordingHandle.updateVideoTrack?.(isCameraOn && track instanceof MediaStreamTrack ? track : null);
+      }
+    });
+    const subMic = mic.broadcastTrack$.subscribe((bt: any) => {
+      const track = bt && typeof bt === "object" && "track" in bt ? bt.track : bt;
+      recordingHandle.updateAudioTrack?.(isMicOn && track instanceof MediaStreamTrack ? track : null);
+    });
+    return () => {
+      subCam.unsubscribe();
+      subMic.unsubscribe();
+    };
+  }, [recordingHandle, camera, mic, isScreenOn, isCameraOn, isMicOn]);
 
   useEffect(() => {
     const sub = screenshare?.video?.broadcastTrack$?.subscribe((bt: any) => {
@@ -218,14 +235,17 @@ function LiveClassRoomInner({
         obs?.value?.track || obs?._value?.track || obs?.track;
       const activeVideoTrack = isScreenOn
         ? getTrack(screenshare.video.broadcastTrack$) ||
-          getTrack(camera.broadcastTrack$)
-        : getTrack(camera.broadcastTrack$);
-      const activeAudioTrack = getTrack(mic.broadcastTrack$);
+          (isCameraOn ? getTrack(camera.broadcastTrack$) : null)
+        : isCameraOn
+          ? getTrack(camera.broadcastTrack$)
+          : null;
+      const activeAudioTrack = isMicOn ? getTrack(mic.broadcastTrack$) : null;
 
       const handle = await startRecordingCapture({
         classId,
-        initialVideoTrack: activeVideoTrack,
-        initialAudioTrack: activeAudioTrack,
+        className: cls.name,
+        initialVideoTrack: activeVideoTrack || null,
+        initialAudioTrack: activeAudioTrack || null,
         onUploading: () => {
           setRecordingHandle(null);
           void updateLiveClass(classId, { recordingStatus: "uploading" });
@@ -601,7 +621,18 @@ function LiveClassRoomInner({
               <Button
                 size="sm"
                 variant={isMicOn ? "default" : "outline"}
-                onClick={() => mic.toggleBroadcasting()}
+                onClick={() => {
+                  if (isMicOn) {
+                    mic.stopBroadcasting();
+                    mic.disableSource();
+                  } else {
+                    try {
+                      mic.enableSource();
+                    } catch {}
+                    mic.startBroadcasting();
+                  }
+                }}
+                title={isMicOn ? "Mute microphone" : "Unmute microphone"}
               >
                 {isMicOn ? (
                   <Mic className="h-4 w-4" />
@@ -612,7 +643,18 @@ function LiveClassRoomInner({
               <Button
                 size="sm"
                 variant={isCameraOn ? "default" : "outline"}
-                onClick={() => camera.toggleBroadcasting()}
+                onClick={() => {
+                  if (isCameraOn) {
+                    camera.stopBroadcasting();
+                    camera.disableSource();
+                  } else {
+                    try {
+                      camera.enableSource();
+                    } catch {}
+                    camera.startBroadcasting();
+                  }
+                }}
+                title={isCameraOn ? "Turn camera off" : "Turn camera on"}
               >
                 {isCameraOn ? (
                   <VideoIcon className="h-4 w-4" />
