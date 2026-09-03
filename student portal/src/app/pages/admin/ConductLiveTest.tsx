@@ -541,6 +541,37 @@ export default function ConductLiveTest() {
     }
   };
 
+  const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
+
+  const handleEndSession = async (targetSessionId?: string) => {
+    const sId = targetSessionId || selectedSessionId;
+    if (!sId) return;
+    const target = allSessions.find((s) => s.id === sId) || currentSession;
+    const title = target?.testTitle ? `"${target.testTitle}"` : "this live test";
+
+    if (
+      !confirm(
+        `Are you sure you want to end and close ${title}? All ongoing student attempts will be finalized.`
+      )
+    ) {
+      return;
+    }
+
+    setClosingSessionId(sId);
+    try {
+      await endLiveTestSession(sId);
+      if (selectedSessionId === sId) {
+        setViewingSessionMode("list");
+        setSelectedSessionId("");
+      }
+    } catch (err: any) {
+      console.error("Error closing live test session:", err);
+      alert(`Could not close live test: ${err?.message || err}`);
+    } finally {
+      setClosingSessionId(null);
+    }
+  };
+
   const studentPresenceList = useMemo(
     () => presenceList.filter((p) => p.role === "student" && p.uid !== adminUid && p.uid !== user?.id),
     [presenceList, adminUid, user?.id],
@@ -1008,17 +1039,34 @@ export default function ConductLiveTest() {
                             </div>
                           </div>
 
-                          <Button
-                            onClick={() => {
-                              setSelectedSessionId(s.id);
-                              setViewingSessionMode("detail");
-                            }}
-                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-9 text-xs shadow-xs flex items-center justify-center gap-1.5"
-                          >
-                            <Video className="h-4 w-4 text-emerald-300" />
-                            <Eye className="h-4 w-4" />
-                            Live Test Alert & Cam Monitor
-                          </Button>
+                          <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                            <Button
+                              onClick={() => {
+                                setSelectedSessionId(s.id);
+                                setViewingSessionMode("detail");
+                              }}
+                              className="flex-1 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-9 text-xs shadow-xs flex items-center justify-center gap-1.5"
+                            >
+                              <Video className="h-4 w-4 text-emerald-300" />
+                              <Eye className="h-4 w-4" />
+                              <span className="truncate">Live Test Alert & Cam Monitor</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleEndSession(s.id)}
+                              disabled={closingSessionId === s.id}
+                              className="w-full sm:w-auto h-9 px-3 border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:text-rose-800 hover:border-rose-300 font-bold text-xs shrink-0 flex items-center justify-center gap-1"
+                              title="Close and end this live test session"
+                            >
+                              {closingSessionId === s.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin text-rose-600" />
+                              ) : (
+                                <StopCircle className="h-4 w-4 text-rose-600" />
+                              )}
+                              <span>Close Test</span>
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     );
@@ -1045,9 +1093,14 @@ export default function ConductLiveTest() {
                   <Button
                     size="sm"
                     className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-md flex items-center gap-1.5 px-3 py-1.5 rounded-lg"
-                    onClick={() => void handleEndSession()}
+                    disabled={closingSessionId === selectedSessionId}
+                    onClick={() => void handleEndSession(selectedSessionId)}
                   >
-                    <StopCircle className="h-4 w-4" />
+                    {closingSessionId === selectedSessionId ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <StopCircle className="h-4 w-4" />
+                    )}
                     End Live Test Session
                   </Button>
                 </div>
@@ -1066,10 +1119,16 @@ export default function ConductLiveTest() {
                           </p>
                           <button
                             type="button"
-                            onClick={() => void handleEndSession()}
-                            className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-800 underline"
+                            onClick={() => void handleEndSession(selectedSessionId)}
+                            disabled={closingSessionId === selectedSessionId}
+                            className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-800 underline disabled:opacity-50"
                           >
-                            <StopCircle className="h-3 w-3" /> End Session
+                            {closingSessionId === selectedSessionId ? (
+                              <Loader2 className="h-3 w-3 animate-spin text-rose-600" />
+                            ) : (
+                              <StopCircle className="h-3 w-3" />
+                            )}
+                            End Session
                           </button>
                         </div>
                         <Radio className="h-7 w-7 text-emerald-500 animate-pulse shrink-0" />
