@@ -1098,24 +1098,6 @@ export default function LiveClassManagement() {
                   </Select>
                 </div>
 
-                {/* Bulk Delete Button when items selected */}
-                {selectedClassIds.length > 0 && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={bulkDeleting}
-                    onClick={() => void handleBulkDelete()}
-                    className="h-7 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs flex items-center gap-1.5 px-3"
-                  >
-                    {bulkDeleting ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-3.5 w-3.5" />
-                    )}
-                    <span>Delete Selected ({selectedClassIds.length})</span>
-                  </Button>
-                )}
-
                 <Button
                   size="sm"
                   className="h-7 bg-indigo-600 hover:bg-indigo-700 text-xs font-semibold"
@@ -1146,16 +1128,6 @@ export default function LiveClassManagement() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-slate-50/80 text-xs">
-                      <TableHead className="w-10 px-3 text-center">
-                        <Checkbox
-                          checked={
-                            filteredClasses.length > 0 &&
-                            selectedClassIds.length === filteredClasses.length
-                          }
-                          onCheckedChange={toggleSelectAll}
-                          aria-label="Select all"
-                        />
-                      </TableHead>
                       <TableHead className="font-bold">
                         Meeting Name & Subject
                       </TableHead>
@@ -1170,22 +1142,8 @@ export default function LiveClassManagement() {
                   <TableBody>
                     {filteredClasses.map((cls) => {
                       const canControl = isHostOrCoHost(cls, user?.id);
-                      const isSelected = selectedClassIds.includes(cls.id);
                       return (
                         <TableRow
-                          key={cls.id}
-                          className={`hover:bg-slate-50/60 text-xs transition-colors ${
-                            isSelected ? "bg-indigo-50/40" : ""
-                          }`}
-                        >
-                          <TableCell className="w-10 px-3 text-center">
-                            <Checkbox
-                              checked={isSelected}
-                              onCheckedChange={() => toggleSelectClass(cls.id)}
-                              aria-label={`Select ${cls.name}`}
-                            />
-                          </TableCell>
-                          <TableCell>
                             <div className="font-bold text-slate-900">
                               {cls.name}
                             </div>
