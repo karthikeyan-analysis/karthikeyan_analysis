@@ -447,37 +447,12 @@ function LiveClassRoomInner({
             <PhoneOff className="h-7 w-7" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900">Live Studio Connection Issue</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              Live Studio Connection Issue
+            </h3>
             <p className="mt-1 text-xs text-slate-600 leading-relaxed">
               {connectError}
             </p>
-          </div>
-          <div className="pt-2 flex flex-col gap-2">
-            <Button
-              className="bg-indigo-600 hover:bg-indigo-700 font-bold text-xs h-9 w-full shadow-md"
-              onClick={() => reconnect()}
-            >
-              🔄 Rejoin Host Studio
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs h-8"
-              onClick={() => navigate("/admin/live-classes")}
-            >
-              Back to Dashboard
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  if (!partyTracks) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 p-8 text-center text-slate-500">
-        <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-        Joining the class…
-      </div>
     );
   }
 
@@ -631,7 +606,9 @@ function LiveClassRoomInner({
             <div>
               <p className="font-semibold text-slate-900">{cls.name}</p>
               <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-slate-500">
-                <span>{cls.subject} · {roster.length} in room</span>
+                <span>
+                  {cls.subject} · {roster.length} in room
+                </span>
                 {isConnected ? (
                   <span className="inline-flex items-center text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5" />
@@ -647,102 +624,118 @@ function LiveClassRoomInner({
                     Reconnecting · Click to Rejoin
                   </button>
                 )}
-                {isUploading
-                  ? " · Uploading recording…"
-                  : isRecording
-                    ? " · Recording"
-                    : ""}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={isMicOn ? "default" : "outline"}
-                onClick={() => {
-                  if (isMicOn) {
-                    mic.stopBroadcasting();
-                    mic.disableSource();
-                  } else {
-                    try {
-                      mic.enableSource();
-                    } catch {}
-                    mic.startBroadcasting();
-                  }
-                }}
-                title={isMicOn ? "Mute microphone" : "Unmute microphone"}
-              >
-                {isMicOn ? (
-                  <Mic className="h-4 w-4" />
-                ) : (
-                  <MicOff className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant={isCameraOn ? "default" : "outline"}
-                onClick={() => {
-                  if (isCameraOn) {
-                    camera.stopBroadcasting();
-                    camera.disableSource();
-                  } else {
-                    try {
-                      camera.enableSource();
-                    } catch {}
-                    camera.startBroadcasting();
-                  }
-                }}
-                title={isCameraOn ? "Turn camera off" : "Turn camera on"}
-              >
-                {isCameraOn ? (
-                  <VideoIcon className="h-4 w-4" />
-                ) : (
-                  <VideoOff className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant={isScreenOn ? "default" : "outline"}
-                onClick={() => void toggleScreenshare()}
-              >
-                {isScreenOn ? (
-                  <ScreenShareOff className="h-4 w-4" />
-                ) : (
-                  <ScreenShare className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant={isRecording ? "default" : "outline"}
-                className={isRecording ? "bg-red-600 hover:bg-red-700" : ""}
-                disabled={isUploading}
-                onClick={() => void toggleRecording()}
-              >
-                {isRecording ? (
-                  <Square className="mr-1 h-4 w-4" />
-                ) : (
-                  <Circle className="mr-1 h-4 w-4" />
-                )}
-                {isUploading
-                  ? "Uploading…"
-                  : isRecording
-                    ? "Stop Recording"
-                    : "Record"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => void leaveRoom()}
-              >
-                Leave
-              </Button>
-              <Button
-                size="sm"
-                className="bg-red-600 hover:bg-red-700"
-                onClick={() => void endForEveryone()}
-              >
-                <PhoneOff className="mr-1 h-4 w-4" />
-                End Class
-              </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Only Hosts & Admins can toggle Video & Mic off/on */}
+              {isHost ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant={isMicOn ? "default" : "outline"}
+                    onClick={() => {
+                      if (isMicOn) {
+                        mic.stopBroadcasting();
+                        mic.disableSource();
+                      } else {
+                        try {
+                          mic.enableSource();
+                        } catch {}
+                        mic.startBroadcasting();
+                      }
+                    }}
+                    title={isMicOn ? "Mute microphone" : "Unmute microphone"}
+                  >
+                    {isMicOn ? (
+                      <Mic className="h-4 w-4" />
+                    ) : (
+                      <MicOff className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isCameraOn ? "default" : "outline"}
+                    onClick={() => {
+                      if (isCameraOn) {
+                        camera.stopBroadcasting();
+                        camera.disableSource();
+                      } else {
+                        try {
+                          camera.enableSource();
+                        } catch {}
+                        camera.startBroadcasting();
+                      }
+                    }}
+                    title={isCameraOn ? "Turn camera off" : "Turn camera on"}
+                  >
+                    {isCameraOn ? (
+                      <VideoIcon className="h-4 w-4" />
+                    ) : (
+                      <VideoOff className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isScreenOn ? "default" : "outline"}
+                    onClick={() => void toggleScreenshare()}
+                  >
+                    {isScreenOn ? (
+                      <ScreenShareOff className="h-4 w-4" />
+                    ) : (
+                      <ScreenShare className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isRecording ? "default" : "outline"}
+                    className={isRecording ? "bg-red-600 hover:bg-red-700" : ""}
+                    disabled={isUploading}
+                    onClick={() => void toggleRecording()}
+                  >
+                    {isRecording ? (
+                      <Square className="mr-1 h-4 w-4" />
+                    ) : (
+                      <Circle className="mr-1 h-4 w-4" />
+                    )}
+                    {isUploading
+                      ? "Uploading…"
+                      : isRecording
+                        ? "Stop Recording"
+                        : "Record"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void leaveRoom()}
+                  >
+                    Leave
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => void endForEveryone()}
+                  >
+                    <PhoneOff className="mr-1 h-4 w-4" />
+                    End Class
+                  </Button>
+                </>
+              ) : (
+                /* Student view: Video & Mic are mandatory - no option to turn off */
+                <>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold shadow-2xs">
+                    <VideoIcon className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                    <Mic className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                    <span>Live Video & Audio Active (Mandatory)</span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void leaveRoom()}
+                  >
+                    Leave
+                  </Button>
+                </>
+              )}
             </div>
           </div>
 

@@ -140,6 +140,24 @@ function StudentCallInner({
     [classId, user],
   );
 
+  // Mandatory Student Camera & Microphone Auto-Broadcasting
+  useEffect(() => {
+    if (isConnected) {
+      try {
+        camera.enableSource();
+        camera.startBroadcasting();
+      } catch (e) {
+        console.warn("Student camera auto-broadcast:", e);
+      }
+      try {
+        mic.enableSource();
+        mic.startBroadcasting();
+      } catch (e) {
+        console.warn("Student mic auto-broadcast:", e);
+      }
+    }
+  }, [isConnected, camera, mic]);
+
   // Attendance: join when the call connects; leave on unmount / disconnect.
   useEffect(() => {
     if (!isConnected || !user?.studentRecordId) return;
@@ -232,7 +250,9 @@ function StudentCallInner({
             <PhoneOff className="h-7 w-7" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-slate-900">Network Connection Issue</h3>
+            <h3 className="text-base font-bold text-slate-900">
+              Network Connection Issue
+            </h3>
             <p className="mt-1 text-xs text-slate-600 leading-relaxed">
               {connectError}
             </p>
@@ -319,65 +339,12 @@ function StudentCallInner({
                 )}
               </div>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant={isMicOn ? "default" : "outline"}
-                disabled={!!myPresence?.mutedByHost}
-                onClick={() => {
-                  if (isMicOn) {
-                    mic.stopBroadcasting();
-                    mic.disableSource();
-                  } else {
-                    try {
-                      mic.enableSource();
-                    } catch {}
-                    mic.startBroadcasting();
-                  }
-                }}
-                title={
-                  myPresence?.mutedByHost
-                    ? "Muted by host"
-                    : isMicOn
-                      ? "Mute microphone"
-                      : "Unmute microphone"
-                }
-              >
-                {myPresence?.mutedByHost || !isMicOn ? (
-                  <MicOff className="h-4 w-4" />
-                ) : (
-                  <Mic className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                size="sm"
-                variant={isCameraOn ? "default" : "outline"}
-                disabled={!!myPresence?.videoDisabledByHost}
-                onClick={() => {
-                  if (isCameraOn) {
-                    camera.stopBroadcasting();
-                    camera.disableSource();
-                  } else {
-                    try {
-                      camera.enableSource();
-                    } catch {}
-                    camera.startBroadcasting();
-                  }
-                }}
-                title={
-                  myPresence?.videoDisabledByHost
-                    ? "Video disabled by host"
-                    : isCameraOn
-                      ? "Turn camera off"
-                      : "Turn camera on"
-                }
-              >
-                {myPresence?.videoDisabledByHost || !isCameraOn ? (
-                  <VideoOff className="h-4 w-4" />
-                ) : (
-                  <VideoIcon className="h-4 w-4" />
-                )}
-              </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-emerald-800 text-xs font-bold shadow-2xs">
+                <VideoIcon className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                <Mic className="h-3.5 w-3.5 text-emerald-600 animate-pulse" />
+                <span>Live Video & Audio Active (Mandatory)</span>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
