@@ -3,18 +3,46 @@ import { useNavigate } from "react-router";
 import { useAuth } from "../../context/AuthContext";
 import { useData } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { Badge } from "../../components/ui/badge";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
 import { cn } from "../../components/ui/utils";
 import StudentAvatar from "../../components/StudentAvatar";
 import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
-import { listExamTestsForAdmin } from "../../features/exams/examApi";
-import type { ExamTest } from "../../features/exams/types";
+import {
+  getExamTest,
+  listAttemptsForAdmin,
+  listExamTestsForAdmin,
+  listPrivateQuestions,
+  listPublicQuestions,
+} from "../../features/exams/examApi";
+import type {
+  ExamAttempt,
+  ExamQuestionPrivate,
+  ExamQuestionPublic,
+  ExamTest,
+} from "../../features/exams/types";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
+import {
+  displayNameForAttempt,
+  resolveAttemptParticipant,
+  safeFileName,
+  toIsoOrEmpty,
+} from "../../features/exams/adminTestReportUtils";
+import * as XLSX from "xlsx";
 import {
   createLiveTestSession,
   deleteLiveTestSession,
@@ -29,9 +57,15 @@ import {
   subscribeToLiveTestPresence,
   subscribeToLiveTestSession,
 } from "../../features/liveTests/liveTestApi";
-import { subscribeToAdmins, type AdminProfile } from "../../features/liveClasses/adminDirectory";
+import {
+  subscribeToAdmins,
+  type AdminProfile,
+} from "../../features/liveClasses/adminDirectory";
 import { useLiveTestPresence } from "../../features/liveTests/useLiveTestPresence";
-import type { LiveTestPresence, LiveTestSession } from "../../features/liveTests/liveTestTypes";
+import type {
+  LiveTestPresence,
+  LiveTestSession,
+} from "../../features/liveTests/liveTestTypes";
 import {
   Activity,
   AlertTriangle,
@@ -90,14 +124,23 @@ export default function ConductLiveTest() {
   const [enableStudentCamera, setEnableStudentCamera] = useState(true);
   const [enableAdminVideo, setEnableAdminVideo] = useState(true);
   const [maxTabSwitchWarnings, setMaxTabSwitchWarnings] = useState(3);
-  const [autoSubmitOnViolationLimit, setAutoSubmitOnViolationLimit] = useState(false);
-  const [customDurationMinutes, setCustomDurationMinutes] = useState<number | "">("");
+  const [autoSubmitOnViolationLimit, setAutoSubmitOnViolationLimit] =
+    useState(false);
+  const [customDurationMinutes, setCustomDurationMinutes] = useState<
+    number | ""
+  >("");
 
   // Active & Scheduled Sessions State
   const [activeSessions, setActiveSessions] = useState<LiveTestSession[]>([]);
-  const [scheduledSessions, setScheduledSessions] = useState<LiveTestSession[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [currentSession, setCurrentSession] = useState<LiveTestSession | null>(null);
+  const [scheduledSessions, setScheduledSessions] = useState<LiveTestSession[]>(
+    [],
+  );
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
+    null,
+  );
+  const [currentSession, setCurrentSession] = useState<LiveTestSession | null>(
+    null,
+  );
   const [presenceList, setPresenceList] = useState<LiveTestPresence[]>([]);
 
   // Announcement state
@@ -105,12 +148,14 @@ export default function ConductLiveTest() {
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false);
 
   // Warning Modal State
-  const [warningStudent, setWarningStudent] = useState<LiveTestPresence | null>(null);
+  const [warningStudent, setWarningStudent] = useState<LiveTestPresence | null>(
+    null,
+  );
   const [warningMsg, setWarningMsg] = useState("");
 
   const [launching, setLaunching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"setup" | "room" | "schedule">(() =>
-    user?.adminKind === "cohost" ? "room" : "setup",
+  const [activeTab, setActiveTab] = useState<"setup" | "room" | "schedule">(
+    () => (user?.adminKind === "cohost" ? "room" : "setup"),
   );
 
   // Scheduled Test Form State
@@ -121,7 +166,9 @@ export default function ConductLiveTest() {
   const [scheduling, setScheduling] = useState(false);
 
   // View Mode for Tab 2: "list" (show list of ongoing tests) vs "detail" (show selected session proctoring room)
-  const [viewingSessionMode, setViewingSessionMode] = useState<"list" | "detail">("list");
+  const [viewingSessionMode, setViewingSessionMode] = useState<
+    "list" | "detail"
+  >("list");
 
   // Load published premade tests
   useEffect(() => {
@@ -158,7 +205,12 @@ export default function ConductLiveTest() {
     if (!isCohost) return activeSessions;
     return activeSessions.filter((s) => {
       if (s.coHostId && s.coHostId === user?.id) return true;
-      if (s.coHostEmail && user?.email && s.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      if (
+        s.coHostEmail &&
+        user?.email &&
+        s.coHostEmail.toLowerCase() === user.email.toLowerCase()
+      )
+        return true;
       if (s.scheduledByUid && s.scheduledByUid === user?.id) return true;
       if (s.startedByUid && s.startedByUid === user?.id) return true;
       return false;
@@ -169,7 +221,12 @@ export default function ConductLiveTest() {
     if (!isCohost) return scheduledSessions;
     return scheduledSessions.filter((s) => {
       if (s.coHostId && s.coHostId === user?.id) return true;
-      if (s.coHostEmail && user?.email && s.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
+      if (
+        s.coHostEmail &&
+        user?.email &&
+        s.coHostEmail.toLowerCase() === user.email.toLowerCase()
+      )
+        return true;
       if (s.scheduledByUid && s.scheduledByUid === user?.id) return true;
       if (s.startedByUid && s.startedByUid === user?.id) return true;
       return false;
@@ -181,9 +238,19 @@ export default function ConductLiveTest() {
     if (!user) return false;
     if (user.role === "admin" && user.adminKind !== "cohost") return true;
     if (!currentSession) return false;
-    if (currentSession.startedByUid === user.id || currentSession.scheduledByUid === user.id) return true;
-    if (currentSession.coHostId && currentSession.coHostId === user.id) return true;
-    if (currentSession.coHostEmail && user.email && currentSession.coHostEmail.toLowerCase() === user.email.toLowerCase()) return true;
+    if (
+      currentSession.startedByUid === user.id ||
+      currentSession.scheduledByUid === user.id
+    )
+      return true;
+    if (currentSession.coHostId && currentSession.coHostId === user.id)
+      return true;
+    if (
+      currentSession.coHostEmail &&
+      user.email &&
+      currentSession.coHostEmail.toLowerCase() === user.email.toLowerCase()
+    )
+      return true;
     return false;
   }, [user, currentSession]);
 
@@ -269,13 +336,15 @@ export default function ConductLiveTest() {
 
   // Hook into WebRTC for Admin / Co-Host in the active session
   const adminUid = user?.id || (isCohost ? "cohost" : "admin");
-  const adminName = user?.name || (isCohost ? "Co-Host Proctor" : "Admin Proctor");
-  const { partyTracks, camera, mic, screenshare, isScreenOn } = useLiveTestPresence({
-    sessionId: selectedSessionId || "",
-    uid: adminUid,
-    name: adminName,
-    role: isCohost ? "cohost" : "admin",
-  });
+  const adminName =
+    user?.name || (isCohost ? "Co-Host Proctor" : "Admin Proctor");
+  const { partyTracks, camera, mic, screenshare, isScreenOn } =
+    useLiveTestPresence({
+      sessionId: selectedSessionId || "",
+      uid: adminUid,
+      name: adminName,
+      role: isCohost ? "cohost" : "admin",
+    });
 
   const [isAdminMicOn, setIsAdminMicOn] = useState(true);
   const [isAdminCamOn, setIsAdminCamOn] = useState(true);
@@ -298,7 +367,8 @@ export default function ConductLiveTest() {
     const sub = camera.broadcastTrack$.subscribe((bt) => {
       const el = adminVideoRef.current;
       if (!el) return;
-      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
+      const track =
+        bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
       if (track) {
         const ms = new MediaStream();
         ms.addTrack(track as MediaStreamTrack);
@@ -312,11 +382,21 @@ export default function ConductLiveTest() {
 
   // Toggle mic/camera/screenshare sources
   const handleToggleMic = () => {
-    if (isAdminMicOn) { mic.disableSource(); } else { mic.enableSource(); mic.startBroadcasting(); }
+    if (isAdminMicOn) {
+      mic.disableSource();
+    } else {
+      mic.enableSource();
+      mic.startBroadcasting();
+    }
     setIsAdminMicOn(!isAdminMicOn);
   };
   const handleToggleCam = () => {
-    if (isAdminCamOn) { camera.disableSource(); } else { camera.enableSource(); camera.startBroadcasting(); }
+    if (isAdminCamOn) {
+      camera.disableSource();
+    } else {
+      camera.enableSource();
+      camera.startBroadcasting();
+    }
     setIsAdminCamOn(!isAdminCamOn);
   };
   const handleToggleScreenshare = async () => {
@@ -330,7 +410,9 @@ export default function ConductLiveTest() {
       }
     } catch (err) {
       console.warn("Screen share error:", err);
-      alert("Screen share could not be started — please ensure screen share permissions are allowed in your browser.");
+      alert(
+        "Screen share could not be started — please ensure screen share permissions are allowed in your browser.",
+      );
     }
   };
 
@@ -342,10 +424,16 @@ export default function ConductLiveTest() {
     // Filter by Batch Tab
     if (selectedBatchTab !== "all") {
       if (selectedBatchTab === "__common__") {
-        list = list.filter((t) => !t.batchId && (!t.batchIds || t.batchIds.length === 0));
+        list = list.filter(
+          (t) => !t.batchId && (!t.batchIds || t.batchIds.length === 0),
+        );
       } else {
         list = list.filter((t) => {
-          const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+          const bIds = t.batchIds?.length
+            ? t.batchIds
+            : t.batchId
+              ? [t.batchId]
+              : [];
           return bIds.includes(selectedBatchTab);
         });
       }
@@ -355,7 +443,9 @@ export default function ConductLiveTest() {
     const q = searchTest.toLowerCase().trim();
     if (q) {
       list = list.filter(
-        (t) => t.title.toLowerCase().includes(q) || t.subject?.toLowerCase().includes(q),
+        (t) =>
+          t.title.toLowerCase().includes(q) ||
+          t.subject?.toLowerCase().includes(q),
       );
     }
 
@@ -364,7 +454,11 @@ export default function ConductLiveTest() {
 
   const handleSelectTest = (test: ExamTest) => {
     setSelectedTest(test);
-    const ids = test.batchIds?.length ? test.batchIds : test.batchId ? [test.batchId] : [];
+    const ids = test.batchIds?.length
+      ? test.batchIds
+      : test.batchId
+        ? [test.batchId]
+        : [];
     setSelectedBatchIds(ids);
     setCustomDurationMinutes(test.durationMinutes);
   };
@@ -427,7 +521,9 @@ export default function ConductLiveTest() {
       return;
     }
     if (!scheduleStartTime || !scheduleEndTime) {
-      alert("Please select both Start Time and End Time for the test schedule.");
+      alert(
+        "Please select both Start Time and End Time for the test schedule.",
+      );
       return;
     }
     if (scheduleBatchIds.length === 0) {
@@ -477,7 +573,12 @@ export default function ConductLiveTest() {
 
   const handleEndSession = async () => {
     if (!selectedSessionId) return;
-    if (!confirm("Are you sure you want to end this Live Test session for all students?")) return;
+    if (
+      !confirm(
+        "Are you sure you want to end this Live Test session for all students?",
+      )
+    )
+      return;
 
     try {
       await endLiveTestSession(selectedSessionId);
@@ -489,7 +590,10 @@ export default function ConductLiveTest() {
   };
 
   const handleDeleteSchedule = async (sessionId: string, title: string) => {
-    if (!confirm(`Are you sure you want to cancel the schedule for "${title}"?`)) return;
+    if (
+      !confirm(`Are you sure you want to cancel the schedule for "${title}"?`)
+    )
+      return;
     try {
       await deleteLiveTestSession(sessionId);
     } catch (err) {
@@ -512,7 +616,10 @@ export default function ConductLiveTest() {
     if (!selectedSessionId || !announcementText.trim()) return;
     setSendingAnnouncement(true);
     try {
-      await sendLiveTestAnnouncement(selectedSessionId, announcementText.trim());
+      await sendLiveTestAnnouncement(
+        selectedSessionId,
+        announcementText.trim(),
+      );
       setAnnouncementText("");
     } catch (err) {
       console.error(err);
@@ -524,7 +631,11 @@ export default function ConductLiveTest() {
   const handleSendWarning = async () => {
     if (!selectedSessionId || !warningStudent || !warningMsg.trim()) return;
     try {
-      await sendStudentWarningMessage(selectedSessionId, warningStudent.uid, warningMsg.trim());
+      await sendStudentWarningMessage(
+        selectedSessionId,
+        warningStudent.uid,
+        warningMsg.trim(),
+      );
       setWarningStudent(null);
       setWarningMsg("");
     } catch (err) {
@@ -547,11 +658,13 @@ export default function ConductLiveTest() {
     const sId = targetSessionId || selectedSessionId;
     if (!sId) return;
     const target = allSessions.find((s) => s.id === sId) || currentSession;
-    const title = target?.testTitle ? `"${target.testTitle}"` : "this live test";
+    const title = target?.testTitle
+      ? `"${target.testTitle}"`
+      : "this live test";
 
     if (
       !confirm(
-        `Are you sure you want to end and close ${title}? All ongoing student attempts will be finalized.`
+        `Are you sure you want to end and close ${title}? All ongoing student attempts will be finalized.`,
       )
     ) {
       return;
@@ -572,24 +685,249 @@ export default function ConductLiveTest() {
     }
   };
 
+  const [exportingTestId, setExportingTestId] = useState<string | null>(null);
+
+  const handleExportLiveTestResults = async (
+    target: { testId: string; testTitle?: string },
+    format: "xlsx" | "csv" = "xlsx",
+  ) => {
+    const testId = target.testId;
+    if (!testId) return;
+
+    setExportingTestId(testId);
+    try {
+      const [t, attempts, qs, keys] = await Promise.all([
+        getExamTest(testId),
+        listAttemptsForAdmin(testId),
+        listPublicQuestions(testId).catch(() => [] as ExamQuestionPublic[]),
+        listPrivateQuestions(testId).catch(
+          () => null as ExamQuestionPrivate[] | null,
+        ),
+      ]);
+
+      const testTitle = t?.title || target.testTitle || "Live_Test";
+      const totalMarks =
+        typeof t?.totalMarks === "number"
+          ? t.totalMarks
+          : qs.reduce((sum, q) => sum + (q.marks || 0), 0);
+
+      const questions = [...qs];
+      const correctIndexById = new Map<string, number>();
+      if (keys) {
+        for (const k of keys) correctIndexById.set(k.id, k.correctIndex);
+      }
+
+      const sortAttemptsForRankExport = (
+        attList: ExamAttempt[],
+        studentList: any[],
+      ) => {
+        const nameOf = (a: ExamAttempt) =>
+          displayNameForAttempt(a, studentList).trim().toLowerCase() || a.uid;
+
+        const submitted = attList.filter((a) => a.status === "submitted");
+        const notSubmitted = attList.filter((a) => a.status !== "submitted");
+
+        submitted.sort((a, b) => {
+          const sa = a.score ?? -Infinity;
+          const sb = b.score ?? -Infinity;
+          if (sb !== sa) return sb - sa;
+          return nameOf(a).localeCompare(nameOf(b));
+        });
+        notSubmitted.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+
+        return { ranked: submitted, unranked: notSubmitted };
+      };
+
+      const percentFromAttempt = (a: ExamAttempt, maxM: number) => {
+        const max = a.maxScore ?? maxM;
+        const score = a.score;
+        if (score == null || !Number.isFinite(max) || max <= 0) return null;
+        return Math.round((score / max) * 1000) / 10;
+      };
+
+      const { ranked, unranked } = sortAttemptsForRankExport(attempts, students);
+      const exportAttemptOrder = [...ranked, ...unranked];
+
+      let rankCounter = 0;
+      let lastScoreForRank: number | undefined = undefined;
+
+      const summaryRows = exportAttemptOrder.map((a) => {
+        const participant = resolveAttemptParticipant(a, students);
+        const answers = a.answers || {};
+        const answeredCount = Object.values(answers).filter(
+          (v) => v != null,
+        ).length;
+        let correctCount: number | "" = "";
+        let wrongCount: number | "" = "";
+        let unansweredCount: number | "" = "";
+
+        if (keys) {
+          let c = 0;
+          let w = 0;
+          let u = 0;
+          for (const q of questions) {
+            const selected = answers[q.id] ?? null;
+            if (selected == null) {
+              u++;
+              continue;
+            }
+            const correct = correctIndexById.get(q.id);
+            if (correct == null) continue;
+            if (selected === correct) c++;
+            else w++;
+          }
+          correctCount = c;
+          wrongCount = w;
+          unansweredCount = u;
+        }
+
+        const startedMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
+        const submittedMs = a.submittedAt
+          ? new Date(a.submittedAt).getTime()
+          : null;
+        const timeTakenSeconds =
+          startedMs != null &&
+          submittedMs != null &&
+          Number.isFinite(startedMs) &&
+          Number.isFinite(submittedMs)
+            ? Math.max(0, Math.round((submittedMs - startedMs) / 1000))
+            : "";
+
+        const maxForStudent = a.maxScore ?? totalMarks;
+        const pct = percentFromAttempt(a, totalMarks);
+
+        if (a.status === "submitted") {
+          if (lastScoreForRank !== a.score) {
+            rankCounter++;
+            lastScoreForRank = a.score;
+          }
+        }
+
+        return {
+          Rank: a.status === "submitted" ? rankCounter : "",
+          "Student Name": participant.name,
+          "Student ID": participant.studentId,
+          "Score Obtained": a.score ?? "",
+          "Max Score": maxForStudent,
+          "Percentage (%)": pct != null ? `${pct}%` : "",
+          "Total Questions": questions.length,
+          "Total Marks": totalMarks,
+          "Student Email": participant.email,
+          "Is Guest": participant.isGuest ? "Yes" : "No",
+          Status: a.status,
+          "Answered Questions": answeredCount,
+          "Unanswered Questions": unansweredCount,
+          "Correct Answers": correctCount,
+          "Wrong Answers": wrongCount,
+          "Time Taken (Seconds)": timeTakenSeconds,
+          "Started At": toIsoOrEmpty(a.startedAt),
+          "Submitted At": toIsoOrEmpty(a.submittedAt),
+          "Exam ID": testId,
+          "Exam Title": testTitle,
+        };
+      });
+
+      if (summaryRows.length === 0) {
+        alert("No student attempts found for this live test yet.");
+        return;
+      }
+
+      if (format === "csv") {
+        const worksheet = XLSX.utils.json_to_sheet(summaryRows);
+        const csv = XLSX.utils.sheet_to_csv(worksheet);
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${safeFileName(testTitle)}_Live_Results_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const wb = XLSX.utils.book_new();
+        const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Summary & Rankings");
+
+        if (questions.length > 0) {
+          const qByQRows = exportAttemptOrder.flatMap((a) => {
+            const participant = resolveAttemptParticipant(a, students);
+            const answers = a.answers || {};
+            return questions.map((q, idx) => {
+              const selected = answers[q.id] ?? null;
+              const correct = keys ? correctIndexById.get(q.id) : undefined;
+              const selectedText =
+                selected != null ? (q.options?.[selected] ?? "") : "";
+              const correctText =
+                correct != null ? (q.options?.[correct] ?? "") : "";
+              const isCorrect =
+                correct != null && selected != null ? selected === correct : "";
+
+              return {
+                "Student Name": participant.name,
+                "Student ID": participant.studentId,
+                "Question #": idx + 1,
+                Marks: q.marks,
+                "Selected Option": selected != null ? selected + 1 : "Skipped",
+                "Selected Text": selectedText,
+                "Correct Option": correct != null ? correct + 1 : "",
+                "Correct Text": correctText,
+                Result:
+                  isCorrect === true
+                    ? "CORRECT"
+                    : isCorrect === false
+                      ? "WRONG"
+                      : "SKIPPED",
+              };
+            });
+          });
+          const wsQByQ = XLSX.utils.json_to_sheet(qByQRows);
+          XLSX.utils.book_append_sheet(wb, wsQByQ, "Question Analysis");
+        }
+
+        XLSX.writeFile(
+          wb,
+          `${safeFileName(testTitle)}_Live_Results_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
+      }
+    } catch (err: any) {
+      console.error("Export live test results error:", err);
+      alert(`Could not export live test results: ${err?.message || err}`);
+    } finally {
+      setExportingTestId(null);
+    }
+  };
+
   const studentPresenceList = useMemo(
-    () => presenceList.filter((p) => p.role === "student" && p.uid !== adminUid && p.uid !== user?.id),
+    () =>
+      presenceList.filter(
+        (p) => p.role === "student" && p.uid !== adminUid && p.uid !== user?.id,
+      ),
     [presenceList, adminUid, user?.id],
   );
 
   const totalTabViolations = useMemo(
-    () => studentPresenceList.reduce((acc, p) => acc + (p.tabSwitchCount || 0), 0),
+    () =>
+      studentPresenceList.reduce((acc, p) => acc + (p.tabSwitchCount || 0), 0),
     [studentPresenceList],
   );
 
   return (
     <div className="space-y-6 pb-12">
-
-
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "setup" | "room" | "schedule")} className="w-full">
-        <TabsList className={cn("grid w-full max-w-2xl bg-slate-100 p-1", isCohost ? "grid-cols-1" : "grid-cols-3")}>
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as "setup" | "room" | "schedule")}
+        className="w-full"
+      >
+        <TabsList
+          className={cn(
+            "grid w-full max-w-2xl bg-slate-100 p-1",
+            isCohost ? "grid-cols-1" : "grid-cols-3",
+          )}
+        >
           {!isCohost && (
-            <TabsTrigger value="setup" className="font-semibold text-xs sm:text-sm">
+            <TabsTrigger
+              value="setup"
+              className="font-semibold text-xs sm:text-sm"
+            >
               1. Select & Configure Test
             </TabsTrigger>
           )}
@@ -598,7 +936,9 @@ export default function ConductLiveTest() {
             value="room"
             className="font-semibold relative text-xs sm:text-sm"
           >
-            {isCohost ? "Live Student Proctoring Monitor" : "2. Ongoing Live Tests"}
+            {isCohost
+              ? "Live Student Proctoring Monitor"
+              : "2. Ongoing Live Tests"}
             {displayActiveSessions.length > 0 && (
               <span className="ml-2 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] text-white font-bold">
                 {displayActiveSessions.length}
@@ -607,7 +947,10 @@ export default function ConductLiveTest() {
           </TabsTrigger>
 
           {!isCohost && (
-            <TabsTrigger value="schedule" className="font-semibold text-xs sm:text-sm">
+            <TabsTrigger
+              value="schedule"
+              className="font-semibold text-xs sm:text-sm"
+            >
               3. Scheduled Tests
               {displayScheduledSessions.length > 0 && (
                 <span className="ml-2 rounded-full bg-indigo-600 px-2 py-0.5 text-[10px] text-white font-bold">
@@ -629,7 +972,10 @@ export default function ConductLiveTest() {
                     <FileSpreadsheet className="h-5 w-5 text-indigo-600" />
                     Select Premade Test
                   </span>
-                  <Badge variant="outline" className="text-slate-700 bg-slate-50 font-bold px-2.5 py-0.5">
+                  <Badge
+                    variant="outline"
+                    className="text-slate-700 bg-slate-50 font-bold px-2.5 py-0.5"
+                  >
                     {filteredTests.length} Tests Available
                   </Badge>
                 </div>
@@ -639,7 +985,9 @@ export default function ConductLiveTest() {
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     <span>Select Batch Filter</span>
                     <span className="text-[11px] font-normal text-slate-400">
-                      {selectedBatchTab === "all" ? "Showing all batches" : "Filtered by batch"}
+                      {selectedBatchTab === "all"
+                        ? "Showing all batches"
+                        : "Filtered by batch"}
                     </span>
                   </div>
 
@@ -655,17 +1003,25 @@ export default function ConductLiveTest() {
                       )}
                     >
                       <span>All Batches</span>
-                      <span className={cn(
-                        "rounded-md px-1.5 py-0.2 text-[10px]",
-                        selectedBatchTab === "all" ? "bg-slate-800 text-slate-200" : "bg-slate-200 text-slate-700",
-                      )}>
+                      <span
+                        className={cn(
+                          "rounded-md px-1.5 py-0.2 text-[10px]",
+                          selectedBatchTab === "all"
+                            ? "bg-slate-800 text-slate-200"
+                            : "bg-slate-200 text-slate-700",
+                        )}
+                      >
                         {tests.length}
                       </span>
                     </button>
 
                     {batches.map((b) => {
                       const count = tests.filter((t) => {
-                        const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+                        const bIds = t.batchIds?.length
+                          ? t.batchIds
+                          : t.batchId
+                            ? [t.batchId]
+                            : [];
                         return bIds.includes(b.id);
                       }).length;
                       if (count === 0) return null;
@@ -687,7 +1043,9 @@ export default function ConductLiveTest() {
                           <span
                             className={cn(
                               "rounded-md px-1.5 py-0.2 text-[10px]",
-                              isSelected ? "bg-indigo-700 text-indigo-100" : "bg-slate-200 text-slate-700",
+                              isSelected
+                                ? "bg-indigo-700 text-indigo-100"
+                                : "bg-slate-200 text-slate-700",
                             )}
                           >
                             {count}
@@ -727,7 +1085,8 @@ export default function ConductLiveTest() {
                   </div>
                 ) : filteredTests.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-500">
-                    No published tests found matching your selected batch or search query.
+                    No published tests found matching your selected batch or
+                    search query.
                   </p>
                 ) : (
                   <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
@@ -747,12 +1106,20 @@ export default function ConductLiveTest() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <h4 className="font-semibold text-slate-900">{t.title}</h4>
+                              <h4 className="font-semibold text-slate-900">
+                                {t.title}
+                              </h4>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700 font-medium">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-slate-100 text-slate-700 font-medium"
+                                >
                                   {t.subject}
                                 </Badge>
-                                <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 font-medium">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 font-medium"
+                                >
                                   {testBatches}
                                 </Badge>
                               </div>
@@ -795,18 +1162,28 @@ export default function ConductLiveTest() {
                 {!selectedTest ? (
                   <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-slate-500">
                     <Radio className="h-10 w-10 text-slate-400 mb-2" />
-                    <p className="font-medium text-slate-700">No Test Selected</p>
+                    <p className="font-medium text-slate-700">
+                      No Test Selected
+                    </p>
                     <p className="text-xs text-slate-500 max-w-xs mt-1">
-                      Choose a premade test from the list on the left to configure live proctoring settings.
+                      Choose a premade test from the list on the left to
+                      configure live proctoring settings.
                     </p>
                   </div>
                 ) : (
                   <>
                     {/* Selected Summary Card */}
                     <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Selected Exam</p>
-                      <h3 className="text-lg font-bold text-slate-900 mt-1">{selectedTest.title}</h3>
-                      <p className="text-xs text-slate-600 mt-0.5">{selectedTest.subject} • {selectedTest.totalQuestions} Questions</p>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                        Selected Exam
+                      </p>
+                      <h3 className="text-lg font-bold text-slate-900 mt-1">
+                        {selectedTest.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        {selectedTest.subject} • {selectedTest.totalQuestions}{" "}
+                        Questions
+                      </p>
                     </div>
 
                     {/* Batch Selection */}
@@ -817,22 +1194,31 @@ export default function ConductLiveTest() {
                         </Label>
                         <button
                           type="button"
-                          onClick={() => setShowBatchToggleTab1(!showBatchToggleTab1)}
+                          onClick={() =>
+                            setShowBatchToggleTab1(!showBatchToggleTab1)
+                          }
                           className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
                         >
-                          {showBatchToggleTab1 ? "Done Editing" : "Edit Batches"}
+                          {showBatchToggleTab1
+                            ? "Done Editing"
+                            : "Edit Batches"}
                         </button>
                       </div>
 
                       {!showBatchToggleTab1 ? (
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
                           {selectedBatchIds.length === 0 ? (
-                            <span className="text-xs text-slate-400 font-medium italic">No batches selected</span>
+                            <span className="text-xs text-slate-400 font-medium italic">
+                              No batches selected
+                            </span>
                           ) : (
                             batches
                               .filter((b) => selectedBatchIds.includes(b.id))
                               .map((b) => (
-                                <Badge key={b.id} className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5">
+                                <Badge
+                                  key={b.id}
+                                  className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5"
+                                >
                                   {b.name}
                                 </Badge>
                               ))
@@ -869,17 +1255,23 @@ export default function ConductLiveTest() {
                           <UserPlus className="h-4 w-4 text-indigo-600" />
                           Assign Co-Host (Optional)
                         </span>
-                        <span className="text-[11px] font-normal text-slate-500">Operating access granted to Host & Selected Co-Host</span>
+                        <span className="text-[11px] font-normal text-slate-500">
+                          Operating access granted to Host & Selected Co-Host
+                        </span>
                       </Label>
                       <select
                         className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
                         value={selectedCoHostId}
                         onChange={(e) => setSelectedCoHostId(e.target.value)}
                       >
-                        <option value="none">-- No Co-Host (Host Only) --</option>
+                        <option value="none">
+                          -- No Co-Host (Host Only) --
+                        </option>
                         {adminProfiles.map((a) => (
                           <option key={a.uid} value={a.uid}>
-                            {a.name} ({a.kind === "cohost" ? "Co-Host" : "Admin"} • {a.email})
+                            {a.name} (
+                            {a.kind === "cohost" ? "Co-Host" : "Admin"} •{" "}
+                            {a.email})
                           </option>
                         ))}
                       </select>
@@ -896,33 +1288,54 @@ export default function ConductLiveTest() {
                         <label className="flex items-center gap-3 cursor-pointer">
                           <Checkbox
                             checked={enableStudentCamera}
-                            onCheckedChange={(c) => setEnableStudentCamera(Boolean(c))}
+                            onCheckedChange={(c) =>
+                              setEnableStudentCamera(Boolean(c))
+                            }
                           />
                           <div>
-                            <p className="text-sm font-medium text-slate-800">Mandatory Student Webcam Proctoring</p>
-                            <p className="text-xs text-slate-500">Student camera feeds are streamed live to Admin monitor grid.</p>
+                            <p className="text-sm font-medium text-slate-800">
+                              Mandatory Student Webcam Proctoring
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Student camera feeds are streamed live to Admin
+                              monitor grid.
+                            </p>
                           </div>
                         </label>
 
                         <label className="flex items-center gap-3 cursor-pointer">
                           <Checkbox
                             checked={enableAdminVideo}
-                            onCheckedChange={(c) => setEnableAdminVideo(Boolean(c))}
+                            onCheckedChange={(c) =>
+                              setEnableAdminVideo(Boolean(c))
+                            }
                           />
                           <div>
-                            <p className="text-sm font-medium text-slate-800">Admin Broadcast Video & Audio</p>
-                            <p className="text-xs text-slate-500">Students can view Admin video stream and hear proctor announcements.</p>
+                            <p className="text-sm font-medium text-slate-800">
+                              Admin Broadcast Video & Audio
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Students can view Admin video stream and hear
+                              proctor announcements.
+                            </p>
                           </div>
                         </label>
 
                         <label className="flex items-center gap-3 cursor-pointer">
                           <Checkbox
                             checked={autoSubmitOnViolationLimit}
-                            onCheckedChange={(c) => setAutoSubmitOnViolationLimit(Boolean(c))}
+                            onCheckedChange={(c) =>
+                              setAutoSubmitOnViolationLimit(Boolean(c))
+                            }
                           />
                           <div>
-                            <p className="text-sm font-medium text-slate-800">Auto-Submit Test on Excessive Tab Switching</p>
-                            <p className="text-xs text-slate-500">Automatically submit attempt when warning threshold is reached.</p>
+                            <p className="text-sm font-medium text-slate-800">
+                              Auto-Submit Test on Excessive Tab Switching
+                            </p>
+                            <p className="text-xs text-slate-500">
+                              Automatically submit attempt when warning
+                              threshold is reached.
+                            </p>
                           </div>
                         </label>
                       </div>
@@ -965,7 +1378,8 @@ export default function ConductLiveTest() {
                     Ongoing Live Test Sessions ({displayActiveSessions.length})
                   </h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Select an ongoing test below to view its live proctoring grid and broadcast controls.
+                    Select an ongoing test below to view its live proctoring
+                    grid and broadcast controls.
                   </p>
                 </div>
               </div>
@@ -973,7 +1387,9 @@ export default function ConductLiveTest() {
               {displayActiveSessions.length === 0 ? (
                 <div className="flex h-56 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500 shadow-xs">
                   <Radio className="h-10 w-10 text-slate-300 mb-2" />
-                  <p className="font-semibold text-slate-700">No Ongoing Live Tests</p>
+                  <p className="font-semibold text-slate-700">
+                    No Ongoing Live Tests
+                  </p>
                   <p className="text-xs text-slate-400 mt-1 max-w-sm">
                     {isCohost
                       ? "There are currently no active live test sessions assigned to you for proctoring."
@@ -994,11 +1410,12 @@ export default function ConductLiveTest() {
                   {displayActiveSessions.map((s) => {
                     const testBatches = s.batchIds?.length
                       ? batches
-                        .filter((b) => s.batchIds!.includes(b.id))
-                        .map((b) => b.name)
-                        .join(", ")
+                          .filter((b) => s.batchIds!.includes(b.id))
+                          .map((b) => b.name)
+                          .join(", ")
                       : s.batchId
-                        ? batches.find((b) => b.id === s.batchId)?.name || "All Batches"
+                        ? batches.find((b) => b.id === s.batchId)?.name ||
+                          "All Batches"
                         : "All Batches";
 
                     return (
@@ -1016,7 +1433,9 @@ export default function ConductLiveTest() {
                               <CardTitle className="text-base font-bold text-slate-900 leading-tight">
                                 {s.testTitle}
                               </CardTitle>
-                              <p className="text-xs text-slate-500 mt-0.5">{s.subject}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">
+                                {s.subject}
+                              </p>
                             </div>
                           </div>
                         </CardHeader>
@@ -1024,17 +1443,26 @@ export default function ConductLiveTest() {
                         <CardContent className="pt-3 pb-4 space-y-3">
                           <div className="space-y-1.5 text-xs text-slate-600">
                             <div className="flex items-center justify-between">
-                              <span className="text-slate-500">Target Batches:</span>
-                              <span className="font-semibold text-slate-800 truncate max-w-[160px]">{testBatches}</span>
+                              <span className="text-slate-500">
+                                Target Batches:
+                              </span>
+                              <span className="font-semibold text-slate-800 truncate max-w-[160px]">
+                                {testBatches}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-slate-500">Duration:</span>
-                              <span className="font-semibold text-slate-800">{s.durationMinutes} Mins</span>
+                              <span className="font-semibold text-slate-800">
+                                {s.durationMinutes} Mins
+                              </span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-slate-500">Proctor:</span>
                               <span className="font-semibold text-slate-800">
-                                {s.coHostName || s.coHostEmail || s.adminName || "Admin"}
+                                {s.coHostName ||
+                                  s.coHostEmail ||
+                                  s.adminName ||
+                                  "Admin"}
                               </span>
                             </div>
                           </div>
@@ -1049,7 +1477,9 @@ export default function ConductLiveTest() {
                             >
                               <Video className="h-4 w-4 text-emerald-300" />
                               <Eye className="h-4 w-4" />
-                              <span className="truncate">Live Test Alert & Cam Monitor</span>
+                              <span className="truncate">
+                                Live Test Alert & Cam Monitor
+                              </span>
                             </Button>
                             <Button
                               variant="outline"
@@ -1067,6 +1497,52 @@ export default function ConductLiveTest() {
                               <span>Close Test</span>
                             </Button>
                           </div>
+
+                          {/* Export Results & Rankings Row */}
+                          <div className="flex items-center gap-1.5 pt-2 border-t border-slate-100">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                void handleExportLiveTestResults(s, "xlsx")
+                              }
+                              disabled={exportingTestId === s.testId}
+                              className="flex-1 h-8 text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 shadow-2xs"
+                              title="Export full test results with rankings to Excel"
+                            >
+                              {exportingTestId === s.testId ? (
+                                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin text-emerald-600" />
+                              ) : (
+                                <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" />
+                              )}
+                              <span>Excel (.xlsx)</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                void handleExportLiveTestResults(s, "csv")
+                              }
+                              disabled={exportingTestId === s.testId}
+                              className="h-8 text-xs font-semibold bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200 px-2.5 shadow-2xs"
+                              title="Export test results to CSV"
+                            >
+                              <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                              <span>CSV</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                navigate(`/admin/tests/${s.testId}/results`)
+                              }
+                              className="h-8 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2.5"
+                              title="View full results and ranks page"
+                            >
+                              <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                              <span>Ranks</span>
+                            </Button>
+                          </div>
                         </CardContent>
                       </Card>
                     );
@@ -1077,7 +1553,7 @@ export default function ConductLiveTest() {
           ) : (
             /* DETAILED PROCTORING ROOM VIEW FOR SELECTED SESSION */
             <div className="space-y-6">
-              {/* Top Navigation & End Session Control */}
+              {/* Top Navigation & Controls */}
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                   <Button
@@ -1104,6 +1580,54 @@ export default function ConductLiveTest() {
                     End Live Test Session
                   </Button>
                 </div>
+
+                {/* Results & Export Actions */}
+                {currentSession && (
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleExportLiveTestResults(
+                          currentSession,
+                          "xlsx",
+                        )
+                      }
+                      disabled={exportingTestId === currentSession.testId}
+                      className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300 font-bold text-xs shadow-xs flex items-center gap-1.5"
+                    >
+                      {exportingTestId === currentSession.testId ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                      ) : (
+                        <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
+                      )}
+                      <span>Export Excel (.xlsx)</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        void handleExportLiveTestResults(currentSession, "csv")
+                      }
+                      disabled={exportingTestId === currentSession.testId}
+                      className="bg-white hover:bg-slate-50 text-slate-700 border-slate-300 font-semibold text-xs shadow-xs"
+                    >
+                      <Download className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                      <span>CSV</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        navigate(`/admin/tests/${currentSession.testId}/results`)
+                      }
+                      className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 font-bold text-xs shadow-xs flex items-center gap-1.5"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      <span>View Results & Ranks</span>
+                    </Button>
+                  </div>
+                )}
               </div>
 
               {currentSession && (
@@ -1113,13 +1637,17 @@ export default function ConductLiveTest() {
                     <Card className="border-slate-200 shadow-xs border-l-4 border-l-rose-500">
                       <CardContent className="pt-4 pb-3 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-slate-500 uppercase">Live Session</p>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">
+                            Live Session
+                          </p>
                           <p className="text-lg font-bold text-slate-900 truncate max-w-[180px]">
                             {currentSession.testTitle}
                           </p>
                           <button
                             type="button"
-                            onClick={() => void handleEndSession(selectedSessionId)}
+                            onClick={() =>
+                              void handleEndSession(selectedSessionId)
+                            }
                             disabled={closingSessionId === selectedSessionId}
                             className="mt-1 inline-flex items-center gap-1 text-xs font-bold text-rose-600 hover:text-rose-800 underline disabled:opacity-50"
                           >
@@ -1138,7 +1666,9 @@ export default function ConductLiveTest() {
                     <Card className="border-slate-200 shadow-xs">
                       <CardContent className="pt-4 pb-3 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-slate-500 uppercase">Students Joined</p>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">
+                            Students Joined
+                          </p>
                           <p className="text-2xl font-bold text-slate-900 tabular-nums">
                             {studentPresenceList.length}
                           </p>
@@ -1150,7 +1680,9 @@ export default function ConductLiveTest() {
                     <Card className="border-slate-200 shadow-xs">
                       <CardContent className="pt-4 pb-3 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-slate-500 uppercase">Tab Violations</p>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">
+                            Tab Violations
+                          </p>
                           <p className="text-2xl font-bold text-rose-600 tabular-nums">
                             {totalTabViolations}
                           </p>
@@ -1162,7 +1694,9 @@ export default function ConductLiveTest() {
                     <Card className="border-slate-200 shadow-xs">
                       <CardContent className="pt-4 pb-3 flex items-center justify-between">
                         <div>
-                          <p className="text-xs font-semibold text-slate-500 uppercase">Duration</p>
+                          <p className="text-xs font-semibold text-slate-500 uppercase">
+                            Duration
+                          </p>
                           <p className="text-2xl font-bold text-slate-900 tabular-nums">
                             {currentSession.durationMinutes} mins
                           </p>
@@ -1180,7 +1714,9 @@ export default function ConductLiveTest() {
                         <CardTitle className="text-sm font-semibold flex items-center justify-between text-slate-200">
                           <span className="flex items-center gap-2">
                             <Video className="h-4 w-4 text-emerald-400" />
-                            {isCohost ? "Co-Host Proctor Camera & Mic Feed" : "Admin Proctor Camera & Mic Feed"}
+                            {isCohost
+                              ? "Co-Host Proctor Camera & Mic Feed"
+                              : "Admin Proctor Camera & Mic Feed"}
                           </span>
                           <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[10px]">
                             BROADCASTING LIVE
@@ -1206,12 +1742,16 @@ export default function ConductLiveTest() {
                               <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-slate-700 text-slate-400">
                                 <VideoOff className="h-6 w-6" />
                               </div>
-                              <p className="text-xs text-slate-400">Camera Off</p>
+                              <p className="text-xs text-slate-400">
+                                Camera Off
+                              </p>
                             </div>
                           )}
                           {/* Name overlay */}
                           <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 py-2">
-                            <span className="text-xs font-medium text-white">{adminName} ({isCohost ? "Co-Host" : "Admin"})</span>
+                            <span className="text-xs font-medium text-white">
+                              {adminName} ({isCohost ? "Co-Host" : "Admin"})
+                            </span>
                           </div>
                         </div>
 
@@ -1219,20 +1759,36 @@ export default function ConductLiveTest() {
                           <Button
                             size="sm"
                             variant={isAdminMicOn ? "default" : "outline"}
-                            className={isAdminMicOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
+                            className={
+                              isAdminMicOn
+                                ? "bg-indigo-600 hover:bg-indigo-700"
+                                : "text-slate-300"
+                            }
                             onClick={handleToggleMic}
                           >
-                            {isAdminMicOn ? <Mic className="mr-1.5 h-4 w-4" /> : <MicOff className="mr-1.5 h-4 w-4" />}
+                            {isAdminMicOn ? (
+                              <Mic className="mr-1.5 h-4 w-4" />
+                            ) : (
+                              <MicOff className="mr-1.5 h-4 w-4" />
+                            )}
                             {isAdminMicOn ? "Mic On" : "Muted"}
                           </Button>
 
                           <Button
                             size="sm"
                             variant={isAdminCamOn ? "default" : "outline"}
-                            className={isAdminCamOn ? "bg-indigo-600 hover:bg-indigo-700" : "text-slate-300"}
+                            className={
+                              isAdminCamOn
+                                ? "bg-indigo-600 hover:bg-indigo-700"
+                                : "text-slate-300"
+                            }
                             onClick={handleToggleCam}
                           >
-                            {isAdminCamOn ? <Camera className="mr-1.5 h-4 w-4" /> : <CameraOff className="mr-1.5 h-4 w-4" />}
+                            {isAdminCamOn ? (
+                              <Camera className="mr-1.5 h-4 w-4" />
+                            ) : (
+                              <CameraOff className="mr-1.5 h-4 w-4" />
+                            )}
                             {isAdminCamOn ? "Camera On" : "Cam Off"}
                           </Button>
                         </div>
@@ -1252,15 +1808,20 @@ export default function ConductLiveTest() {
                           <Input
                             placeholder="Type announcement (e.g. '10 minutes remaining! Check Section B')..."
                             value={announcementText}
-                            onChange={(e) => setAnnouncementText(e.target.value)}
+                            onChange={(e) =>
+                              setAnnouncementText(e.target.value)
+                            }
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") void handleSendAnnouncement();
+                              if (e.key === "Enter")
+                                void handleSendAnnouncement();
                             }}
                             className="text-sm"
                           />
                           <Button
                             onClick={() => void handleSendAnnouncement()}
-                            disabled={sendingAnnouncement || !announcementText.trim()}
+                            disabled={
+                              sendingAnnouncement || !announcementText.trim()
+                            }
                             className="bg-indigo-600 hover:bg-indigo-700 text-white shrink-0"
                           >
                             <Send className="mr-1.5 h-4 w-4" />
@@ -1274,11 +1835,14 @@ export default function ConductLiveTest() {
                               <Megaphone className="h-3.5 w-3.5" />
                               Last Broadcasted Announcement:
                             </p>
-                            <p className="mt-1 font-medium">{currentSession.announcement}</p>
+                            <p className="mt-1 font-medium">
+                              {currentSession.announcement}
+                            </p>
                           </div>
                         ) : (
                           <p className="text-xs text-slate-400">
-                            Broadcasted announcements will pop up immediately on every student&apos;s exam window.
+                            Broadcasted announcements will pop up immediately on
+                            every student&apos;s exam window.
                           </p>
                         )}
                       </CardContent>
@@ -1290,16 +1854,21 @@ export default function ConductLiveTest() {
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                         <Eye className="h-5 w-5 text-indigo-600" />
-                        Live Student Proctoring Grid ({studentPresenceList.length} Connected)
+                        Live Student Proctoring Grid (
+                        {studentPresenceList.length} Connected)
                       </h3>
                     </div>
 
                     {studentPresenceList.length === 0 ? (
                       <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
                         <Users className="h-10 w-10 text-slate-300 mb-2" />
-                        <p className="font-medium text-slate-700">Waiting for Students to Join</p>
+                        <p className="font-medium text-slate-700">
+                          Waiting for Students to Join
+                        </p>
                         <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                          As soon as students open the live test window, their webcams and exam progress will appear live in this grid.
+                          As soon as students open the live test window, their
+                          webcams and exam progress will appear live in this
+                          grid.
                         </p>
                       </div>
                     ) : (
@@ -1322,24 +1891,35 @@ export default function ConductLiveTest() {
                                   presence={{
                                     ...p,
                                     id: p.uid,
-                                    role: p.role === "cohost" ? "co-host" : p.role === "admin" ? "host" : "student",
+                                    role:
+                                      p.role === "cohost"
+                                        ? "co-host"
+                                        : p.role === "admin"
+                                          ? "host"
+                                          : "student",
                                     sessionId: selectedSessionId || "",
-                                    updatedAt: p.updatedAt || new Date().toISOString(),
+                                    updatedAt:
+                                      p.updatedAt || new Date().toISOString(),
                                   }}
-                                  partyTracks={partyTracks || (undefined as any)}
+                                  partyTracks={
+                                    partyTracks || (undefined as any)
+                                  }
                                   isLocal={false}
                                 />
 
                                 {p.tabSwitchCount > 0 && (
                                   <div className="absolute top-2 left-2 rounded-md bg-rose-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs z-10">
-                                    ⚠️ {p.tabSwitchCount} Tab Switch{p.tabSwitchCount > 1 ? "es" : ""}
+                                    ⚠️ {p.tabSwitchCount} Tab Switch
+                                    {p.tabSwitchCount > 1 ? "es" : ""}
                                   </div>
                                 )}
 
                                 {p.isSubmitted && (
                                   <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-white z-10">
                                     <CheckCircle2 className="h-8 w-8 text-emerald-400 mb-1" />
-                                    <p className="text-xs font-bold">Exam Submitted</p>
+                                    <p className="text-xs font-bold">
+                                      Exam Submitted
+                                    </p>
                                   </div>
                                 )}
                               </div>
@@ -1347,18 +1927,31 @@ export default function ConductLiveTest() {
                               {/* Student Info & Progress */}
                               <div className="mt-3 space-y-2">
                                 <div className="flex items-center justify-between text-xs">
-                                  <span className="font-semibold text-slate-800 truncate max-w-[120px]">{p.name}</span>
+                                  <span className="font-semibold text-slate-800 truncate max-w-[120px]">
+                                    {p.name}
+                                  </span>
                                   <span className="font-medium text-slate-500">
-                                    Q{p.currentQuestionIndex + 1} / {p.totalQuestions || "?"}
+                                    Q{p.currentQuestionIndex + 1} /{" "}
+                                    {p.totalQuestions || "?"}
                                   </span>
                                 </div>
 
                                 <div className="flex items-center justify-between text-[11px] text-slate-500">
-                                  <span>Answered: <strong className="text-slate-800">{p.totalAnswered}</strong></span>
+                                  <span>
+                                    Answered:{" "}
+                                    <strong className="text-slate-800">
+                                      {p.totalAnswered}
+                                    </strong>
+                                  </span>
                                   {p.isSubmitted ? (
-                                    <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Submitted</Badge>
+                                    <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">
+                                      Submitted
+                                    </Badge>
                                   ) : (
-                                    <Badge variant="outline" className="text-[10px] text-indigo-700 bg-indigo-50 border-indigo-200">
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] text-indigo-700 bg-indigo-50 border-indigo-200"
+                                    >
                                       In Progress
                                     </Badge>
                                   )}
@@ -1372,7 +1965,9 @@ export default function ConductLiveTest() {
                                     className="h-7 text-[11px] text-amber-700 hover:bg-amber-50"
                                     onClick={() => {
                                       setWarningStudent(p);
-                                      setWarningMsg("Please stay focused on your test screen.");
+                                      setWarningMsg(
+                                        "Please stay focused on your test screen.",
+                                      );
                                     }}
                                   >
                                     Warn
@@ -1411,7 +2006,10 @@ export default function ConductLiveTest() {
                     <FileSpreadsheet className="h-5 w-5 text-indigo-600" />
                     Select Premade Test to Schedule
                   </span>
-                  <Badge variant="outline" className="text-slate-700 bg-slate-50 font-bold px-2.5 py-0.5">
+                  <Badge
+                    variant="outline"
+                    className="text-slate-700 bg-slate-50 font-bold px-2.5 py-0.5"
+                  >
                     {filteredTests.length} Tests Available
                   </Badge>
                 </div>
@@ -1421,7 +2019,9 @@ export default function ConductLiveTest() {
                   <div className="flex items-center justify-between text-xs font-semibold text-slate-500 uppercase tracking-wide">
                     <span>Select Batch Filter</span>
                     <span className="text-[11px] font-normal text-slate-400">
-                      {selectedBatchTab === "all" ? "Showing all batches" : "Filtered by batch"}
+                      {selectedBatchTab === "all"
+                        ? "Showing all batches"
+                        : "Filtered by batch"}
                     </span>
                   </div>
 
@@ -1440,7 +2040,9 @@ export default function ConductLiveTest() {
                       <span
                         className={cn(
                           "rounded-md px-1.5 py-0.2 text-[10px]",
-                          selectedBatchTab === "all" ? "bg-slate-800 text-slate-200" : "bg-slate-200 text-slate-700",
+                          selectedBatchTab === "all"
+                            ? "bg-slate-800 text-slate-200"
+                            : "bg-slate-200 text-slate-700",
                         )}
                       >
                         {tests.length}
@@ -1449,7 +2051,11 @@ export default function ConductLiveTest() {
 
                     {batches.map((b) => {
                       const count = tests.filter((t) => {
-                        const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+                        const bIds = t.batchIds?.length
+                          ? t.batchIds
+                          : t.batchId
+                            ? [t.batchId]
+                            : [];
                         return bIds.includes(b.id);
                       }).length;
 
@@ -1469,7 +2075,9 @@ export default function ConductLiveTest() {
                           <span
                             className={cn(
                               "rounded-md px-1.5 py-0.2 text-[10px]",
-                              selectedBatchTab === b.id ? "bg-indigo-700 text-white" : "bg-slate-200 text-slate-700",
+                              selectedBatchTab === b.id
+                                ? "bg-indigo-700 text-white"
+                                : "bg-slate-200 text-slate-700",
                             )}
                           >
                             {count}
@@ -1509,7 +2117,8 @@ export default function ConductLiveTest() {
                   </div>
                 ) : filteredTests.length === 0 ? (
                   <p className="py-6 text-center text-sm text-slate-500">
-                    No published tests found matching your selected batch or search query.
+                    No published tests found matching your selected batch or
+                    search query.
                   </p>
                 ) : (
                   <div className="max-h-[460px] space-y-2 overflow-y-auto pr-1">
@@ -1521,7 +2130,11 @@ export default function ConductLiveTest() {
                           key={t.id}
                           onClick={() => {
                             setScheduleTest(t);
-                            const bIds = t.batchIds?.length ? t.batchIds : t.batchId ? [t.batchId] : [];
+                            const bIds = t.batchIds?.length
+                              ? t.batchIds
+                              : t.batchId
+                                ? [t.batchId]
+                                : [];
                             setScheduleBatchIds(bIds);
                           }}
                           className={cn(
@@ -1533,12 +2146,20 @@ export default function ConductLiveTest() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <h4 className="font-semibold text-slate-900">{t.title}</h4>
+                              <h4 className="font-semibold text-slate-900">
+                                {t.title}
+                              </h4>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Badge variant="outline" className="text-[10px] bg-slate-100 text-slate-700 font-medium">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-slate-100 text-slate-700 font-medium"
+                                >
                                   {t.subject || "General"}
                                 </Badge>
-                                <Badge variant="outline" className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 font-medium">
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] bg-indigo-50 text-indigo-700 border-indigo-200 font-medium"
+                                >
                                   {testBatches}
                                 </Badge>
                               </div>
@@ -1567,7 +2188,9 @@ export default function ConductLiveTest() {
                                   : "border-slate-300 bg-white",
                               )}
                             >
-                              {isSelected && <CheckCircle2 className="h-4 w-4" />}
+                              {isSelected && (
+                                <CheckCircle2 className="h-4 w-4" />
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1590,22 +2213,35 @@ export default function ConductLiveTest() {
                 {!scheduleTest ? (
                   <div className="flex h-64 flex-col items-center justify-center text-center text-slate-500">
                     <FileSpreadsheet className="h-10 w-10 text-slate-300 mb-2" />
-                    <p className="font-semibold text-slate-700">No Test Selected</p>
+                    <p className="font-semibold text-slate-700">
+                      No Test Selected
+                    </p>
                     <p className="text-xs text-slate-400 mt-1 max-w-xs">
-                      Please select a premade test from the list on the left to configure start/end times and schedule.
+                      Please select a premade test from the list on the left to
+                      configure start/end times and schedule.
                     </p>
                   </div>
                 ) : (
                   <>
                     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
                       <div className="flex items-center justify-between">
-                        <Badge className="bg-indigo-600 text-white text-[10px] font-bold">SELECTED FOR SCHEDULE</Badge>
-                        <Badge variant="outline" className="text-indigo-700 border-indigo-300 text-xs">
+                        <Badge className="bg-indigo-600 text-white text-[10px] font-bold">
+                          SELECTED FOR SCHEDULE
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className="text-indigo-700 border-indigo-300 text-xs"
+                        >
                           {scheduleTest.durationMinutes} mins
                         </Badge>
                       </div>
-                      <h3 className="text-base font-bold text-slate-900 mt-2">{scheduleTest.title}</h3>
-                      <p className="text-xs text-slate-600 mt-0.5">{scheduleTest.subject} • {scheduleTest.totalQuestions} Questions</p>
+                      <h3 className="text-base font-bold text-slate-900 mt-2">
+                        {scheduleTest.title}
+                      </h3>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        {scheduleTest.subject} • {scheduleTest.totalQuestions}{" "}
+                        Questions
+                      </p>
                     </div>
 
                     {/* Target Batches */}
@@ -1616,22 +2252,31 @@ export default function ConductLiveTest() {
                         </Label>
                         <button
                           type="button"
-                          onClick={() => setShowBatchToggleTab3(!showBatchToggleTab3)}
+                          onClick={() =>
+                            setShowBatchToggleTab3(!showBatchToggleTab3)
+                          }
                           className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
                         >
-                          {showBatchToggleTab3 ? "Done Editing" : "Edit Batches"}
+                          {showBatchToggleTab3
+                            ? "Done Editing"
+                            : "Edit Batches"}
                         </button>
                       </div>
 
                       {!showBatchToggleTab3 ? (
                         <div className="flex flex-wrap gap-1.5 pt-0.5">
                           {scheduleBatchIds.length === 0 ? (
-                            <span className="text-xs text-slate-400 font-medium italic">No batches selected</span>
+                            <span className="text-xs text-slate-400 font-medium italic">
+                              No batches selected
+                            </span>
                           ) : (
                             batches
                               .filter((b) => scheduleBatchIds.includes(b.id))
                               .map((b) => (
-                                <Badge key={b.id} className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5">
+                                <Badge
+                                  key={b.id}
+                                  className="bg-indigo-600 text-white text-xs font-semibold px-2.5 py-0.5"
+                                >
                                   {b.name}
                                 </Badge>
                               ))
@@ -1647,7 +2292,9 @@ export default function ConductLiveTest() {
                                 type="button"
                                 onClick={() => {
                                   setScheduleBatchIds((prev) =>
-                                    prev.includes(b.id) ? prev.filter((id) => id !== b.id) : [...prev, b.id],
+                                    prev.includes(b.id)
+                                      ? prev.filter((id) => id !== b.id)
+                                      : [...prev, b.id],
                                   );
                                 }}
                                 className={cn(
@@ -1667,7 +2314,9 @@ export default function ConductLiveTest() {
 
                     {/* Schedule Start Time */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-700">Scheduled Start Date & Time</Label>
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Scheduled Start Date & Time
+                      </Label>
                       <Input
                         type="datetime-local"
                         value={scheduleStartTime}
@@ -1678,7 +2327,9 @@ export default function ConductLiveTest() {
 
                     {/* Schedule End Time */}
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-slate-700">Scheduled End Date & Time</Label>
+                      <Label className="text-xs font-semibold text-slate-700">
+                        Scheduled End Date & Time
+                      </Label>
                       <Input
                         type="datetime-local"
                         value={scheduleEndTime}
@@ -1700,10 +2351,14 @@ export default function ConductLiveTest() {
                         value={selectedCoHostId}
                         onChange={(e) => setSelectedCoHostId(e.target.value)}
                       >
-                        <option value="none">-- No Co-Host (Host Only) --</option>
+                        <option value="none">
+                          -- No Co-Host (Host Only) --
+                        </option>
                         {adminProfiles.map((a) => (
                           <option key={a.uid} value={a.uid}>
-                            {a.name} ({a.kind === "cohost" ? "Co-Host" : "Admin"} • {a.email})
+                            {a.name} (
+                            {a.kind === "cohost" ? "Co-Host" : "Admin"} •{" "}
+                            {a.email})
                           </option>
                         ))}
                       </select>
@@ -1711,7 +2366,9 @@ export default function ConductLiveTest() {
 
                     <Button
                       onClick={() => void handleCreateSchedule()}
-                      disabled={scheduling || !scheduleStartTime || !scheduleEndTime}
+                      disabled={
+                        scheduling || !scheduleStartTime || !scheduleEndTime
+                      }
                       className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold h-10 text-xs shadow-md mt-4"
                     >
                       {scheduling ? (
@@ -1744,9 +2401,12 @@ export default function ConductLiveTest() {
               {displayScheduledSessions.length === 0 ? (
                 <div className="flex h-44 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center text-slate-500">
                   <CalendarClock className="h-8 w-8 text-slate-300 mb-1.5" />
-                  <p className="font-semibold text-slate-700">No Scheduled Tests</p>
+                  <p className="font-semibold text-slate-700">
+                    No Scheduled Tests
+                  </p>
                   <p className="text-xs text-slate-400 mt-0.5 max-w-xs">
-                    Select a premade test above and configure start/end times to create automated schedules.
+                    Select a premade test above and configure start/end times to
+                    create automated schedules.
                   </p>
                 </div>
               ) : (
@@ -1754,23 +2414,23 @@ export default function ConductLiveTest() {
                   {displayScheduledSessions.map((s) => {
                     const testBatches = s.batchIds?.length
                       ? batches
-                        .filter((b) => s.batchIds!.includes(b.id))
-                        .map((b) => b.name)
-                        .join(", ")
+                          .filter((b) => s.batchIds!.includes(b.id))
+                          .map((b) => b.name)
+                          .join(", ")
                       : "All Batches";
 
                     const startFormatted = s.scheduledStartTime
                       ? new Date(s.scheduledStartTime).toLocaleString([], {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
                       : "Not set";
 
                     const endFormatted = s.scheduledEndTime
                       ? new Date(s.scheduledEndTime).toLocaleString([], {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })
                       : "Not set";
 
                     return (
@@ -1784,8 +2444,12 @@ export default function ConductLiveTest() {
                               <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-semibold mb-1">
                                 SCHEDULED
                               </Badge>
-                              <h4 className="font-bold text-slate-900 text-sm">{s.testTitle}</h4>
-                              <p className="text-xs text-slate-500">{s.subject} • {testBatches}</p>
+                              <h4 className="font-bold text-slate-900 text-sm">
+                                {s.testTitle}
+                              </h4>
+                              <p className="text-xs text-slate-500">
+                                {s.subject} • {testBatches}
+                              </p>
                               {s.coHostName && (
                                 <p className="text-[11px] text-indigo-600 font-medium mt-1">
                                   Co-Host: {s.coHostName}
@@ -1822,7 +2486,9 @@ export default function ConductLiveTest() {
                                 size="sm"
                                 variant="ghost"
                                 className="h-7 w-7 p-0 text-slate-400 hover:text-rose-600"
-                                onClick={() => void handleDeleteSchedule(s.id, s.testTitle)}
+                                onClick={() =>
+                                  void handleDeleteSchedule(s.id, s.testTitle)
+                                }
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -1831,12 +2497,20 @@ export default function ConductLiveTest() {
 
                           <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-50 p-2.5 text-xs text-slate-700">
                             <div>
-                              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Starts At</span>
-                              <span className="font-semibold text-indigo-950">{startFormatted}</span>
+                              <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                                Starts At
+                              </span>
+                              <span className="font-semibold text-indigo-950">
+                                {startFormatted}
+                              </span>
                             </div>
                             <div>
-                              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Ends At</span>
-                              <span className="font-semibold text-rose-950">{endFormatted}</span>
+                              <span className="text-[10px] text-slate-400 uppercase font-semibold block">
+                                Ends At
+                              </span>
+                              <span className="font-semibold text-rose-950">
+                                {endFormatted}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1865,10 +2539,18 @@ export default function ConductLiveTest() {
               className="text-sm"
             />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setWarningStudent(null)}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setWarningStudent(null)}
+              >
                 Cancel
               </Button>
-              <Button size="sm" className="bg-amber-600 hover:bg-amber-700 text-white" onClick={() => void handleSendWarning()}>
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                onClick={() => void handleSendWarning()}
+              >
                 Send Warning
               </Button>
             </div>
