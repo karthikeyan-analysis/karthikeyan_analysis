@@ -19,7 +19,11 @@ import {
   subscribeToLiveClass,
   subscribeToOwnDoubts,
 } from "../../features/liveClasses/liveClassApi";
-import type { LiveClass, LiveClassDoubt, LiveClassPresence } from "../../features/liveClasses/types";
+import type {
+  LiveClass,
+  LiveClassDoubt,
+  LiveClassPresence,
+} from "../../features/liveClasses/types";
 import TakeExam from "./TakeExam";
 import {
   Send,
@@ -72,16 +76,30 @@ function playNotificationChime() {
   }
 }
 
-function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass }) {
+function StudentCallInner({
+  classId,
+  cls,
+}: {
+  classId: string;
+  cls: LiveClass;
+}) {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { partyTracks, connectError, reconnect, isConnected, mic, camera, roster, myPresence } =
-    useLiveClassPresence({
-      classId,
-      uid: user!.id,
-      name: user!.name,
-      role: "student",
-    });
+  const {
+    partyTracks,
+    connectError,
+    reconnect,
+    isConnected,
+    mic,
+    camera,
+    roster,
+    myPresence,
+  } = useLiveClassPresence({
+    classId,
+    uid: user!.id,
+    name: user!.name,
+    role: "student",
+  });
 
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
@@ -90,13 +108,17 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
   const [doubtText, setDoubtText] = useState("");
   const [sending, setSending] = useState(false);
 
-  const [activeInRoomTestId, setActiveInRoomTestId] = useState<string | null>(null);
+  const [activeInRoomTestId, setActiveInRoomTestId] = useState<string | null>(
+    null,
+  );
   const [showTestAlertModal, setShowTestAlertModal] = useState(false);
   const prevTestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const currentTestId =
-      cls.liveTestId && cls.liveTestId !== "none" && (cls as any).liveTestActive === true
+      cls.liveTestId &&
+      cls.liveTestId !== "none" &&
+      (cls as any).liveTestActive === true
         ? cls.liveTestId
         : null;
     if (currentTestId && currentTestId !== prevTestIdRef.current) {
@@ -113,7 +135,10 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     prevTestIdRef.current = currentTestId;
   }, [cls.liveTestId, (cls as any).liveTestActive]);
 
-  useEffect(() => subscribeToOwnDoubts(classId, user!.id, setDoubts), [classId, user]);
+  useEffect(
+    () => subscribeToOwnDoubts(classId, user!.id, setDoubts),
+    [classId, user],
+  );
 
   // Attendance: join when the call connects; leave on unmount / disconnect.
   useEffect(() => {
@@ -127,7 +152,10 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
       studentId: user.studentId,
     }).catch(console.error);
     return () => {
-      recordAttendanceLeave({ classId, studentRecordId: user.studentRecordId! }).catch(console.error);
+      recordAttendanceLeave({
+        classId,
+        studentRecordId: user.studentRecordId!,
+      }).catch(console.error);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isConnected, classId, user?.studentRecordId]);
@@ -147,12 +175,15 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     }
   }, [myPresence?.mutedByHost, isMicOn, mic]);
   useEffect(() => {
-    if (myPresence?.videoDisabledByHost && isCameraOn) camera.toggleBroadcasting();
+    if (myPresence?.videoDisabledByHost && isCameraOn)
+      camera.toggleBroadcasting();
     if (myPresence?.videoDisabledByHost) {
       wasVideoDisabledByHost.current = true;
     } else if (wasVideoDisabledByHost.current) {
       wasVideoDisabledByHost.current = false;
-      setHostNotice("Host re-enabled your video — you can turn your camera back on.");
+      setHostNotice(
+        "Host re-enabled your video — you can turn your camera back on.",
+      );
     }
   }, [myPresence?.videoDisabledByHost, isCameraOn, camera]);
   useEffect(() => {
@@ -166,9 +197,9 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     }
   }, [myPresence?.kicked, navigate]);
 
-  // Host ended the class, or left and put it back to waiting.
+  // Host explicitly ended the class
   useEffect(() => {
-    if (cls.status !== "active") {
+    if (cls.status === "ended") {
       navigate("/student/live-classes", { replace: true });
     }
   }, [cls.status, navigate]);
@@ -195,13 +226,33 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
 
   if (connectError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
-        <p className="max-w-md text-red-600">{connectError}</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={() => reconnect()}>Try again</Button>
-          <Button variant="outline" onClick={() => navigate("/student/live-classes")}>
-            Back
-          </Button>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center">
+        <div className="rounded-2xl border border-rose-200 bg-white p-6 shadow-xl max-w-md w-full space-y-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <PhoneOff className="h-7 w-7" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Network Connection Issue</h3>
+            <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+              {connectError}
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2">
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 font-bold text-xs h-9 w-full shadow-md"
+              onClick={() => reconnect()}
+            >
+              🔄 Rejoin Live Class Now
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8"
+              onClick={() => navigate("/student/live-classes")}
+            >
+              Back to Live Classes
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -210,14 +261,18 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 p-8 text-center text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
-        Joining the class…
+        Connecting to live class…
       </div>
     );
   }
 
   const hostPresence =
     (cls.spotlightUid ? roster.find((p) => p.id === cls.spotlightUid) : null) ||
-    roster.find((p) => !!p.screenshareVideoTrack && (p.role === "host" || p.role === "co-host")) ||
+    roster.find(
+      (p) =>
+        !!p.screenshareVideoTrack &&
+        (p.role === "host" || p.role === "co-host"),
+    ) ||
     roster.find((p) => p.role === "host") ||
     roster.find((p) => p.role === "co-host") ||
     null;
@@ -245,10 +300,24 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div>
               <p className="font-semibold text-slate-900">{cls.name}</p>
-              <p className="text-xs text-slate-500">
-                {cls.subject}
-                {isConnected ? "" : " · Connecting…"}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-slate-500">{cls.subject}</span>
+                {isConnected ? (
+                  <span className="inline-flex items-center text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                    Connected
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => reconnect()}
+                    className="inline-flex items-center text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300 hover:bg-amber-100 transition"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mr-1.5 animate-ping" />
+                    Reconnecting · Click to Rejoin
+                  </button>
+                )}
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -266,7 +335,13 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                     mic.startBroadcasting();
                   }
                 }}
-                title={myPresence?.mutedByHost ? "Muted by host" : isMicOn ? "Mute microphone" : "Unmute microphone"}
+                title={
+                  myPresence?.mutedByHost
+                    ? "Muted by host"
+                    : isMicOn
+                      ? "Mute microphone"
+                      : "Unmute microphone"
+                }
               >
                 {myPresence?.mutedByHost || !isMicOn ? (
                   <MicOff className="h-4 w-4" />
@@ -289,7 +364,13 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                     camera.startBroadcasting();
                   }
                 }}
-                title={myPresence?.videoDisabledByHost ? "Video disabled by host" : isCameraOn ? "Turn camera off" : "Turn camera on"}
+                title={
+                  myPresence?.videoDisabledByHost
+                    ? "Video disabled by host"
+                    : isCameraOn
+                      ? "Turn camera off"
+                      : "Turn camera on"
+                }
               >
                 {myPresence?.videoDisabledByHost || !isCameraOn ? (
                   <VideoOff className="h-4 w-4" />
@@ -297,7 +378,11 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                   <VideoIcon className="h-4 w-4" />
                 )}
               </Button>
-              <Button size="sm" variant="outline" onClick={() => navigate("/student/live-classes")}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => navigate("/student/live-classes")}
+              >
                 <PhoneOff className="mr-1 h-4 w-4" />
                 Leave
               </Button>
@@ -305,15 +390,22 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
           </div>
 
           {/* Test banner ONLY if host explicitly launched a test */}
-          {cls.liveTestId && cls.liveTestId !== "none" && (cls as any).liveTestActive === true ? (
+          {cls.liveTestId &&
+          cls.liveTestId !== "none" &&
+          (cls as any).liveTestActive === true ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-amber-950 shadow-md">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-600 text-white shadow">
                   <Award className="h-5 w-5 animate-pulse" />
                 </div>
                 <div>
-                  <p className="font-bold text-xs sm:text-sm">Instructor launched a Live Exam!</p>
-                  <p className="text-[11px] text-amber-800">Your teacher started a CBT test for this class. Click below to participate.</p>
+                  <p className="font-bold text-xs sm:text-sm">
+                    Instructor launched a Live Exam!
+                  </p>
+                  <p className="text-[11px] text-amber-800">
+                    Your teacher started a CBT test for this class. Click below
+                    to participate.
+                  </p>
                 </div>
               </div>
               <Button
@@ -344,8 +436,13 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
           ) : (
             <div className="flex h-80 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-slate-500">
               <VideoIcon className="h-10 w-10 text-indigo-400 mb-2 animate-pulse" />
-              <p className="font-semibold text-slate-800 text-base">Waiting for Host / Admin stream…</p>
-              <p className="text-xs text-slate-400 mt-1">The instructor's video & screen presentation will appear here in big.</p>
+              <p className="font-semibold text-slate-800 text-base">
+                Waiting for Host / Admin stream…
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                The instructor's video & screen presentation will appear here in
+                big.
+              </p>
             </div>
           )}
         </div>
@@ -357,7 +454,9 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
               <MessageCircleQuestion className="h-4 w-4 text-indigo-600" />
               Ask a Doubt
             </p>
-            <p className="mb-2 text-xs text-slate-500">Only your instructor can see your doubts.</p>
+            <p className="mb-2 text-xs text-slate-500">
+              Only your instructor can see your doubts.
+            </p>
             <div className="mb-3">
               <textarea
                 className="min-h-[60px] w-full rounded-lg border border-slate-200 p-2 text-sm"
@@ -381,22 +480,28 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                 <div
                   key={d.id}
                   className={`rounded-lg border p-2.5 text-xs space-y-1.5 ${
-                    d.resolved ? "border-emerald-200 bg-emerald-50/50" : "border-slate-200 bg-slate-50"
+                    d.resolved
+                      ? "border-emerald-200 bg-emerald-50/50"
+                      : "border-slate-200 bg-slate-50"
                   }`}
                 >
                   <p className="text-slate-900 font-medium">{d.text}</p>
-                  
+
                   {d.replyText ? (
                     <div className="mt-1.5 rounded-md border border-indigo-200 bg-white p-2 text-indigo-950 font-medium">
                       <p className="text-[10px] font-bold text-indigo-600 flex items-center gap-1">
                         <MessageSquare className="h-3 w-3" />
                         {d.repliedByName || "Instructor"}'s Reply:
                       </p>
-                      <p className="mt-0.5 text-xs text-slate-800">{d.replyText}</p>
+                      <p className="mt-0.5 text-xs text-slate-800">
+                        {d.replyText}
+                      </p>
                     </div>
                   ) : (
                     <p className="mt-1 text-[11px] text-slate-500">
-                      {d.resolved ? "✓ Answered by instructor" : "Pending instructor review…"}
+                      {d.resolved
+                        ? "✓ Answered by instructor"
+                        : "Pending instructor review…"}
                     </p>
                   )}
                 </div>
@@ -411,7 +516,9 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
                 <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
                 Your Video Stream
               </p>
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">You</span>
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                You
+              </span>
             </div>
             <div className="overflow-hidden rounded-lg">
               {renderTile(
@@ -440,11 +547,10 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 text-xs sm:text-sm text-amber-900">
-            <p>
-              Your instructor has launched a CBT Live Test for this class.
-            </p>
+            <p>Your instructor has launched a CBT Live Test for this class.</p>
             <p className="font-semibold text-amber-950 bg-amber-100/80 p-2.5 rounded-lg border border-amber-200">
-              ⚡ You will stay connected to the live class meeting with your camera and mic active while taking this test.
+              ⚡ You will stay connected to the live class meeting with your
+              camera and mic active while taking this test.
             </p>
           </div>
           <DialogFooter className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -482,7 +588,9 @@ function StudentCallInner({ classId, cls }: { classId: string; cls: LiveClass })
               </span>
               <span className="text-emerald-400">Live Meeting Active</span>
               <span className="text-slate-400">•</span>
-              <span className="text-slate-300">Camera & Mic Connected ({roster.length} in room)</span>
+              <span className="text-slate-300">
+                Camera & Mic Connected ({roster.length} in room)
+              </span>
             </div>
             <Button
               size="sm"
@@ -520,7 +628,10 @@ function WaitingForHost({ cls }: { cls: LiveClass | null }) {
           ? cls.name
           : `${cls?.name || "This class"} will open automatically when the host starts.`}
       </p>
-      <Button variant="outline" onClick={() => navigate("/student/live-classes")}>
+      <Button
+        variant="outline"
+        onClick={() => navigate("/student/live-classes")}
+      >
         Back to Live Classes
       </Button>
     </div>

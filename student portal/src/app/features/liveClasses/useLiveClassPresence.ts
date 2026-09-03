@@ -172,25 +172,50 @@ export function useLiveClassPresence(params: {
     if (isPcConnected) setConnectError(null);
   }, [isPcConnected]);
 
-  // If ICE dies and partytracks' internal retry keeps thrashing, surface a
-  // recoverable error after a short grace period so the user can hard-reconnect.
+  // Auto-reconnect as soon as device regains network connectivity
+  useEffect(() => {
+    const handleOnline = () => {
+      setConnectError(null);
+      reconnect();
+    };
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [reconnect]);
+
+  // If ICE dies or connection disconnects/fails, auto-retry first, then surface error after a grace period.
   useEffect(() => {
     if (!partyTracks) return;
-    if (connectionState !== "failed" && connectionState !== "closed") return;
-    const t = window.setTimeout(() => {
-      setConnectError(
-        "Media connection was lost. Check your network (and that TURN is configured), then try again.",
-      );
-    }, 2500);
-    return () => window.clearTimeout(t);
-  }, [connectionState, partyTracks]);
+    if (connectionState !== "failed" && connectionState !== "closed" && connectionState !== "disconnected") return;
+
+    // First, attempt an automatic recovery reconnect after 3 seconds
+    const autoRetryTimer = window.setTimeout(() => {
+      if (connectionState === "disconnected" || connectionState === "failed") {
+        reconnect();
+      }
+    }, 3000);
+
+    const errorTimer = window.setTimeout(() => {
+      if (connectionState === "failed" || connectionState === "closed" || connectionState === "disconnected") {
+        setConnectError(
+          "Media connection dropped due to network issues. Click 'Rejoin Class' to re-establish your live connection.",
+        );
+      }
+    }, 7000);
+
+    return () => {
+      window.clearTimeout(autoRetryTimer);
+      window.clearTimeout(errorTimer);
+    };
+  }, [connectionState, partyTracks, reconnect]);
 
   // Stuck in "new"/"connecting" usually means ICE/TURN or mic permission never completed.
   useEffect(() => {
     if (!partyTracks || isPcConnected || connectError) return;
     const t = window.setTimeout(() => {
       setConnectError(
-        "Could not establish a media connection within 25 seconds. Allow camera/mic access, check your network, then try again.",
+        "Could not establish a media connection. Check your internet connection and try rejoining.",
       );
     }, 25000);
     return () => window.clearTimeout(t);

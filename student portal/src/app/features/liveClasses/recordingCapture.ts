@@ -48,7 +48,8 @@ export async function startRecordingCapture(params: {
   videoElement.muted = true;
   videoElement.playsInline = true;
 
-  let currentVideoTrack: MediaStreamTrack | null = params.initialVideoTrack || null;
+  let currentVideoTrack: MediaStreamTrack | null =
+    params.initialVideoTrack || null;
   if (currentVideoTrack && currentVideoTrack.readyState === "live") {
     videoElement.srcObject = new MediaStream([currentVideoTrack]);
     void videoElement.play().catch(() => {});
@@ -132,23 +133,31 @@ export async function startRecordingCapture(params: {
   stream = canvasStream;
 
   const mimeType =
-    ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"].find((t) =>
-      MediaRecorder.isTypeSupported(t),
-    ) || "video/webm";
+    [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+    ].find((t) => MediaRecorder.isTypeSupported(t)) || "video/webm";
 
-  const getUploadUrl = httpsCallable<{ classId: string; contentType: string }, { url: string; key: string }>(
-    functions,
-    "getRecordingUploadUrl",
-  );
+  const getUploadUrl = httpsCallable<
+    { classId: string; contentType: string },
+    { url: string; key: string }
+  >(functions, "getRecordingUploadUrl");
 
   let prefetchedUploadData: { url: string; key: string } | null = null;
-  const prefetchedPromise = getUploadUrl({ classId: params.classId, contentType: mimeType })
+  const prefetchedPromise = getUploadUrl({
+    classId: params.classId,
+    contentType: mimeType,
+  })
     .then((res) => {
       prefetchedUploadData = res.data;
       return res.data;
     })
     .catch((err) => {
-      console.warn("Pre-fetching R2 upload URL failed, will fallback on stop", err);
+      console.warn(
+        "Pre-fetching R2 upload URL failed, will fallback on stop",
+        err,
+      );
       return null;
     });
 
@@ -167,9 +176,14 @@ export async function startRecordingCapture(params: {
 
   const cleanupTracks = () => {
     if (animFrameId) cancelAnimationFrame(animFrameId);
-    try { videoElement.pause(); videoElement.srcObject = null; } catch {}
+    try {
+      videoElement.pause();
+      videoElement.srcObject = null;
+    } catch {}
     tracksToStop.forEach((t) => {
-      try { t.stop(); } catch {}
+      try {
+        t.stop();
+      } catch {}
     });
   };
 
@@ -183,7 +197,9 @@ export async function startRecordingCapture(params: {
       }
       if (chunks.length > 0 && prefetchedUploadData?.url) {
         const emergencyBlob = new Blob(chunks, { type: mimeType });
-        const cleanUploadUrl = prefetchedUploadData.url.replace(/%0D%0A/gi, "").replace(/[\r\n]/g, "");
+        const cleanUploadUrl = prefetchedUploadData.url
+          .replace(/%0D%0A/gi, "")
+          .replace(/[\r\n]/g, "");
         void fetch(cleanUploadUrl, {
           method: "PUT",
           headers: { "Content-Type": mimeType },
@@ -229,7 +245,10 @@ export async function startRecordingCapture(params: {
         });
         cleanupTracks();
 
-        const durationSec = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+        const durationSec = Math.max(
+          1,
+          Math.round((Date.now() - startedAt) / 1000),
+        );
         params.onUploading?.();
 
         const recordingKey = `recordings/${params.classId}/rec_${Date.now()}.webm`;
@@ -242,7 +261,10 @@ export async function startRecordingCapture(params: {
           let uploadData: any = prefetchedUploadData;
           if (!uploadData) {
             try {
-              const res = await getUploadUrl({ classId: params.classId, contentType: mimeType });
+              const res = await getUploadUrl({
+                classId: params.classId,
+                contentType: mimeType,
+              });
               uploadData = res.data;
             } catch (getErr) {
               console.warn("R2 presigned upload URL notice:", getErr);
@@ -258,7 +280,9 @@ export async function startRecordingCapture(params: {
             const timeoutId = setTimeout(() => controller.abort(), 120000);
 
             try {
-              const cleanHeaderContentType = mimeType.includes("mp4") ? "video/mp4" : "video/webm";
+              const cleanHeaderContentType = mimeType.includes("mp4")
+                ? "video/mp4"
+                : "video/webm";
               const putRes = await fetch(cleanUploadUrl, {
                 method: "PUT",
                 headers: { "Content-Type": cleanHeaderContentType },
@@ -282,7 +306,9 @@ export async function startRecordingCapture(params: {
         // Firebase Cloud Storage Upload for instant HTML5 video streaming URL
         try {
           const storageRef = ref(storage, recordingKey);
-          const uploadSnap = await uploadBytes(storageRef, blob, { contentType: mimeType });
+          const uploadSnap = await uploadBytes(storageRef, blob, {
+            contentType: mimeType,
+          });
           downloadUrl = await getDownloadURL(uploadSnap.ref);
         } catch (storageErr) {
           console.warn("Firebase Storage upload notice:", storageErr);
@@ -340,7 +366,9 @@ export async function startRecordingCapture(params: {
   const updateAudioTrack = (newTrack: MediaStreamTrack | null) => {
     try {
       if (newTrack && newTrack.readyState === "live") {
-        canvasStream.getAudioTracks().forEach((t) => canvasStream.removeTrack(t));
+        canvasStream
+          .getAudioTracks()
+          .forEach((t) => canvasStream.removeTrack(t));
         canvasStream.addTrack(newTrack);
       }
     } catch (err) {

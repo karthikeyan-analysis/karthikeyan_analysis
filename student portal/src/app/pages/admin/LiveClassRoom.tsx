@@ -194,13 +194,19 @@ function LiveClassRoomInner({
     if (!recordingHandle) return;
     const subCam = camera.broadcastTrack$.subscribe((bt: any) => {
       if (!isScreenOn) {
-        const track = bt && typeof bt === "object" && "track" in bt ? bt.track : bt;
-        recordingHandle.updateVideoTrack?.(isCameraOn && track instanceof MediaStreamTrack ? track : null);
+        const track =
+          bt && typeof bt === "object" && "track" in bt ? bt.track : bt;
+        recordingHandle.updateVideoTrack?.(
+          isCameraOn && track instanceof MediaStreamTrack ? track : null,
+        );
       }
     });
     const subMic = mic.broadcastTrack$.subscribe((bt: any) => {
-      const track = bt && typeof bt === "object" && "track" in bt ? bt.track : bt;
-      recordingHandle.updateAudioTrack?.(isMicOn && track instanceof MediaStreamTrack ? track : null);
+      const track =
+        bt && typeof bt === "object" && "track" in bt ? bt.track : bt;
+      recordingHandle.updateAudioTrack?.(
+        isMicOn && track instanceof MediaStreamTrack ? track : null,
+      );
     });
     return () => {
       subCam.unsubscribe();
@@ -435,16 +441,33 @@ function LiveClassRoomInner({
 
   if (connectError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-8 text-center">
-        <p className="max-w-md text-red-600">{connectError}</p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={() => reconnect()}>Try again</Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate("/admin/live-classes")}
-          >
-            Back
-          </Button>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center">
+        <div className="rounded-2xl border border-rose-200 bg-white p-6 shadow-xl max-w-md w-full space-y-4 text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
+            <PhoneOff className="h-7 w-7" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">Live Studio Connection Issue</h3>
+            <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+              {connectError}
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2">
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 font-bold text-xs h-9 w-full shadow-md"
+              onClick={() => reconnect()}
+            >
+              🔄 Rejoin Host Studio
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8"
+              onClick={() => navigate("/admin/live-classes")}
+            >
+              Back to Dashboard
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -607,15 +630,29 @@ function LiveClassRoomInner({
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div>
               <p className="font-semibold text-slate-900">{cls.name}</p>
-              <p className="text-xs text-slate-500">
-                {cls.subject} · Role: {role} · {roster.length} in room
-                {isConnected ? "" : " · Connecting…"}
+              <div className="flex flex-wrap items-center gap-2 mt-0.5 text-xs text-slate-500">
+                <span>{cls.subject} · {roster.length} in room</span>
+                {isConnected ? (
+                  <span className="inline-flex items-center text-[11px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5" />
+                    Live Studio Connected
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => reconnect()}
+                    className="inline-flex items-center text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300 hover:bg-amber-100 transition"
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mr-1.5 animate-ping" />
+                    Reconnecting · Click to Rejoin
+                  </button>
+                )}
                 {isUploading
                   ? " · Uploading recording…"
                   : isRecording
                     ? " · Recording"
                     : ""}
-              </p>
+              </div>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
