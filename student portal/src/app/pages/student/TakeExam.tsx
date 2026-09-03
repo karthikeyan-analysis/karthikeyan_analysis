@@ -451,17 +451,30 @@ export default function TakeExam({
     const load = async () => {
       setLoading(true);
       try {
-        const t = await getExamTest(testId);
+        const [t, existingAttempt] = await Promise.all([
+          getExamTest(testId),
+          getAttempt(testId, uid),
+        ]);
         if (!t) throw new Error("Exam not found");
         if (cancelled) return;
 
         setTest(t);
 
-        // Guest participants already verified the passcode at join time — always let them through.
-        const guestOk = isGuestParticipant;
-        const alreadyOk = localStorage.getItem(pwSessionKey) === "1";
-        setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk);
-        if (guestOk) localStorage.setItem(pwSessionKey, "1");
+        // If the student already started this test (in_progress), bypass password & instruction screens
+        // so they instantly resume the test and timer without re-entering password or reading instructions again.
+        if (existingAttempt && existingAttempt.status === "in_progress") {
+          localStorage.setItem(pwSessionKey, "1");
+          localStorage.setItem(instructionsSessionKey, "1");
+          localStorage.setItem(examSessionKey, "1");
+          setPwVerified(true);
+          setInstructionsOk(true);
+        } else {
+          // Guest participants already verified the passcode at join time — always let them through.
+          const guestOk = isGuestParticipant;
+          const alreadyOk = localStorage.getItem(pwSessionKey) === "1";
+          setPwVerified(!t.accessPasswordHash || alreadyOk || guestOk);
+          if (guestOk) localStorage.setItem(pwSessionKey, "1");
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -578,26 +591,29 @@ export default function TakeExam({
           setMarkedForReview([]);
           setVisited(qs.length ? { [qs[0].id]: true } : {});
         } else {
-          if (attempt.status === "in_progress") {
-            const sameBrowserSession = localStorage.getItem(examSessionKey) === "1";
-            const hasApprovedRejoin = latestRejoinApprovalAvailable(attempt);
-            if (!sameBrowserSession && !hasApprovedRejoin) {
-              await requestRejoinApproval(testId, uid);
-              setRejoinBlocked(true);
-              setAttemptStatus(null);
-              return;
-            }
-            if (!sameBrowserSession && hasApprovedRejoin) {
-              await markRejoinApprovalUsed(testId, uid);
-              localStorage.setItem(examSessionKey, "1");
-            }
-          }
+          // In-progress or submitted attempt exists in Firestore.
+          // Allow the student to freely rejoin and resume their in-progress exam.
+          // The countdown timer automatically computes remaining time from the original startedAt + duration.
+          localStorage.setItem(examSessionKey, "1");
+          localStorage.setItem(instructionsSessionKey, "1");
           setRejoinBlocked(false);
           setClosedForNewAttempts(false);
           setAttemptStartedAtIso(attempt.startedAt);
           setAttemptStatus(attempt.status);
           setAttemptSubmittedAtIso(attempt.submittedAt || null);
-          setAnswers(attempt.answers || {});
+
+          // Restore answers: merge Firestore saved answers with any local cache
+          let mergedAnswers = { ...(attempt.answers || {}) };
+          try {
+            const localSaved = localStorage.getItem(`exam_answers:${testId}:${uid}`);
+            if (localSaved) {
+              const parsed = JSON.parse(localSaved);
+              if (parsed && typeof parsed === "object") {
+                mergedAnswers = { ...mergedAnswers, ...parsed };
+              }
+            }
+          } catch {}
+          setAnswers(mergedAnswers);
           setMarkedForReview(attempt.markedForReview || []);
 
           // Restore the exact question order the student saw when they first started.
@@ -751,13 +767,25 @@ export default function TakeExam({
   const handleSelect = (optionIndex: number) => {
     if (!currentQuestion) return;
     if (!isAttemptActive) return;
-    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: optionIndex }));
+    setAnswers((prev) => {
+      const next = { ...prev, [currentQuestion.id]: optionIndex };
+      try {
+        localStorage.setItem(`exam_answers:${testId}:${uid}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const handleClear = () => {
     if (!currentQuestion) return;
     if (!isAttemptActive) return;
-    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: null }));
+    setAnswers((prev) => {
+      const next = { ...prev, [currentQuestion.id]: null };
+      try {
+        localStorage.setItem(`exam_answers:${testId}:${uid}`, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
 
   const toggleMarkForReview = () => {
@@ -765,8 +793,7 @@ export default function TakeExam({
     if (!isAttemptActive) return;
     setMarkedForReview((prev) => {
       const has = prev.includes(currentQuestion.id);
-      if (has) return prev.filter((id) => id !== currentQuestion.id);
-      return [...prev, currentQuestion.id];
+      return has ? prev.filter((id) => id !== currentQuestion.id) : [...prev, currentQuestion.id];
     });
   };
 
@@ -821,6 +848,7 @@ export default function TakeExam({
 
       await submitAttempt({ testId, uid, score: s, maxScore: max });
       localStorage.removeItem(examSessionKey);
+      localStorage.removeItem(`exam_answers:${testId}:${uid}`);
       setAttemptStatus("submitted");
       setAttemptSubmittedAtIso(new Date().toISOString());
       setScore({ score: s, maxScore: max });
