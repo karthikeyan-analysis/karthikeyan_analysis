@@ -1143,7 +1143,8 @@ export default function LiveClassManagement() {
                     {filteredClasses.map((cls) => {
                       const canControl = isHostOrCoHost(cls, user?.id);
                       return (
-                        <TableRow
+                        <TableRow>
+                          <TableCell>
                             <div className="font-bold text-slate-900">
                               {cls.name}
                             </div>
