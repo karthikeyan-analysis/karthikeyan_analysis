@@ -32,7 +32,10 @@ import {
 } from "../../features/exams/examApi";
 import StudentPhotoImage from "../../components/StudentPhotoImage";
 import ParticipantVideoTile from "../../components/liveClasses/ParticipantVideoTile";
-import { examIncludesBatch, formatExamBatchLabel } from "../../features/exams/examBatchUtils";
+import {
+  examIncludesBatch,
+  formatExamBatchLabel,
+} from "../../features/exams/examBatchUtils";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
 import { useData } from "../../context/DataContext";
 import type {
@@ -72,7 +75,10 @@ import {
   subscribeToActiveLiveTestForTest,
   upsertLiveTestPresence,
 } from "../../features/liveTests/liveTestApi";
-import { subscribeToLiveTestPresence, subscribeToLiveTestSession } from "../../features/liveTests/liveTestApi";
+import {
+  subscribeToLiveTestPresence,
+  subscribeToLiveTestSession,
+} from "../../features/liveTests/liveTestApi";
 import { toast } from "sonner";
 import { useLiveTestPresence } from "../../features/liveTests/useLiveTestPresence";
 import type { LiveTestSession } from "../../features/liveTests/liveTestTypes";
@@ -97,7 +103,10 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out. Check your connection.")), ms),
+      setTimeout(
+        () => reject(new Error("Request timed out. Check your connection.")),
+        ms,
+      ),
     ),
   ]);
 }
@@ -107,7 +116,8 @@ function formatTimeLeft(totalSeconds: number) {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  if (h > 0)
+    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
@@ -125,7 +135,8 @@ function canShowAnswers(params: {
   endAtMs: number;
 }) {
   if (params.showAnswersAfter === "never") return false;
-  if (params.showAnswersAfter === "after_end") return params.nowMs >= params.endAtMs;
+  if (params.showAnswersAfter === "after_end")
+    return params.nowMs >= params.endAtMs;
   return true;
 }
 
@@ -156,7 +167,9 @@ export default function TakeExam({
 
   const [test, setTest] = useState<ExamTest | null>(null);
   const [questions, setQuestions] = useState<ExamQuestionPublic[]>([]);
-  const [correctKeys, setCorrectKeys] = useState<ExamQuestionPrivate[] | null>(null);
+  const [correctKeys, setCorrectKeys] = useState<ExamQuestionPrivate[] | null>(
+    null,
+  );
 
   const [pwInput, setPwInput] = useState("");
   const [pwError, setPwError] = useState<string | null>(null);
@@ -167,10 +180,19 @@ export default function TakeExam({
   const [answers, setAnswers] = useState<Record<string, number | null>>({});
   const [markedForReview, setMarkedForReview] = useState<string[]>([]);
   const [visited, setVisited] = useState<Record<string, true>>({});
-  const [attemptStartedAtIso, setAttemptStartedAtIso] = useState<string | null>(null);
-  const [attemptSubmittedAtIso, setAttemptSubmittedAtIso] = useState<string | null>(null);
-  const [attemptStatus, setAttemptStatus] = useState<"in_progress" | "submitted" | null>(null);
-  const [score, setScore] = useState<{ score: number; maxScore: number } | null>(null);
+  const [attemptStartedAtIso, setAttemptStartedAtIso] = useState<string | null>(
+    null,
+  );
+  const [attemptSubmittedAtIso, setAttemptSubmittedAtIso] = useState<
+    string | null
+  >(null);
+  const [attemptStatus, setAttemptStatus] = useState<
+    "in_progress" | "submitted" | null
+  >(null);
+  const [score, setScore] = useState<{
+    score: number;
+    maxScore: number;
+  } | null>(null);
   const [closedForNewAttempts, setClosedForNewAttempts] = useState(false);
   const [rejoinBlocked, setRejoinBlocked] = useState(false);
   const [requestingRejoin, setRequestingRejoin] = useState(false);
@@ -193,20 +215,23 @@ export default function TakeExam({
   }, [id]);
 
   const totalAnsweredCount = useMemo(
-    () => Object.values(answers).filter((v) => v !== null && v !== undefined).length,
+    () =>
+      Object.values(answers).filter((v) => v !== null && v !== undefined)
+        .length,
     [answers],
   );
 
-  const { partyTracks, roster, myPresence, cameraStatus, camera } = useLiveTestPresence({
-    sessionId: liveSession?.id || "",
-    uid: user?.id || "",
-    name: user?.name || "Student",
-    role: "student",
-    currentQuestionIndex: currentIndex,
-    totalAnswered: totalAnsweredCount,
-    totalQuestions: questions.length,
-    isSubmitted: attemptStatus === "submitted",
-  });
+  const { partyTracks, roster, myPresence, cameraStatus, camera } =
+    useLiveTestPresence({
+      sessionId: liveSession?.id || "",
+      uid: user?.id || "",
+      name: user?.name || "Student",
+      role: "student",
+      currentQuestionIndex: currentIndex,
+      totalAnswered: totalAnsweredCount,
+      totalQuestions: questions.length,
+      isSubmitted: attemptStatus === "submitted",
+    });
 
   const studentCamVideoRef = useRef<HTMLVideoElement>(null);
   useEffect(() => {
@@ -222,7 +247,8 @@ export default function TakeExam({
     const sub = camera.broadcastTrack$.subscribe((bt) => {
       const el = studentCamVideoRef.current;
       if (!el) return;
-      const track = bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
+      const track =
+        bt && typeof bt === "object" && "track" in bt ? (bt as any).track : bt;
       if (track) {
         const ms = new MediaStream();
         ms.addTrack(track as MediaStreamTrack);
@@ -238,25 +264,36 @@ export default function TakeExam({
     if (!liveSession) return null;
 
     // Rule 1: Admin priority — if an active Admin is in room roster, prioritize Admin stream!
-    const adminInRoster = roster.find(
-      (p) => (p.role === "admin" || p.uid === liveSession.startedByUid) && p.videoTrack
-    ) || roster.find((p) => p.role === "admin" || p.uid === liveSession.startedByUid);
+    const adminInRoster =
+      roster.find(
+        (p) =>
+          (p.role === "admin" || p.uid === liveSession.startedByUid) &&
+          p.videoTrack,
+      ) ||
+      roster.find(
+        (p) => p.role === "admin" || p.uid === liveSession.startedByUid,
+      );
 
     if (adminInRoster) return adminInRoster;
 
     // Rule 2: Co-Host priority — if Co-Host assigned/present, show Co-Host stream
-    const cohostInRoster = roster.find(
-      (p) =>
-        (p.role === "cohost" ||
+    const cohostInRoster =
+      roster.find(
+        (p) =>
+          (p.role === "cohost" ||
+            (liveSession.coHostId && p.uid === liveSession.coHostId) ||
+            (liveSession.coHostEmail &&
+              p.email?.toLowerCase() ===
+                liveSession.coHostEmail.toLowerCase())) &&
+          p.videoTrack,
+      ) ||
+      roster.find(
+        (p) =>
+          p.role === "cohost" ||
           (liveSession.coHostId && p.uid === liveSession.coHostId) ||
-          (liveSession.coHostEmail && p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase())) &&
-        p.videoTrack
-    ) || roster.find(
-      (p) =>
-        p.role === "cohost" ||
-        (liveSession.coHostId && p.uid === liveSession.coHostId) ||
-        (liveSession.coHostEmail && p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase())
-    );
+          (liveSession.coHostEmail &&
+            p.email?.toLowerCase() === liveSession.coHostEmail.toLowerCase()),
+      );
 
     if (cohostInRoster) return cohostInRoster;
 
@@ -264,7 +301,10 @@ export default function TakeExam({
     return {
       id: liveSession.coHostId || liveSession.startedByUid || "proctor",
       uid: liveSession.coHostId || liveSession.startedByUid || "proctor",
-      name: liveSession.coHostName || liveSession.adminName || "Proctor / Instructor",
+      name:
+        liveSession.coHostName ||
+        liveSession.adminName ||
+        "Proctor / Instructor",
       role: (liveSession.coHostId ? "cohost" : "admin") as any,
       sessionId: liveSession.id,
       cameraStatus: "active" as const,
@@ -282,14 +322,19 @@ export default function TakeExam({
   const forceSubmittedHandled = useRef(false);
   useEffect(() => {
     if (!liveSession?.id || !user?.id || attemptStatus === "submitted") return;
-    const unsubPresence = subscribeToLiveTestPresence(liveSession.id, (list) => {
-      const selfPres = list.find((p) => p.uid === user.id);
-      if (selfPres?.forceSubmittedByAdmin && !forceSubmittedHandled.current) {
-        forceSubmittedHandled.current = true;
-        toast.warning("⚠️ Your exam has been force-submitted by the instructor.");
-        void handleSubmit();
-      }
-    });
+    const unsubPresence = subscribeToLiveTestPresence(
+      liveSession.id,
+      (list) => {
+        const selfPres = list.find((p) => p.uid === user.id);
+        if (selfPres?.forceSubmittedByAdmin && !forceSubmittedHandled.current) {
+          forceSubmittedHandled.current = true;
+          toast.warning(
+            "⚠️ Your exam has been force-submitted by the instructor.",
+          );
+          void handleSubmit();
+        }
+      },
+    );
     const unsubSession = subscribeToLiveTestSession(liveSession.id, (sess) => {
       if (sess?.status === "ended" && !forceSubmittedHandled.current) {
         forceSubmittedHandled.current = true;
@@ -351,9 +396,18 @@ export default function TakeExam({
   const uid = user?.id || "";
   const isGuestParticipant =
     user?.isGuestExamParticipant === true && user.guestExamTestId === testId;
-  const pwSessionKey = useMemo(() => `exam_pw_ok:${testId}:${uid}`, [testId, uid]);
-  const instructionsSessionKey = useMemo(() => `cbt_instr_ok:${testId}:${uid}`, [testId, uid]);
-  const examSessionKey = useMemo(() => `exam_session_ok:${testId}:${uid}`, [testId, uid]);
+  const pwSessionKey = useMemo(
+    () => `exam_pw_ok:${testId}:${uid}`,
+    [testId, uid],
+  );
+  const instructionsSessionKey = useMemo(
+    () => `cbt_instr_ok:${testId}:${uid}`,
+    [testId, uid],
+  );
+  const examSessionKey = useMemo(
+    () => `exam_session_ok:${testId}:${uid}`,
+    [testId, uid],
+  );
   const [instructionsOk, setInstructionsOk] = useState(false);
   const [instructionsChecked, setInstructionsChecked] = useState(false);
 
@@ -377,7 +431,9 @@ export default function TakeExam({
   const isAttemptActive = attemptStatus === "in_progress";
   const isAttemptSubmitted = attemptStatus === "submitted";
 
-  const timeLeftSeconds = hardEndMs ? Math.max(0, Math.floor((hardEndMs - nowTick) / 1000)) : 0;
+  const timeLeftSeconds = hardEndMs
+    ? Math.max(0, Math.floor((hardEndMs - nowTick) / 1000))
+    : 0;
 
   const currentQuestion = questions[currentIndex];
   const isCurrentMarkedForReview = Boolean(
@@ -407,15 +463,27 @@ export default function TakeExam({
     return attempt.rejoinApprovedAt > attempt.rejoinApprovalUsedAt;
   };
 
-  const questionIdOrder = useMemo(() => questions.map((q) => q.id), [questions]);
+  const questionIdOrder = useMemo(
+    () => questions.map((q) => q.id),
+    [questions],
+  );
 
   const answeredCount = useMemo(() => {
-    return questionIdOrder.reduce((acc, qid) => (answers[qid] != null ? acc + 1 : acc), 0);
+    return questionIdOrder.reduce(
+      (acc, qid) => (answers[qid] != null ? acc + 1 : acc),
+      0,
+    );
   }, [answers, questionIdOrder]);
 
-  const reviewCount = useMemo(() => markedForReview.length, [markedForReview.length]);
+  const reviewCount = useMemo(
+    () => markedForReview.length,
+    [markedForReview.length],
+  );
   const markedWithoutAnswerCount = useMemo(() => {
-    return markedForReview.reduce((acc, qid) => (answers[qid] == null ? acc + 1 : acc), 0);
+    return markedForReview.reduce(
+      (acc, qid) => (answers[qid] == null ? acc + 1 : acc),
+      0,
+    );
   }, [answers, markedForReview]);
 
   const notVisitedCount = useMemo(() => {
@@ -426,7 +494,11 @@ export default function TakeExam({
   const paletteStatus = useMemo(() => {
     const statusById: Record<
       string,
-      "not_visited" | "not_answered" | "answered" | "marked_for_review" | "answered_marked"
+      | "not_visited"
+      | "not_answered"
+      | "answered"
+      | "marked_for_review"
+      | "answered_marked"
     > = {};
 
     questionIdOrder.forEach((qid) => {
@@ -493,7 +565,8 @@ export default function TakeExam({
   // so by the time they click "Continue to test" the questions are already in memory.
   useEffect(() => {
     if (!testId || !uid) return;
-    if (prefetchedForTestId.current === testId && prefetchedQsRef.current) return;
+    if (prefetchedForTestId.current === testId && prefetchedQsRef.current)
+      return;
 
     // Fast path: sessionStorage lets us skip the network entirely on refresh / rejoin
     try {
@@ -516,10 +589,14 @@ export default function TakeExam({
         if (cancelled || !qs.length) return;
         prefetchedQsRef.current = qs;
         prefetchedForTestId.current = testId;
-        try { sessionStorage.setItem(`exam_qs:${testId}`, JSON.stringify(qs)); } catch {}
+        try {
+          sessionStorage.setItem(`exam_qs:${testId}`, JSON.stringify(qs));
+        } catch {}
       })
       .catch(() => {});
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [testId, uid]);
 
   useEffect(() => {
@@ -543,12 +620,17 @@ export default function TakeExam({
         ]);
         if (cancelled) return;
 
-        const isLiveActiveSession = Boolean(liveSession && liveSession.status === "active" && liveSession.startedAt);
+        const isLiveActiveSession = Boolean(
+          liveSession &&
+          liveSession.status === "active" &&
+          liveSession.startedAt,
+        );
         const isStaleAttemptFromPreviousRun = Boolean(
           attempt &&
           isLiveActiveSession &&
           attempt.startedAt &&
-          new Date(attempt.startedAt).getTime() < new Date(liveSession!.startedAt!).getTime()
+          new Date(attempt.startedAt).getTime() <
+            new Date(liveSession!.startedAt!).getTime(),
         );
 
         if (!attempt || isStaleAttemptFromPreviousRun) {
@@ -569,7 +651,9 @@ export default function TakeExam({
           const qs = shouldShuffle ? shuffleArray(rawQs) : rawQs;
 
           const startMs = Date.now();
-          const hardEnd = new Date(startMs + (test.durationMinutes || 0) * 60 * 1000).toISOString();
+          const hardEnd = new Date(
+            startMs + (test.durationMinutes || 0) * 60 * 1000,
+          ).toISOString();
           await startAttempt({
             testId,
             uid,
@@ -605,7 +689,9 @@ export default function TakeExam({
           // Restore answers: merge Firestore saved answers with any local cache
           let mergedAnswers = { ...(attempt.answers || {}) };
           try {
-            const localSaved = localStorage.getItem(`exam_answers:${testId}:${uid}`);
+            const localSaved = localStorage.getItem(
+              `exam_answers:${testId}:${uid}`,
+            );
             if (localSaved) {
               const parsed = JSON.parse(localSaved);
               if (parsed && typeof parsed === "object") {
@@ -621,9 +707,13 @@ export default function TakeExam({
           // otherwise fall back to the default upload order (rawQs).
           let qs = rawQs;
           if (attempt.questionIds?.length) {
-            const posMap = new Map(attempt.questionIds.map((qid, i) => [qid, i]));
+            const posMap = new Map(
+              attempt.questionIds.map((qid, i) => [qid, i]),
+            );
             qs = [...rawQs].sort(
-              (a, b) => (posMap.get(a.id) ?? rawQs.length) - (posMap.get(b.id) ?? rawQs.length),
+              (a, b) =>
+                (posMap.get(a.id) ?? rawQs.length) -
+                (posMap.get(b.id) ?? rawQs.length),
             );
           }
           setQuestions(qs);
@@ -637,7 +727,11 @@ export default function TakeExam({
           });
           if (qs[0]?.id) v[qs[0].id] = true;
           setVisited(v);
-          if (attempt.status === "submitted" && attempt.score != null && attempt.maxScore != null) {
+          if (
+            attempt.status === "submitted" &&
+            attempt.score != null &&
+            attempt.maxScore != null
+          ) {
             setScore({ score: attempt.score, maxScore: attempt.maxScore });
           }
         }
@@ -758,7 +852,8 @@ export default function TakeExam({
   useEffect(() => {
     if (!uid || !testId || !isAttemptActive) return;
     const unsub = subscribeToTest(testId, (data) => {
-      const paused = Array.isArray(data.pausedUids) && data.pausedUids.includes(uid);
+      const paused =
+        Array.isArray(data.pausedUids) && data.pausedUids.includes(uid);
       setIsPaused(paused);
     });
     return unsub;
@@ -770,7 +865,10 @@ export default function TakeExam({
     setAnswers((prev) => {
       const next = { ...prev, [currentQuestion.id]: optionIndex };
       try {
-        localStorage.setItem(`exam_answers:${testId}:${uid}`, JSON.stringify(next));
+        localStorage.setItem(
+          `exam_answers:${testId}:${uid}`,
+          JSON.stringify(next),
+        );
       } catch {}
       return next;
     });
@@ -782,7 +880,10 @@ export default function TakeExam({
     setAnswers((prev) => {
       const next = { ...prev, [currentQuestion.id]: null };
       try {
-        localStorage.setItem(`exam_answers:${testId}:${uid}`, JSON.stringify(next));
+        localStorage.setItem(
+          `exam_answers:${testId}:${uid}`,
+          JSON.stringify(next),
+        );
       } catch {}
       return next;
     });
@@ -793,12 +894,16 @@ export default function TakeExam({
     if (!isAttemptActive) return;
     setMarkedForReview((prev) => {
       const has = prev.includes(currentQuestion.id);
-      return has ? prev.filter((id) => id !== currentQuestion.id) : [...prev, currentQuestion.id];
+      return has
+        ? prev.filter((id) => id !== currentQuestion.id)
+        : [...prev, currentQuestion.id];
     });
   };
 
-  const goNext = () => setCurrentIndex((i) => clamp(i + 1, 0, questions.length - 1));
-  const goPrev = () => setCurrentIndex((i) => clamp(i - 1, 0, questions.length - 1));
+  const goNext = () =>
+    setCurrentIndex((i) => clamp(i + 1, 0, questions.length - 1));
+  const goPrev = () =>
+    setCurrentIndex((i) => clamp(i - 1, 0, questions.length - 1));
 
   const handleManualSave = async () => {
     if (!uid || !testId) return;
@@ -812,7 +917,9 @@ export default function TakeExam({
       );
     } catch (e) {
       console.error("Manual save failed", e);
-      alert("Save failed. Your answer is recorded locally — you can continue. Check connection.");
+      alert(
+        "Save failed. Your answer is recorded locally — you can continue. Check connection.",
+      );
     } finally {
       setSaving(false);
     }
@@ -870,8 +977,11 @@ export default function TakeExam({
     if (!isAttemptSubmitted) return false;
     const effectiveEndAtMs = hardEndMs ?? endAtMs;
     const can =
-      canShowAnswers({ showAnswersAfter: test.showAnswersAfter, nowMs: nowTick, endAtMs: effectiveEndAtMs }) ||
-      false;
+      canShowAnswers({
+        showAnswersAfter: test.showAnswersAfter,
+        nowMs: nowTick,
+        endAtMs: effectiveEndAtMs,
+      }) || false;
     return can;
   }, [endAtMs, hardEndMs, isAttemptSubmitted, nowTick, test]);
 
@@ -913,7 +1023,9 @@ export default function TakeExam({
       <Alert variant="destructive">
         <XCircle className="h-4 w-4" />
         <AlertTitle>Exam not found</AlertTitle>
-        <AlertDescription>This exam does not exist or you don&apos;t have access.</AlertDescription>
+        <AlertDescription>
+          This exam does not exist or you don&apos;t have access.
+        </AlertDescription>
       </Alert>
     );
   }
@@ -950,10 +1062,12 @@ export default function TakeExam({
           <CardContent className="p-6 space-y-4 text-center">
             <Clock className="w-10 h-10 text-amber-500 mx-auto" />
             <div>
-              <div className="text-lg font-semibold text-slate-900">Rejoin approval required</div>
+              <div className="text-lg font-semibold text-slate-900">
+                Rejoin approval required
+              </div>
               <p className="text-sm text-slate-600 mt-2">
-                You already started this test. To continue from a new session, admin approval is required.
-                Your rejoin request has been sent.
+                You already started this test. To continue from a new session,
+                admin approval is required. Your rejoin request has been sent.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
@@ -964,7 +1078,10 @@ export default function TakeExam({
               >
                 {requestingRejoin ? "Requesting..." : "Request Again"}
               </Button>
-              <Button variant="outline" onClick={() => navigate("/student/tests")}>
+              <Button
+                variant="outline"
+                onClick={() => navigate("/student/tests")}
+              >
                 Back to schedule
               </Button>
             </div>
@@ -984,13 +1101,19 @@ export default function TakeExam({
           <CardContent className="p-6 space-y-4 text-center">
             <XCircle className="w-10 h-10 text-slate-400 mx-auto" />
             <div>
-              <div className="text-lg font-semibold text-slate-900">Test closed</div>
+              <div className="text-lg font-semibold text-slate-900">
+                Test closed
+              </div>
               <p className="text-sm text-slate-600 mt-2">
-                This test is no longer accepting new attempts. If you already submitted, your result
-                was shown when you finished — download the PDF from that screen only.
+                This test is no longer accepting new attempts. If you already
+                submitted, your result was shown when you finished — download
+                the PDF from that screen only.
               </p>
             </div>
-            <Button variant="outline" onClick={() => navigate("/student/tests")}>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/student/tests")}
+            >
               Back to schedule
             </Button>
           </CardContent>
@@ -1005,9 +1128,12 @@ export default function TakeExam({
         <Card className="w-full max-w-md">
           <CardContent className="p-6 space-y-4">
             <div>
-              <div className="text-lg font-semibold text-slate-900">Enter test password</div>
+              <div className="text-lg font-semibold text-slate-900">
+                Enter test password
+              </div>
               <div className="text-sm text-slate-600 mt-1">
-                This exam is password protected. Ask your admin/trainer for the password.
+                This exam is password protected. Ask your admin/trainer for the
+                password.
               </div>
             </div>
 
@@ -1022,7 +1148,9 @@ export default function TakeExam({
                 }}
                 placeholder="Password"
               />
-              {pwError ? <div className="text-sm text-rose-600">{pwError}</div> : null}
+              {pwError ? (
+                <div className="text-sm text-rose-600">{pwError}</div>
+              ) : null}
             </div>
 
             <div className="flex items-center gap-2">
@@ -1079,7 +1207,9 @@ export default function TakeExam({
     ];
 
     return (
-      <div className={cn("min-h-screen bg-slate-50 p-4 sm:p-6", tamilFriendlyFont)}>
+      <div
+        className={cn("min-h-screen bg-slate-50 p-4 sm:p-6", tamilFriendlyFont)}
+      >
         <div className="mx-auto w-full max-w-5xl">
           <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
             <div className="px-5 py-2 sm:px-8 sm:py-3 bg-white border-b border-slate-200">
@@ -1092,8 +1222,9 @@ export default function TakeExam({
                     Instructions before you start
                   </h1>
                   <p className="mt-0.5 text-xs text-slate-600 max-w-2xl">
-                    Read the official CBT instructions and the platform guidelines. You can start the test only after you
-                    confirm you’ve read them.
+                    Read the official CBT instructions and the platform
+                    guidelines. You can start the test only after you confirm
+                    you’ve read them.
                   </p>
                 </div>
                 <Button
@@ -1113,12 +1244,16 @@ export default function TakeExam({
                     <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="text-sm font-semibold text-slate-900">TNPSC CBT Instructions (Scanned)</div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            TNPSC CBT Instructions (Scanned)
+                          </div>
                           <div className="text-xs text-slate-600 mt-0.5">
                             Official instructions pages (Tamil + English)
                           </div>
                         </div>
-                        <Badge className="bg-indigo-600 text-white">Official</Badge>
+                        <Badge className="bg-indigo-600 text-white">
+                          Official
+                        </Badge>
                       </div>
                       <div className="mt-4 space-y-3">
                         {instructionPages.map((src, idx) => (
@@ -1127,7 +1262,9 @@ export default function TakeExam({
                             className="rounded-lg border border-slate-200 bg-white overflow-hidden"
                           >
                             <div className="px-3 py-2 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                              <span className="text-xs font-semibold text-slate-700">Page {idx + 1} / {instructionPages.length}</span>
+                              <span className="text-xs font-semibold text-slate-700">
+                                Page {idx + 1} / {instructionPages.length}
+                              </span>
                             </div>
                             <img
                               src={src}
@@ -1150,9 +1287,16 @@ export default function TakeExam({
                             How to use Save/Mark/Submit properly
                           </div>
                         </div>
-                        <Badge className="bg-violet-600 text-white">Platform</Badge>
+                        <Badge className="bg-violet-600 text-white">
+                          Platform
+                        </Badge>
                       </div>
-                      <pre className={cn("mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-900", tamilFriendlyFont)}>
+                      <pre
+                        className={cn(
+                          "mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-900",
+                          tamilFriendlyFont,
+                        )}
+                      >
                         {PLATFORM_INSTRUCTIONS_TEXT.trim()}
                       </pre>
                     </div>
@@ -1165,10 +1309,13 @@ export default function TakeExam({
                   <label className="flex items-start gap-3 text-sm text-slate-700 select-none">
                     <Checkbox
                       checked={instructionsChecked}
-                      onCheckedChange={(v) => setInstructionsChecked(v === true)}
+                      onCheckedChange={(v) =>
+                        setInstructionsChecked(v === true)
+                      }
                     />
                     <span>
-                      I have read and understood the instructions. I agree to follow them during the examination.
+                      I have read and understood the instructions. I agree to
+                      follow them during the examination.
                     </span>
                   </label>
 
@@ -1184,7 +1331,8 @@ export default function TakeExam({
                   </Button>
                 </div>
                 <div className="mt-3 text-xs text-slate-500">
-                  Tip: If you get disconnected, wait for the page to recover—avoid refresh during the exam.
+                  Tip: If you get disconnected, wait for the page to
+                  recover—avoid refresh during the exam.
                 </div>
               </div>
             </div>
@@ -1201,7 +1349,9 @@ export default function TakeExam({
           <CardContent className="p-6 space-y-4 text-center">
             <Pause className="w-10 h-10 text-amber-500 mx-auto" />
             <div>
-              <div className="text-lg font-semibold text-slate-900">Exam paused</div>
+              <div className="text-lg font-semibold text-slate-900">
+                Exam paused
+              </div>
               <p className="text-sm text-slate-600 mt-2">
                 Your exam has been temporarily paused by the administrator.
                 Please wait — it will resume automatically.
@@ -1228,15 +1378,22 @@ export default function TakeExam({
           <div className="flex items-center gap-2 truncate">
             <Megaphone className="h-4 w-4 shrink-0 text-slate-950" />
             <span>PROCTOR ANNOUNCEMENT:</span>
-            <span className="font-bold text-slate-900">{liveSession.announcement}</span>
+            <span className="font-bold text-slate-900">
+              {liveSession.announcement}
+            </span>
           </div>
-          <Badge className="bg-slate-950 text-amber-300 hover:bg-slate-900 text-[10px] shrink-0">LIVE</Badge>
+          <Badge className="bg-slate-950 text-amber-300 hover:bg-slate-900 text-[10px] shrink-0">
+            LIVE
+          </Badge>
         </div>
       ) : null}
 
       <div className="shrink-0 px-3 pt-2 md:px-5 md:pt-3">
         <header className="rounded-xl border border-slate-200/90 bg-white shadow-sm overflow-hidden">
-          <div className="h-0.5 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500" aria-hidden />
+          <div
+            className="h-0.5 bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-500"
+            aria-hidden
+          />
           <div className="px-3 py-2 sm:px-4 sm:py-2.5">
             <div className="flex items-center gap-2.5 sm:gap-3">
               <div className="shrink-0">
@@ -1246,21 +1403,37 @@ export default function TakeExam({
                   className="block h-8 w-auto max-w-[150px] sm:max-w-[190px] object-contain object-left"
                 />
               </div>
-              <div className="hidden sm:block w-px h-8 bg-slate-200 shrink-0" aria-hidden />
+              <div
+                className="hidden sm:block w-px h-8 bg-slate-200 shrink-0"
+                aria-hidden
+              />
               <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-2 gap-y-1">
                 <h1 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight truncate max-w-[120px] sm:max-w-none">
                   {test.title}
                 </h1>
-                <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium border-slate-300 bg-white">
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-5 font-medium border-slate-300 bg-white"
+                >
                   {test.subject}
                 </Badge>
                 {isAttemptSubmitted ? (
-                  <Badge className="text-[10px] px-1.5 py-0 h-5 bg-emerald-100 text-emerald-800">Submitted</Badge>
+                  <Badge className="text-[10px] px-1.5 py-0 h-5 bg-emerald-100 text-emerald-800">
+                    Submitted
+                  </Badge>
                 ) : (
-                  <Badge className="text-[10px] px-1.5 py-0 h-5 bg-indigo-100 text-indigo-800">In progress</Badge>
+                  <Badge className="text-[10px] px-1.5 py-0 h-5 bg-indigo-100 text-indigo-800">
+                    In progress
+                  </Badge>
                 )}
                 <div className="hidden lg:flex items-center gap-1 w-full xl:w-auto">
-                  <ExamMetaStat icon={Layers} label="Batch" value={batchLabel} wide compact />
+                  <ExamMetaStat
+                    icon={Layers}
+                    label="Batch"
+                    value={batchLabel}
+                    wide
+                    compact
+                  />
                   <ExamMetaStat
                     icon={FileQuestion}
                     label="Questions"
@@ -1275,26 +1448,43 @@ export default function TakeExam({
                     compact
                     emphasized
                   />
-                  <ExamMetaStat icon={Timer} label="Duration" value={durationLabel} compact emphasized />
+                  <ExamMetaStat
+                    icon={Timer}
+                    label="Duration"
+                    value={durationLabel}
+                    compact
+                    emphasized
+                  />
                 </div>
               </div>
               <div
                 className={cn(
                   "shrink-0 flex items-center gap-1.5 rounded-md border px-2 py-1",
-                  timerUrgent ? "bg-red-50 border-red-300" : "bg-white border-slate-200",
+                  timerUrgent
+                    ? "bg-red-50 border-red-300"
+                    : "bg-white border-slate-200",
                 )}
                 aria-live="polite"
                 aria-atomic="true"
               >
-                <Clock className={cn("w-3.5 h-3.5 shrink-0", timerUrgent ? "text-red-600" : "text-slate-500")} />
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Left</span>
+                <Clock
+                  className={cn(
+                    "w-3.5 h-3.5 shrink-0",
+                    timerUrgent ? "text-red-600" : "text-slate-500",
+                  )}
+                />
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                  Left
+                </span>
                 <span
                   className={cn(
                     "text-base sm:text-lg font-black tabular-nums tracking-tight leading-none",
                     timerUrgent ? "text-red-700" : "text-slate-900",
                   )}
                 >
-                  {isAttemptSubmitted ? "00:00" : formatTimeLeft(timeLeftSeconds)}
+                  {isAttemptSubmitted
+                    ? "00:00"
+                    : formatTimeLeft(timeLeftSeconds)}
                 </span>
               </div>
             </div>
@@ -1312,13 +1502,21 @@ export default function TakeExam({
                     Q{currentIndex + 1}
                   </Badge>
                   <span className="text-sm text-slate-600">
-                    Mark: <span className="font-semibold text-slate-900">{currentQuestion?.marks ?? 0}</span>
+                    Mark:{" "}
+                    <span className="font-semibold text-slate-900">
+                      {currentQuestion?.marks ?? 0}
+                    </span>
                   </span>
-                  {currentQuestion && markedForReview.includes(currentQuestion.id) && (
-                    <Badge className="bg-violet-100 text-violet-800 border border-violet-200/80">Marked</Badge>
-                  )}
+                  {currentQuestion &&
+                    markedForReview.includes(currentQuestion.id) && (
+                      <Badge className="bg-violet-100 text-violet-800 border border-violet-200/80">
+                        Marked
+                      </Badge>
+                    )}
                 </div>
-                <span className="text-xs text-slate-500 hidden sm:inline">Scroll to view full question</span>
+                <span className="text-xs text-slate-500 hidden sm:inline">
+                  Scroll to view full question
+                </span>
               </div>
 
               <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain scroll-smooth">
@@ -1327,409 +1525,483 @@ export default function TakeExam({
                     <ExamQuestionImageFrame
                       src={currentQuestion.imageUrl}
                       alt={`Question ${currentIndex + 1} figure`}
-                      questionNo={currentQuestion.questionNo ?? currentIndex + 1}
+                      questionNo={
+                        currentQuestion.questionNo ?? currentIndex + 1
+                      }
                       display="full"
                     />
                   ) : null}
 
-              {currentQuestion?.text?.trim() ? (
-                <div className="text-slate-900 text-base leading-relaxed whitespace-pre-wrap">
-                  {currentQuestion.text}
-                </div>
-              ) : null}
+                  {currentQuestion?.text?.trim() ? (
+                    <div className="text-slate-900 text-base leading-relaxed whitespace-pre-wrap">
+                      {currentQuestion.text}
+                    </div>
+                  ) : null}
 
-              <div className="border-t border-slate-100 pt-3 flex flex-col gap-1" role="radiogroup" aria-label="Answer choices">
-                {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
-                  const selected = answers[currentQuestion.id] === idx;
-                  const correctIndex = correctIndexById.get(currentQuestion.id);
-                  const showCorrect = showAnswers && correctIndex != null;
-                  const isCorrect = showCorrect && correctIndex === idx;
-                  const isWrongSelected = showCorrect && selected && correctIndex !== idx;
-                  const letter = String.fromCharCode(65 + idx);
-                  const label = (opt || "").trim() || letter;
-                  const isLetterOnly = label.toUpperCase() === letter;
-                  const radioFilled = selected || isCorrect || isWrongSelected;
+                  <div
+                    className="border-t border-slate-100 pt-3 flex flex-col gap-1"
+                    role="radiogroup"
+                    aria-label="Answer choices"
+                  >
+                    {currentQuestion?.options?.slice(0, 5).map((opt, idx) => {
+                      const selected = answers[currentQuestion.id] === idx;
+                      const correctIndex = correctIndexById.get(
+                        currentQuestion.id,
+                      );
+                      const showCorrect = showAnswers && correctIndex != null;
+                      const isCorrect = showCorrect && correctIndex === idx;
+                      const isWrongSelected =
+                        showCorrect && selected && correctIndex !== idx;
+                      const letter = String.fromCharCode(65 + idx);
+                      const label = (opt || "").trim() || letter;
+                      const isLetterOnly = label.toUpperCase() === letter;
+                      const radioFilled =
+                        selected || isCorrect || isWrongSelected;
 
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      role="radio"
-                      aria-checked={selected}
-                      title={label}
-                      className={cn(
-                        "w-full text-left py-2 px-2 sm:px-3 flex items-center gap-3 rounded-lg border transition-colors",
-                        "hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1",
-                        !showCorrect && !selected && "border-transparent",
-                        selected && !showCorrect && "border-indigo-200 bg-indigo-50/80",
-                        isCorrect && "border-emerald-300 bg-emerald-50/80",
-                        isWrongSelected && "border-red-300 bg-red-50/80",
-                        !radioFilled && !showCorrect && "border-slate-100",
-                      )}
-                      onClick={() => handleSelect(idx)}
-                      disabled={!isAttemptActive}
-                    >
-                      <span
-                        className={cn(
-                          "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-colors",
-                          isCorrect && "border-emerald-600",
-                          isWrongSelected && "border-red-600",
-                          selected && !showCorrect && "border-indigo-600",
-                          !radioFilled && "border-slate-400",
-                        )}
-                        aria-hidden
-                      >
-                        {radioFilled ? (
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          title={label}
+                          className={cn(
+                            "w-full text-left py-2 px-2 sm:px-3 flex items-center gap-3 rounded-lg border transition-colors",
+                            "hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-1",
+                            !showCorrect && !selected && "border-transparent",
+                            selected &&
+                              !showCorrect &&
+                              "border-indigo-200 bg-indigo-50/80",
+                            isCorrect && "border-emerald-300 bg-emerald-50/80",
+                            isWrongSelected && "border-red-300 bg-red-50/80",
+                            !radioFilled && !showCorrect && "border-slate-100",
+                          )}
+                          onClick={() => handleSelect(idx)}
+                          disabled={!isAttemptActive}
+                        >
                           <span
                             className={cn(
-                              "h-2.5 w-2.5 rounded-full",
-                              isCorrect && "bg-emerald-600",
-                              isWrongSelected && "bg-red-600",
-                              selected && !showCorrect && "bg-indigo-600",
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 bg-white transition-colors",
+                              isCorrect && "border-emerald-600",
+                              isWrongSelected && "border-red-600",
+                              selected && !showCorrect && "border-indigo-600",
+                              !radioFilled && "border-slate-400",
                             )}
-                          />
-                        ) : null}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-base font-bold shrink-0 tabular-nums",
-                          selected && !showCorrect && "text-indigo-700",
-                          isCorrect && "text-emerald-700",
-                          isWrongSelected && "text-red-700",
-                          !radioFilled && "text-slate-700",
-                        )}
-                      >
-                        {letter}.
-                      </span>
-                      <span
-                        className={cn(
-                          "text-base leading-snug min-w-0 flex-1",
-                          selected && !showCorrect && "font-medium text-indigo-900",
-                          isCorrect && "font-medium text-emerald-900",
-                          isWrongSelected && "font-medium text-red-900",
-                          !radioFilled && "text-slate-900",
-                          isLetterOnly && "sr-only",
-                        )}
-                      >
-                        {label}
-                      </span>
-                    </button>
-                  );
-                })}
+                            aria-hidden
+                          >
+                            {radioFilled ? (
+                              <span
+                                className={cn(
+                                  "h-2.5 w-2.5 rounded-full",
+                                  isCorrect && "bg-emerald-600",
+                                  isWrongSelected && "bg-red-600",
+                                  selected && !showCorrect && "bg-indigo-600",
+                                )}
+                              />
+                            ) : null}
+                          </span>
+                          <span
+                            className={cn(
+                              "text-base font-bold shrink-0 tabular-nums",
+                              selected && !showCorrect && "text-indigo-700",
+                              isCorrect && "text-emerald-700",
+                              isWrongSelected && "text-red-700",
+                              !radioFilled && "text-slate-700",
+                            )}
+                          >
+                            {letter}.
+                          </span>
+                          <span
+                            className={cn(
+                              "text-base leading-snug min-w-0 flex-1",
+                              selected &&
+                                !showCorrect &&
+                                "font-medium text-indigo-900",
+                              isCorrect && "font-medium text-emerald-900",
+                              isWrongSelected && "font-medium text-red-900",
+                              !radioFilled && "text-slate-900",
+                              isLetterOnly && "sr-only",
+                            )}
+                          >
+                            {label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {isAttemptSubmitted && score && (
+                    <div className="mt-6">
+                      <Alert className="border-emerald-200 bg-emerald-50">
+                        <AlertTitle className="text-emerald-900">
+                          Result
+                        </AlertTitle>
+                        <AlertDescription className="text-emerald-800">
+                          Score:{" "}
+                          <span className="font-semibold">{score.score}</span> /{" "}
+                          <span className="font-semibold">
+                            {score.maxScore}
+                          </span>
+                          {attemptSubmittedAtIso ? (
+                            <span className="block mt-1 text-xs text-emerald-700">
+                              Submitted at:{" "}
+                              {new Date(attemptSubmittedAtIso).toLocaleString()}
+                            </span>
+                          ) : null}
+                        </AlertDescription>
+                      </Alert>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {isAttemptSubmitted && score && (
-                <div className="mt-6">
-                  <Alert className="border-emerald-200 bg-emerald-50">
-                    <AlertTitle className="text-emerald-900">Result</AlertTitle>
-                    <AlertDescription className="text-emerald-800">
-                      Score: <span className="font-semibold">{score.score}</span> /{" "}
-                      <span className="font-semibold">{score.maxScore}</span>
-                      {attemptSubmittedAtIso ? (
-                        <span className="block mt-1 text-xs text-emerald-700">
-                          Submitted at: {new Date(attemptSubmittedAtIso).toLocaleString()}
-                        </span>
-                      ) : null}
-                    </AlertDescription>
-                  </Alert>
+              <div className="shrink-0 border-t border-slate-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant={isCurrentMarkedForReview ? "default" : "outline"}
+                    size="sm"
+                    className={cn(
+                      isCurrentMarkedForReview &&
+                        "bg-violet-600 hover:bg-violet-700 text-white border-violet-600",
+                    )}
+                    onClick={() => {
+                      toggleMarkForReview();
+                      if (currentIndex < questions.length - 1) goNext();
+                    }}
+                    disabled={!isAttemptActive}
+                  >
+                    <Flag
+                      className={cn(
+                        "w-4 h-4 mr-2",
+                        isCurrentMarkedForReview && "fill-current",
+                      )}
+                    />
+                    {isCurrentMarkedForReview
+                      ? currentIndex === questions.length - 1
+                        ? "Unmark"
+                        : "Unmark & Next"
+                      : currentIndex === questions.length - 1
+                        ? "Mark for Review"
+                        : "Mark for Review & Next"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleClear}
+                    disabled={!isAttemptActive}
+                  >
+                    Clear Response
+                  </Button>
+                </div>
+
+                <div className="flex items-center gap-2 flex-wrap sm:justify-end">
+                  {currentIndex < questions.length - 1 ? (
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => void handleManualSave().finally(goNext)}
+                      disabled={!isAttemptActive || saving || submitting}
+                    >
+                      {saving ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Save className="w-4 h-4 mr-2" />
+                      )}
+                      Save &amp; Next
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md"
+                      onClick={() => {
+                        if (
+                          confirm(
+                            "Are you sure you want to submit your test now?",
+                          )
+                        ) {
+                          void handleSubmit();
+                        }
+                      }}
+                      disabled={!isAttemptActive || saving || submitting}
+                    >
+                      {submitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin mr-2" />{" "}
+                          Submitting...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Test
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="min-h-0 flex flex-col overflow-hidden">
+            <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-y-auto max-h-[calc(100vh-120px)] space-y-3 scroll-smooth">
+              {/* ELEMENT 1: STUDENT LIVE PROCTORING CAMERA FEED WIDGET */}
+              {liveSession && (
+                <div className="shrink-0 rounded-xl border border-slate-800 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide uppercase text-emerald-400">
+                      <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                      LIVE PROCTORING ACTIVE
+                    </span>
+                    <Badge
+                      variant="outline"
+                      className="text-[9px] text-slate-300 border-slate-700 bg-slate-900"
+                    >
+                      WEBCAM
+                    </Badge>
+                  </div>
+                  <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
+                    <ParticipantVideoTile
+                      presence={{
+                        id: myPresence?.uid || user?.id || "local",
+                        name: myPresence?.name || user?.name || "Student",
+                        role: "student",
+                        sessionId: liveSession?.id || "",
+                        updatedAt: new Date().toISOString(),
+                      }}
+                      partyTracks={partyTracks || (undefined as any)}
+                      isLocal={true}
+                      localVideoTrack$={camera.broadcastTrack$}
+                    />
+                  </div>
                 </div>
               )}
-                </div>
-              </div>
 
-            <div className="shrink-0 border-t border-slate-200 px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button
-                  variant={isCurrentMarkedForReview ? "default" : "outline"}
-                  size="sm"
-                  className={cn(
-                    isCurrentMarkedForReview &&
-                      "bg-violet-600 hover:bg-violet-700 text-white border-violet-600",
-                  )}
-                  onClick={() => {
-                    toggleMarkForReview();
-                    if (currentIndex < questions.length - 1) goNext();
-                  }}
-                  disabled={!isAttemptActive}
-                >
-                  <Flag
-                    className={cn("w-4 h-4 mr-2", isCurrentMarkedForReview && "fill-current")}
-                  />
-                  {isCurrentMarkedForReview
-                    ? currentIndex === questions.length - 1 ? "Unmark" : "Unmark & Next"
-                    : currentIndex === questions.length - 1 ? "Mark for Review" : "Mark for Review & Next"}
-                </Button>
-                <Button variant="outline" size="sm" onClick={handleClear} disabled={!isAttemptActive}>
-                  Clear Response
-                </Button>
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                {currentIndex < questions.length - 1 ? (
-                  <Button
-                    size="sm"
-                    className="bg-blue-600 hover:bg-blue-700"
-                    onClick={() => void handleManualSave().finally(goNext)}
-                    disabled={!isAttemptActive || saving || submitting}
-                  >
-                    {saving ? (
-                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                    ) : (
-                      <Save className="w-4 h-4 mr-2" />
-                    )}
-                    Save &amp; Next
-                  </Button>
-                ) : (
-                  <Button
-                    size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md"
-                    onClick={() => {
-                      if (confirm("Are you sure you want to submit your test now?")) {
-                        void handleSubmit();
-                      }
-                    }}
-                    disabled={!isAttemptActive || saving || submitting}
-                  >
-                    {submitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" /> Submitting...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Test
-                      </>
-                    )}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-h-0 flex flex-col overflow-hidden">
-          <CardContent className="p-4 flex flex-col min-h-0 flex-1 overflow-y-auto max-h-[calc(100vh-120px)] space-y-3 scroll-smooth">
-            {/* ELEMENT 1: STUDENT LIVE PROCTORING CAMERA FEED WIDGET */}
-            {liveSession && (
-              <div className="shrink-0 rounded-xl border border-slate-800 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide uppercase text-emerald-400">
-                    <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-                    LIVE PROCTORING ACTIVE
-                  </span>
-                  <Badge variant="outline" className="text-[9px] text-slate-300 border-slate-700 bg-slate-900">
-                    WEBCAM
-                  </Badge>
-                </div>
-                <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center">
-                  <ParticipantVideoTile
-                    presence={{
-                      id: myPresence?.uid || user?.id || "local",
-                      name: myPresence?.name || user?.name || "Student",
-                      role: "student",
-                      sessionId: liveSession?.id || "",
-                      updatedAt: new Date().toISOString(),
-                    }}
-                    partyTracks={partyTracks || (undefined as any)}
-                    isLocal={true}
-                    localVideoTrack$={camera.broadcastTrack$}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* ELEMENT 2: ADMIN LIVE VIDEO STREAM & INSTRUCTOR BROADCAST TILE */}
-            {liveSession?.proctoringSettings?.enableAdminVideo && (
-              <div className="shrink-0 rounded-xl border border-indigo-900/80 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide uppercase text-indigo-300">
-                    <Video className="h-3.5 w-3.5 text-indigo-400" />
-                    INSTRUCTOR STREAM
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowAdminStream(!showAdminStream)}
-                    className="text-[10px] text-indigo-300 underline font-medium hover:text-white"
-                  >
-                    {showAdminStream ? "Hide Stream" : "Show Stream"}
-                  </button>
-                </div>
-
-                {showAdminStream && (
-                  <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-indigo-950/60 border border-indigo-900/50 flex items-center justify-center">
-                    {proctorPresence ? (
-                      <ParticipantVideoTile
-                        presence={{
-                          id: proctorPresence.uid || proctorPresence.id,
-                          name: proctorPresence.name,
-                          role: proctorPresence.role === "cohost" ? "co-host" : proctorPresence.role === "admin" ? "host" : "student",
-                          sessionId: liveSession?.id || "",
-                          updatedAt: proctorPresence.updatedAt || new Date().toISOString(),
-                          videoTrack: (proctorPresence as any).videoTrack,
-                          audioTrack: (proctorPresence as any).audioTrack,
-                        }}
-                        partyTracks={partyTracks || (undefined as any)}
-                        isLocal={false}
-                      />
-                    ) : (
-                      <div className="text-center p-2">
-                        <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1 animate-pulse" />
-                        <p className="text-[11px] font-semibold text-indigo-200">
-                          {liveSession.coHostName || liveSession.adminName || "Proctor / Instructor"}
-                        </p>
-                        <p className="text-[9px] text-indigo-300/80">Live Video Broadcast Active</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Candidate</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900 truncate" title={user.name}>
-                    {user.name || "Student"}
-                  </div>
-                  <div className="text-xs text-slate-600 mt-0.5">
-                    {user.studentId || user.studentRecordId || "ID not available"}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
-                    <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                      Answered: <span className="font-semibold text-slate-900">{answeredCount}</span>
-                    </div>
-                    <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
-                      Marked: <span className="font-semibold text-slate-900">{reviewCount}</span>
-                    </div>
-                  </div>
-                </div>
-                <div
-                  className="relative w-[84px] h-[108px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm shrink-0"
-                  title="Student photo"
-                >
-                  {photoURL ? (
-                    <StudentPhotoImage
-                      photoURL={photoURL}
-                      imgClassName="max-w-full max-h-full w-full h-full object-contain object-center"
-                      fallback={
-                        <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
-                          {initialsFromName(user.name || "Student")}
-                        </span>
-                      }
-                    />
-                  ) : (
-                    <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
-                      {initialsFromName(user.name || "Student")}
+              {/* ELEMENT 2: ADMIN LIVE VIDEO STREAM & INSTRUCTOR BROADCAST TILE */}
+              {liveSession?.proctoringSettings?.enableAdminVideo && (
+                <div className="shrink-0 rounded-xl border border-indigo-900/80 bg-slate-950 p-2.5 shadow-md space-y-2 text-white">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-[10px] font-bold tracking-wide uppercase text-indigo-300">
+                      <Video className="h-3.5 w-3.5 text-indigo-400" />
+                      INSTRUCTOR STREAM
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAdminStream(!showAdminStream)}
+                      className="text-[10px] text-indigo-300 underline font-medium hover:text-white"
+                    >
+                      {showAdminStream ? "Hide Stream" : "Show Stream"}
+                    </button>
+                  </div>
+
+                  {showAdminStream && (
+                    <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-indigo-950/60 border border-indigo-900/50 flex items-center justify-center">
+                      {proctorPresence ? (
+                        <ParticipantVideoTile
+                          presence={{
+                            id: proctorPresence.uid || proctorPresence.id,
+                            name: proctorPresence.name,
+                            role:
+                              proctorPresence.role === "cohost"
+                                ? "co-host"
+                                : proctorPresence.role === "admin"
+                                  ? "host"
+                                  : "student",
+                            sessionId: liveSession?.id || "",
+                            updatedAt:
+                              proctorPresence.updatedAt ||
+                              new Date().toISOString(),
+                            videoTrack: (proctorPresence as any).videoTrack,
+                            audioTrack: (proctorPresence as any).audioTrack,
+                          }}
+                          partyTracks={partyTracks || (undefined as any)}
+                          isLocal={false}
+                        />
+                      ) : (
+                        <div className="text-center p-2">
+                          <Video className="h-6 w-6 text-indigo-400 mx-auto mb-1 animate-pulse" />
+                          <p className="text-[11px] font-semibold text-indigo-200">
+                            {liveSession.coHostName ||
+                              liveSession.adminName ||
+                              "Proctor / Instructor"}
+                          </p>
+                          <p className="text-[9px] text-indigo-300/80">
+                            Live Video Broadcast Active
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-              </div>
-            </div>
+              )}
 
-            <div className="mt-4 flex shrink-0 items-center justify-between">
-              <div className="text-sm font-semibold text-slate-900">Question Palette</div>
-              <div className="text-xs text-slate-500">
-                {answeredCount}/{questions.length} answered
-              </div>
-            </div>
-
-            <div
-              className="mt-2 min-h-[140px] max-h-[360px] flex-1 overflow-y-auto overscroll-contain scroll-smooth rounded-lg border border-slate-200/80 bg-slate-50/50 p-2 pr-1"
-              aria-label="Question navigation"
-            >
-              <div className="grid grid-cols-6 gap-2">
-              {questions.map((q, idx) => {
-                const st = paletteStatus[q.id];
-                const isCurrent = idx === currentIndex;
-                const base =
-                  st === "answered"
-                    ? "bg-emerald-600 text-white border-emerald-600"
-                    : st === "answered_marked"
-                      ? "bg-violet-600 text-white border-violet-600"
-                    : st === "marked_for_review"
-                      ? "bg-violet-600 text-white border-violet-600"
-                      : st === "not_answered"
-                        ? "bg-red-600 text-white border-red-600"
-                        : "bg-slate-100 text-slate-900 border-slate-300";
-
-                return (
-                  <button
-                    key={q.id}
-                    className={cn(
-                      "relative h-9 rounded-lg border text-xs font-semibold transition-all",
-                      base,
-                      isCurrent &&
-                        st === "not_answered" &&
-                        "ring-2 ring-red-800 ring-offset-2",
-                      isCurrent &&
-                        st !== "not_answered" &&
-                        "ring-2 ring-indigo-400 ring-offset-2",
-                      st === "not_visited" && "hover:bg-slate-50",
-                    )}
-                    onClick={() => setCurrentIndex(idx)}
+              <div className="shrink-0 rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs uppercase tracking-wide text-slate-500">
+                      Candidate
+                    </div>
+                    <div
+                      className="mt-1 text-sm font-semibold text-slate-900 truncate"
+                      title={user.name}
+                    >
+                      {user.name || "Student"}
+                    </div>
+                    <div className="text-xs text-slate-600 mt-0.5">
+                      {user.studentId ||
+                        user.studentRecordId ||
+                        "ID not available"}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+                      <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                        Answered:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {answeredCount}
+                        </span>
+                      </div>
+                      <div className="rounded-md border border-slate-200 bg-white px-2 py-1">
+                        Marked:{" "}
+                        <span className="font-semibold text-slate-900">
+                          {reviewCount}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div
+                    className="relative w-[84px] h-[108px] rounded-sm border-[3px] border-slate-800 bg-white flex items-center justify-center overflow-hidden shadow-sm shrink-0"
+                    title="Student photo"
                   >
-                    {st === "answered_marked" ? (
-                      <span
-                        className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm ring-1 ring-emerald-700/20"
-                        title="Answered and marked for review"
+                    {photoURL ? (
+                      <StudentPhotoImage
+                        photoURL={photoURL}
+                        imgClassName="max-w-full max-h-full w-full h-full object-contain object-center"
+                        fallback={
+                          <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
+                            {initialsFromName(user.name || "Student")}
+                          </span>
+                        }
                       />
-                    ) : null}
-                    {idx + 1}
-                  </button>
-                );
-              })}
+                    ) : (
+                      <span className="text-sm font-bold text-indigo-700 tabular-nums px-1 text-center select-none">
+                        {initialsFromName(user.name || "Student")}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
 
-            <div className="mt-3 shrink-0 grid grid-cols-2 gap-2 text-xs">
-              <LegendChip color="bg-emerald-600" label="Answered" />
-              <LegendChip color="bg-red-600" label="Not Answered" />
-              <LegendChip color="bg-violet-600" label="Marked for Review" />
-              <LegendChip color="bg-slate-100 border border-slate-300" label="Not Visited" />
-            </div>
-            <div className="mt-2 shrink-0">
-              <LegendChip
-                color="bg-violet-600"
-                markerColor="bg-emerald-500"
-                label="Answered & Marked for Review"
-              />
-              <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
-                Answered &amp; Marked for Review will be considered for evaluation.
-              </p>
-            </div>
+              <div className="mt-4 flex shrink-0 items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">
+                  Question Palette
+                </div>
+                <div className="text-xs text-slate-500">
+                  {answeredCount}/{questions.length} answered
+                </div>
+              </div>
 
-            <div className="mt-3 shrink-0 border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-600">
-              <div className="flex items-center justify-between">
-                <span>Counted for evaluation</span>
-                <span className="font-semibold text-slate-900">{answeredCount}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Marked without answer</span>
-                <span className="font-semibold text-slate-900">{markedWithoutAnswerCount}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Not visited (approx)</span>
-                <span className="font-semibold text-slate-900">{notVisitedCount}</span>
-              </div>
-            </div>
+              <div
+                className="mt-2 min-h-[140px] max-h-[360px] flex-1 overflow-y-auto overscroll-contain scroll-smooth rounded-lg border border-slate-200/80 bg-slate-50/50 p-2 pr-1"
+                aria-label="Question navigation"
+              >
+                <div className="grid grid-cols-6 gap-2">
+                  {questions.map((q, idx) => {
+                    const st = paletteStatus[q.id];
+                    const isCurrent = idx === currentIndex;
+                    const base =
+                      st === "answered"
+                        ? "bg-emerald-600 text-white border-emerald-600"
+                        : st === "answered_marked"
+                          ? "bg-violet-600 text-white border-violet-600"
+                          : st === "marked_for_review"
+                            ? "bg-violet-600 text-white border-violet-600"
+                            : st === "not_answered"
+                              ? "bg-red-600 text-white border-red-600"
+                              : "bg-slate-100 text-slate-900 border-slate-300";
 
-            <div className="shrink-0 pt-3">
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
-                Answered questions, including answered and marked for review, will be considered for evaluation.
-                Marked for review without an answer will not be counted.
+                    return (
+                      <button
+                        key={q.id}
+                        className={cn(
+                          "relative h-9 rounded-lg border text-xs font-semibold transition-all",
+                          base,
+                          isCurrent &&
+                            st === "not_answered" &&
+                            "ring-2 ring-red-800 ring-offset-2",
+                          isCurrent &&
+                            st !== "not_answered" &&
+                            "ring-2 ring-indigo-400 ring-offset-2",
+                          st === "not_visited" && "hover:bg-slate-50",
+                        )}
+                        onClick={() => setCurrentIndex(idx)}
+                      >
+                        {st === "answered_marked" ? (
+                          <span
+                            className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm ring-1 ring-emerald-700/20"
+                            title="Answered and marked for review"
+                          />
+                        ) : null}
+                        {idx + 1}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5" />
-                Exam ends only when the timer finishes.
+
+              <div className="mt-3 shrink-0 grid grid-cols-2 gap-2 text-xs">
+                <LegendChip color="bg-emerald-600" label="Answered" />
+                <LegendChip color="bg-red-600" label="Not Answered" />
+                <LegendChip color="bg-violet-600" label="Marked for Review" />
+                <LegendChip
+                  color="bg-slate-100 border border-slate-300"
+                  label="Not Visited"
+                />
               </div>
-            </div>
+              <div className="mt-2 shrink-0">
+                <LegendChip
+                  color="bg-violet-600"
+                  markerColor="bg-emerald-500"
+                  label="Answered & Marked for Review"
+                />
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-600">
+                  Answered &amp; Marked for Review will be considered for
+                  evaluation.
+                </p>
+              </div>
 
+              <div className="mt-3 shrink-0 border-t border-slate-200 pt-3 space-y-2 text-xs text-slate-600">
+                <div className="flex items-center justify-between">
+                  <span>Counted for evaluation</span>
+                  <span className="font-semibold text-slate-900">
+                    {answeredCount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Marked without answer</span>
+                  <span className="font-semibold text-slate-900">
+                    {markedWithoutAnswerCount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Not visited (approx)</span>
+                  <span className="font-semibold text-slate-900">
+                    {notVisitedCount}
+                  </span>
+                </div>
+              </div>
 
-          </CardContent>
-        </Card>
+              <div className="shrink-0 pt-3">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-relaxed text-amber-900">
+                  Answered questions, including answered and marked for review,
+                  will be considered for evaluation. Marked for review without
+                  an answer will not be counted.
+                </div>
+                <div className="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
+                  <Clock className="w-3.5 h-3.5" />
+                  Exam ends only when the timer finishes.
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-      </div>
-
 
       {/* PROCTOR DIRECT WARNING MESSAGE MODAL */}
       {myPresence?.warningMessage && (
@@ -1738,8 +2010,12 @@ export default function TakeExam({
             <div className="flex items-center gap-3 text-amber-600">
               <ShieldAlert className="h-8 w-8 shrink-0" />
               <div>
-                <h3 className="text-base font-bold text-slate-900">Message from Live Proctor</h3>
-                <p className="text-xs text-amber-800 font-medium">Direct Admin Warning</p>
+                <h3 className="text-base font-bold text-slate-900">
+                  Message from Live Proctor
+                </h3>
+                <p className="text-xs text-amber-800 font-medium">
+                  Direct Admin Warning
+                </p>
               </div>
             </div>
             <div className="rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-950 border border-amber-200">
@@ -1790,7 +2066,15 @@ function ExamMetaStat({
         compact && !emphasized && "gap-1 px-1.5 py-0.5",
         compact && emphasized && "gap-1.5 px-2 py-1",
         !compact && "gap-2 px-3 py-2 rounded-lg",
-        wide ? (compact ? "max-w-[180px] min-w-0" : "max-w-full min-w-[140px] flex-1 basis-[200px]") : compact && !emphasized ? "" : compact && emphasized ? "min-w-[72px]" : "min-w-[100px]",
+        wide
+          ? compact
+            ? "max-w-[180px] min-w-0"
+            : "max-w-full min-w-[140px] flex-1 basis-[200px]"
+          : compact && !emphasized
+            ? ""
+            : compact && emphasized
+              ? "min-w-[72px]"
+              : "min-w-[100px]",
       )}
     >
       <Icon
@@ -1841,7 +2125,9 @@ function LegendChip({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className={cn("relative inline-block w-3.5 h-3.5 rounded-sm", color)}>
+      <span
+        className={cn("relative inline-block w-3.5 h-3.5 rounded-sm", color)}
+      >
         {markerColor ? (
           <span
             className={cn(

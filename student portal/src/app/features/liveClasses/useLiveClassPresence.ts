@@ -1,12 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { NEVER, Observable, EMPTY, catchError, distinctUntilChanged, shareReplay, switchMap } from "rxjs";
-import { PartyTracks, getMic, getCamera, getScreenshare, type TrackMetadata } from "partytracks/client";
+import {
+  NEVER,
+  Observable,
+  EMPTY,
+  catchError,
+  distinctUntilChanged,
+  shareReplay,
+  switchMap,
+} from "rxjs";
+import {
+  PartyTracks,
+  getMic,
+  getCamera,
+  getScreenshare,
+  type TrackMetadata,
+} from "partytracks/client";
 import { useObservableAsValue } from "partytracks/react";
 import { createPartyTracksClient } from "./realtimeClient";
-import { deleteOwnPresence, subscribeToPresence, upsertOwnPresence } from "./liveClassApi";
-import type { LiveClassPresence, ParticipantRole, PublishedTrack } from "./types";
+import {
+  deleteOwnPresence,
+  subscribeToPresence,
+  upsertOwnPresence,
+} from "./liveClassApi";
+import type {
+  LiveClassPresence,
+  ParticipantRole,
+  PublishedTrack,
+} from "./types";
 
-function toPublishedTrack(meta: TrackMetadata | undefined): PublishedTrack | null {
+function toPublishedTrack(
+  meta: TrackMetadata | undefined,
+): PublishedTrack | null {
   if (!meta?.sessionId || !meta?.trackName) return null;
   return { sessionId: meta.sessionId, trackName: meta.trackName };
 }
@@ -16,15 +40,18 @@ function toPublishedTrack(meta: TrackMetadata | undefined): PublishedTrack | nul
  * skips the initial state — so UI would stay "connecting" forever if we
  * subscribed after the PC was already connected. Emit current state first.
  */
-function peerConnectionState$(partyTracks: PartyTracks): Observable<RTCPeerConnectionState> {
+function peerConnectionState$(
+  partyTracks: PartyTracks,
+): Observable<RTCPeerConnectionState> {
   return partyTracks.peerConnection$.pipe(
-    switchMap((pc) =>
-      new Observable<RTCPeerConnectionState>((subscriber) => {
-        subscriber.next(pc.connectionState);
-        const handler = () => subscriber.next(pc.connectionState);
-        pc.addEventListener("connectionstatechange", handler);
-        return () => pc.removeEventListener("connectionstatechange", handler);
-      }),
+    switchMap(
+      (pc) =>
+        new Observable<RTCPeerConnectionState>((subscriber) => {
+          subscriber.next(pc.connectionState);
+          const handler = () => subscriber.next(pc.connectionState);
+          pc.addEventListener("connectionstatechange", handler);
+          return () => pc.removeEventListener("connectionstatechange", handler);
+        }),
     ),
     distinctUntilChanged(),
     shareReplay({ bufferSize: 1, refCount: true }),
@@ -70,7 +97,9 @@ export function useLiveClassPresence(params: {
           error: (err) => {
             if (cancelled) return;
             const message =
-              err instanceof Error ? err.message : "Could not establish a media session.";
+              err instanceof Error
+                ? err.message
+                : "Could not establish a media session.";
             setConnectError(message);
           },
         });
@@ -138,7 +167,10 @@ export function useLiveClassPresence(params: {
   const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
 
   const session = useObservableAsValue(session$);
-  const connectionState = useObservableAsValue(pcState$, "new" as RTCPeerConnectionState);
+  const connectionState = useObservableAsValue(
+    pcState$,
+    "new" as RTCPeerConnectionState,
+  );
   const isPcConnected = connectionState === "connected";
 
   const audioMeta$ = useMemo(
@@ -158,7 +190,9 @@ export function useLiveClassPresence(params: {
   const screenMeta$ = useMemo(
     () =>
       partyTracks && isScreenOn
-        ? partyTracks.push(screenshare.video.broadcastTrack$).pipe(catchError(() => EMPTY))
+        ? partyTracks
+            .push(screenshare.video.broadcastTrack$)
+            .pipe(catchError(() => EMPTY))
         : NEVER,
     [partyTracks, screenshare, isScreenOn],
   );
@@ -187,7 +221,12 @@ export function useLiveClassPresence(params: {
   // If ICE dies or connection disconnects/fails, auto-retry first, then surface error after a grace period.
   useEffect(() => {
     if (!partyTracks) return;
-    if (connectionState !== "failed" && connectionState !== "closed" && connectionState !== "disconnected") return;
+    if (
+      connectionState !== "failed" &&
+      connectionState !== "closed" &&
+      connectionState !== "disconnected"
+    )
+      return;
 
     // First, attempt an automatic recovery reconnect after 3 seconds
     const autoRetryTimer = window.setTimeout(() => {
@@ -197,7 +236,11 @@ export function useLiveClassPresence(params: {
     }, 3000);
 
     const errorTimer = window.setTimeout(() => {
-      if (connectionState === "failed" || connectionState === "closed" || connectionState === "disconnected") {
+      if (
+        connectionState === "failed" ||
+        connectionState === "closed" ||
+        connectionState === "disconnected"
+      ) {
         setConnectError(
           "Media connection dropped due to network issues. Click 'Rejoin Class' to re-establish your live connection.",
         );
@@ -233,8 +276,12 @@ export function useLiveClassPresence(params: {
       }
       return err.message || "Could not access camera or microphone.";
     };
-    const micSub = mic.error$.subscribe((err) => setConnectError(toMessage(err)));
-    const camSub = camera.error$.subscribe((err) => setConnectError(toMessage(err)));
+    const micSub = mic.error$.subscribe((err) =>
+      setConnectError(toMessage(err)),
+    );
+    const camSub = camera.error$.subscribe((err) =>
+      setConnectError(toMessage(err)),
+    );
     const screenSub = screenshare.video.error$.subscribe((err) => {
       if (err.name !== "NotAllowedError") {
         console.warn("Screenshare error:", err);
@@ -261,8 +308,10 @@ export function useLiveClassPresence(params: {
       name,
       sessionId: session.sessionId,
       audioTrack: isMicOn && isPcConnected ? toPublishedTrack(audioMeta) : null,
-      videoTrack: isCameraOn && isPcConnected ? toPublishedTrack(videoMeta) : null,
-      screenshareVideoTrack: isScreenOn && isPcConnected ? toPublishedTrack(screenMeta) : null,
+      videoTrack:
+        isCameraOn && isPcConnected ? toPublishedTrack(videoMeta) : null,
+      screenshareVideoTrack:
+        isScreenOn && isPcConnected ? toPublishedTrack(screenMeta) : null,
     }).catch(console.error);
   }, [
     classId,

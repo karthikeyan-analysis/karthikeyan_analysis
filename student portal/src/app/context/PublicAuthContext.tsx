@@ -41,14 +41,19 @@ export interface PublicStudent {
 interface PublicAuthContextType {
   publicStudent: PublicStudent | null;
   loading: boolean;
-  login: (username: string, passcode: string) => Promise<{ success: boolean; error?: string }>;
+  login: (
+    username: string,
+    passcode: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   refreshStudent: () => Promise<void>;
 }
 
 const SESSION_KEY = "publicCBT_session";
 
-const PublicAuthContext = createContext<PublicAuthContextType | undefined>(undefined);
+const PublicAuthContext = createContext<PublicAuthContextType | undefined>(
+  undefined,
+);
 
 function generateSessionToken(): string {
   const arr = new Uint8Array(18);
@@ -57,21 +62,30 @@ function generateSessionToken(): string {
 }
 
 export function PublicAuthProvider({ children }: { children: ReactNode }) {
-  const [publicStudent, setPublicStudent] = useState<PublicStudent | null>(null);
+  const [publicStudent, setPublicStudent] = useState<PublicStudent | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   // On mount — restore session from localStorage and verify against Firestore
   useEffect(() => {
     const restore = async () => {
       const raw = localStorage.getItem(SESSION_KEY);
-      if (!raw) { setLoading(false); return; }
+      if (!raw) {
+        setLoading(false);
+        return;
+      }
       try {
         const { studentId, sessionToken } = JSON.parse(raw) as {
           studentId: string;
           sessionToken: string;
         };
         const snap = await getDoc(doc(db, "publicCBTStudents", studentId));
-        if (!snap.exists()) { clearSession(); setLoading(false); return; }
+        if (!snap.exists()) {
+          clearSession();
+          setLoading(false);
+          return;
+        }
         const data = snap.data() as PublicStudent;
         if (data.activeSessionToken !== sessionToken) {
           // Another device logged in — invalidate this session
@@ -100,7 +114,8 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
   ): Promise<{ success: boolean; error?: string }> => {
     const uname = username.trim().toUpperCase();
     const pc = passcode.trim().toUpperCase();
-    if (!uname || !pc) return { success: false, error: "Enter username and passcode." };
+    if (!uname || !pc)
+      return { success: false, error: "Enter username and passcode." };
 
     try {
       const q = query(
@@ -113,7 +128,8 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
       const docSnap = snap.docs[0];
       const data = docSnap.data() as PublicStudent;
 
-      if (data.passcode !== pc) return { success: false, error: "Incorrect passcode." };
+      if (data.passcode !== pc)
+        return { success: false, error: "Incorrect passcode." };
 
       // Generate new session token (invalidates all other devices)
       const sessionToken = generateSessionToken();
@@ -121,7 +137,11 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
         activeSessionToken: sessionToken,
       });
 
-      const student: PublicStudent = { id: docSnap.id, ...data, activeSessionToken: sessionToken };
+      const student: PublicStudent = {
+        id: docSnap.id,
+        ...data,
+        activeSessionToken: sessionToken,
+      };
       localStorage.setItem(
         SESSION_KEY,
         JSON.stringify({ studentId: docSnap.id, sessionToken }),
@@ -129,7 +149,10 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
       setPublicStudent(student);
       return { success: true };
     } catch (e: any) {
-      return { success: false, error: e?.message || "Login failed. Try again." };
+      return {
+        success: false,
+        error: e?.message || "Login failed. Try again.",
+      };
     }
   };
 
@@ -149,7 +172,9 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PublicAuthContext.Provider value={{ publicStudent, loading, login, logout, refreshStudent }}>
+    <PublicAuthContext.Provider
+      value={{ publicStudent, loading, login, logout, refreshStudent }}
+    >
       {children}
     </PublicAuthContext.Provider>
   );
@@ -157,7 +182,8 @@ export function PublicAuthProvider({ children }: { children: ReactNode }) {
 
 export function usePublicAuth() {
   const ctx = useContext(PublicAuthContext);
-  if (!ctx) throw new Error("usePublicAuth must be used inside PublicAuthProvider");
+  if (!ctx)
+    throw new Error("usePublicAuth must be used inside PublicAuthProvider");
   return ctx;
 }
 
@@ -172,7 +198,12 @@ function generatePasscode(): string {
   return code;
 }
 
-export async function registerPublicStudent(data: Omit<PublicStudent, "id" | "username" | "passcode" | "activeSessionToken" | "registeredAt">): Promise<{ username: string; passcode: string; id: string }> {
+export async function registerPublicStudent(
+  data: Omit<
+    PublicStudent,
+    "id" | "username" | "passcode" | "activeSessionToken" | "registeredAt"
+  >,
+): Promise<{ username: string; passcode: string; id: string }> {
   // Atomically increment counter and get the next number
   const counterRef = doc(db, "publicCBTMeta", "counter");
   let count = 1;
@@ -194,7 +225,9 @@ export async function registerPublicStudent(data: Omit<PublicStudent, "id" | "us
 
   // Strip all undefined values so Firestore setDoc never throws on optional fields
   const cleanData = Object.fromEntries(
-    Object.entries(data).filter(([_, v]) => v !== undefined && v !== null && v !== ""),
+    Object.entries(data).filter(
+      ([_, v]) => v !== undefined && v !== null && v !== "",
+    ),
   );
 
   const newDoc = {

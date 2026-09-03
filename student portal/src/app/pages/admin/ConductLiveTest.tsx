@@ -745,7 +745,10 @@ export default function ConductLiveTest() {
         return Math.round((score / max) * 1000) / 10;
       };
 
-      const { ranked, unranked } = sortAttemptsForRankExport(attempts, students);
+      const { ranked, unranked } = sortAttemptsForRankExport(
+        attempts,
+        students,
+      );
       const exportAttemptOrder = [...ranked, ...unranked];
 
       let rankCounter = 0;
@@ -1588,10 +1591,7 @@ export default function ConductLiveTest() {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        void handleExportLiveTestResults(
-                          currentSession,
-                          "xlsx",
-                        )
+                        void handleExportLiveTestResults(currentSession, "xlsx")
                       }
                       disabled={exportingTestId === currentSession.testId}
                       className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300 font-bold text-xs shadow-xs flex items-center gap-1.5"
@@ -1619,7 +1619,9 @@ export default function ConductLiveTest() {
                       size="sm"
                       variant="outline"
                       onClick={() =>
-                        navigate(`/admin/tests/${currentSession.testId}/results`)
+                        navigate(
+                          `/admin/tests/${currentSession.testId}/results`,
+                        )
                       }
                       className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 font-bold text-xs shadow-xs flex items-center gap-1.5"
                     >
