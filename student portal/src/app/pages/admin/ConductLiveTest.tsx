@@ -571,24 +571,6 @@ export default function ConductLiveTest() {
     }
   };
 
-  const handleEndSession = async () => {
-    if (!selectedSessionId) return;
-    if (
-      !confirm(
-        "Are you sure you want to end this Live Test session for all students?",
-      )
-    )
-      return;
-
-    try {
-      await endLiveTestSession(selectedSessionId);
-      setSelectedSessionId(null);
-      setViewingSessionMode("list");
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleDeleteSchedule = async (sessionId: string, title: string) => {
     if (
       !confirm(`Are you sure you want to cancel the schedule for "${title}"?`)
