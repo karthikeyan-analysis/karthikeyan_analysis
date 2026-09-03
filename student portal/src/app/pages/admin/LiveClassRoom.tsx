@@ -453,6 +453,25 @@ function LiveClassRoomInner({
             <p className="mt-1 text-xs text-slate-600 leading-relaxed">
               {connectError}
             </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2">
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700 font-bold text-xs h-9 w-full shadow-md"
+              onClick={() => reconnect()}
+            >
+              🔄 Reconnect Studio Now
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs h-8"
+              onClick={() => navigate("/admin/live-classes")}
+            >
+              Back to Live Classes
+            </Button>
+          </div>
+        </div>
+      </div>
     );
   }
 
