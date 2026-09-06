@@ -79,6 +79,8 @@ export interface ExamTest {
   manuallyClosedAt?: string;
   /** UIDs of students whose active attempts are temporarily suspended by admin. */
   pausedUids?: string[];
+  /** When true, this test is explicitly featured in the Public CBT Mock Test Portal for registered public candidates. */
+  isPublicTest?: boolean;
   publishedAt?: string;
   settings?: ExamAdvancedSettings;
   createdAt: string; // ISO
@@ -142,4 +144,3 @@ export interface ExamAttempt {
   score?: number;
   maxScore?: number;
 }
-

@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useData } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
@@ -14,7 +19,10 @@ import {
 } from "../../features/exams/examMarks";
 import { sha256Base64 } from "../../features/exams/password";
 import { getExamTest, updateExamTest } from "../../features/exams/examApi";
-import { applySystemExamSettingLocks, getEffectiveExamSettings } from "../../features/exams/settings";
+import {
+  applySystemExamSettingLocks,
+  getEffectiveExamSettings,
+} from "../../features/exams/settings";
 import ExamBatchAssignmentFields, {
   inferExamBatchMode,
   type ExamBatchMode,
@@ -24,7 +32,10 @@ import {
   getExamBatchIds,
   normalizeExamBatchFields,
 } from "../../features/exams/examBatchUtils";
-import type { ExamAdvancedSettings, ExamTest } from "../../features/exams/types";
+import type {
+  ExamAdvancedSettings,
+  ExamTest,
+} from "../../features/exams/types";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 // ── datetime-local helpers ────────────────────────────────────────────────────
@@ -55,6 +66,7 @@ type FormState = {
   defaultMarksPerQuestion: QuestionMarkOption;
   negativeMarkPerWrong: string;
   passcode: string;
+  isPublicTest: boolean;
   settings: Required<ExamAdvancedSettings>;
 };
 
@@ -68,7 +80,9 @@ export default function ExamSettingsPage() {
   const [test, setTest] = useState<ExamTest | null>(null);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saved" | "error">(
+    "idle",
+  );
   const [form, setForm] = useState<FormState | null>(null);
 
   useEffect(() => {
@@ -95,6 +109,7 @@ export default function ExamSettingsPage() {
           ) as QuestionMarkOption,
           negativeMarkPerWrong: String(t.negativeMarkPerWrong || 0),
           passcode: "",
+          isPublicTest: t.isPublicTest !== false,
           settings,
         });
       } catch (e) {
@@ -104,7 +119,9 @@ export default function ExamSettingsPage() {
       }
     };
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [testId]);
 
   const batchStudentCount = useMemo(() => {
@@ -131,7 +148,10 @@ export default function ExamSettingsPage() {
 
   const save = async () => {
     if (!form || !test) return;
-    if (!form.title.trim()) { alert("Test name is required."); return; }
+    if (!form.title.trim()) {
+      alert("Test name is required.");
+      return;
+    }
 
     let batchFields: { batchId: string; batchIds: string[] };
     try {
@@ -141,11 +161,17 @@ export default function ExamSettingsPage() {
       return;
     }
 
-    if (!form.startAt) { alert("Set a start date for the exam window."); return; }
-    if (!form.endAt)   { alert("Set an end date for the exam window."); return; }
+    if (!form.startAt) {
+      alert("Set a start date for the exam window.");
+      return;
+    }
+    if (!form.endAt) {
+      alert("Set an end date for the exam window.");
+      return;
+    }
 
     const startAt = fromDatetimeLocal(form.startAt);
-    const endAt   = fromDatetimeLocal(form.endAt);
+    const endAt = fromDatetimeLocal(form.endAt);
 
     if (new Date(endAt) <= new Date(startAt)) {
       alert("End date must be after the start date.");
@@ -174,7 +200,10 @@ export default function ExamSettingsPage() {
         batchIds: batchFields.batchIds,
         startAt,
         endAt,
-        durationMinutes: Math.max(1, parseInt(form.durationMinutes || "60", 10) || 60),
+        durationMinutes: Math.max(
+          1,
+          parseInt(form.durationMinutes || "60", 10) || 60,
+        ),
         defaultMarksPerQuestion: form.defaultMarksPerQuestion,
         negativeMarkPerWrong: form.settings.negativeMarkingEnabled
           ? Math.max(0, parseFloat(form.negativeMarkPerWrong || "0") || 0)
@@ -182,15 +211,20 @@ export default function ExamSettingsPage() {
         showAnswersAfter: test.showAnswersAfter || "after_end",
         visibility: "BATCH",
         selectedStudentRecordIds: [],
+        isPublicTest: form.isPublicTest,
         settings,
       };
 
       if (form.passcode.trim()) {
-        (updates as Partial<ExamTest> & { accessPasswordHash?: string }).accessPasswordHash =
-          await sha256Base64(form.passcode.trim());
+        (
+          updates as Partial<ExamTest> & { accessPasswordHash?: string }
+        ).accessPasswordHash = await sha256Base64(form.passcode.trim());
       }
 
-      await updateExamTest(testId, updates as Partial<ExamTest> & { accessPasswordHash?: string | null });
+      await updateExamTest(
+        testId,
+        updates as Partial<ExamTest> & { accessPasswordHash?: string | null },
+      );
       setTest((prev) => (prev ? { ...prev, ...updates } : prev));
       patch({ passcode: "" });
       setSaveStatus("saved");
@@ -204,17 +238,21 @@ export default function ExamSettingsPage() {
   };
 
   if (loading || !form || !test)
-    return <div className="text-sm text-slate-500 py-8 text-center">Loading settings…</div>;
+    return (
+      <div className="text-sm text-slate-500 py-8 text-center">
+        Loading settings…
+      </div>
+    );
 
   return (
     <div className="space-y-6">
-
       {/* ── Sticky header bar ── */}
       <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div>
           <p className="text-sm font-semibold text-slate-900">Setup Test</p>
           <p className="text-xs text-slate-500">
-            {test.title} · {selectedBatchLabel} · {batchStudentCount} student{batchStudentCount === 1 ? "" : "s"}
+            {test.title} · {selectedBatchLabel} · {batchStudentCount} student
+            {batchStudentCount === 1 ? "" : "s"}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -228,10 +266,19 @@ export default function ExamSettingsPage() {
               <AlertCircle className="w-4 h-4" /> Save failed
             </span>
           )}
-          <Button variant="outline" size="sm" onClick={() => navigate(`/admin/tests/${testId}/questions`)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/admin/tests/${testId}/questions`)}
+          >
             Go to Questions
           </Button>
-          <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void save()} disabled={saving}>
+          <Button
+            size="sm"
+            className="bg-indigo-600 hover:bg-indigo-700"
+            onClick={() => void save()}
+            disabled={saving}
+          >
             {saving ? "Saving…" : "Save Settings"}
           </Button>
         </div>
@@ -240,11 +287,19 @@ export default function ExamSettingsPage() {
       {/* ── 1. Basic Info ── */}
       <Section title="Basic Info">
         <Field label="Test Name" required>
-          <Input value={form.title} onChange={(e) => patch({ title: e.target.value })} placeholder="e.g. Eco Class Test-05" />
+          <Input
+            value={form.title}
+            onChange={(e) => patch({ title: e.target.value })}
+            placeholder="e.g. Eco Class Test-05"
+          />
         </Field>
 
         <Field label="Subject">
-          <Input value={form.subject} onChange={(e) => patch({ subject: e.target.value })} placeholder="e.g. Economics" />
+          <Input
+            value={form.subject}
+            onChange={(e) => patch({ subject: e.target.value })}
+            placeholder="e.g. Economics"
+          />
         </Field>
 
         <ExamBatchAssignmentFields
@@ -280,7 +335,10 @@ export default function ExamSettingsPage() {
           </Field>
         </div>
 
-        <Field label="Time limit (minutes)" hint="Duration each student gets once they press Start.">
+        <Field
+          label="Time limit (minutes)"
+          hint="Duration each student gets once they press Start."
+        >
           <Input
             type="number"
             min={1}
@@ -303,7 +361,11 @@ export default function ExamSettingsPage() {
           label="Show all questions on one page"
           description="Off = one question per page (recommended for long exams)."
           checked={form.settings.paginationMode === "all_on_one_page"}
-          onChange={(v) => patchSettings({ paginationMode: v ? "all_on_one_page" : "one_per_page" })}
+          onChange={(v) =>
+            patchSettings({
+              paginationMode: v ? "all_on_one_page" : "one_per_page",
+            })
+          }
         />
 
         <Toggle
@@ -348,24 +410,46 @@ export default function ExamSettingsPage() {
       >
         <Field
           label="Passcode"
-          hint={test.accessPasswordHash ? "A passcode is set. Enter a new one only to change it." : undefined}
+          hint={
+            test.accessPasswordHash
+              ? "A passcode is set. Enter a new one only to change it."
+              : undefined
+          }
         >
           <Input
             type="password"
             value={form.passcode}
             onChange={(e) => patch({ passcode: e.target.value })}
-            placeholder={test.accessPasswordHash ? "Leave blank to keep current passcode" : "Set passcode"}
+            placeholder={
+              test.accessPasswordHash
+                ? "Leave blank to keep current passcode"
+                : "Set passcode"
+            }
             className="max-w-xs"
           />
         </Field>
+
+        <Toggle
+          label="Show in Public CBT Mock Test Portal"
+          description="When enabled, registered candidates logging in with their Hall Ticket username and passcode can see and take this test from /public/dashboard."
+          checked={form.isPublicTest}
+          onChange={(v) => patch({ isPublicTest: v })}
+        />
       </Section>
 
       {/* ── Footer save ── */}
       <div className="flex justify-end gap-2 pb-8">
-        <Button variant="outline" onClick={() => navigate(`/admin/tests/${testId}/questions`)}>
+        <Button
+          variant="outline"
+          onClick={() => navigate(`/admin/tests/${testId}/questions`)}
+        >
           Next: Questions
         </Button>
-        <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={() => void save()} disabled={saving}>
+        <Button
+          className="bg-indigo-600 hover:bg-indigo-700"
+          onClick={() => void save()}
+          disabled={saving}
+        >
           {saving ? "Saving…" : "Save Settings"}
         </Button>
       </div>
@@ -388,7 +472,9 @@ function Section({
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base">{title}</CardTitle>
-        {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
+        {description && (
+          <p className="text-xs text-slate-500 mt-0.5">{description}</p>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">{children}</CardContent>
     </Card>
