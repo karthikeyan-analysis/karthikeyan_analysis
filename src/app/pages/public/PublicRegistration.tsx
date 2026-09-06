@@ -1,13 +1,17 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { storage } from "../../../config/firebase";
-import { registerPublicStudent, usePublicAuth } from "../../context/PublicAuthContext";
+import {
+  registerPublicStudent,
+  usePublicAuth,
+} from "../../context/PublicAuthContext";
+import { getPortalLoginSettings } from "../../features/portal/portalLoginSettings";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
-import { Camera } from "lucide-react";
+import { AlertCircle, Camera, Loader2 } from "lucide-react";
 
 const UG_SUBJECTS = ["Maths", "Statistics", "Economics"];
 const PG_SUBJECTS = ["Maths", "Statistics", "Economics", "Others"];
@@ -28,6 +32,9 @@ export default function PublicRegistration() {
   const { login } = usePublicAuth();
   const photoInputRef = useRef<HTMLInputElement>(null);
 
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
+  const [checkingSettings, setCheckingSettings] = useState(true);
+
   const [form, setForm] = useState({
     name: "",
     fatherName: "",
@@ -47,6 +54,13 @@ export default function PublicRegistration() {
   );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    getPortalLoginSettings().then((s) => {
+      setRegistrationEnabled(s.allowPublicCbtRegistration !== false);
+      setCheckingSettings(false);
+    });
+  }, []);
 
   const availableSubjects = [
     ...(form.educationalQualifications.includes("UG") ? UG_SUBJECTS : []),
@@ -102,12 +116,16 @@ export default function PublicRegistration() {
       return "Enter a valid 10-digit phone number.";
     if (!form.nativeDistrict.trim()) return "Native district is required.";
     if (!form.gender) return "Please select gender.";
-    if (form.educationalQualifications.length === 0) return "Please select qualification (UG / PG).";
-    if (form.subjects.length === 0) return "Please select at least one subject.";
-    if (!form.isKarthikeyanStudent) return "Please answer the Karthikeyan Analysis question.";
+    if (form.educationalQualifications.length === 0)
+      return "Please select qualification (UG / PG).";
+    if (form.subjects.length === 0)
+      return "Please select at least one subject.";
+    if (!form.isKarthikeyanStudent)
+      return "Please answer the Karthikeyan Analysis question.";
     if (form.isKarthikeyanStudent === "Yes" && !form.karthikeyanYear)
       return "Please select your batch year.";
-    if (declarations.some((d) => !d)) return "Please accept all declaration points.";
+    if (declarations.some((d) => !d))
+      return "Please accept all declaration points.";
     return "";
   };
 
@@ -115,7 +133,10 @@ export default function PublicRegistration() {
     e.preventDefault();
     setError("");
     const err = validate();
-    if (err) { setError(err); return; }
+    if (err) {
+      setError(err);
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -128,7 +149,8 @@ export default function PublicRegistration() {
       }
 
       const qual: "UG" | "PG" | "Both" =
-        form.educationalQualifications.includes("UG") && form.educationalQualifications.includes("PG")
+        form.educationalQualifications.includes("UG") &&
+        form.educationalQualifications.includes("PG")
           ? "Both"
           : form.educationalQualifications[0]!;
 
@@ -143,7 +165,9 @@ export default function PublicRegistration() {
         subjects: form.subjects,
         isKarthikeyanStudent: form.isKarthikeyanStudent === "Yes",
         karthikeyanYear:
-          form.isKarthikeyanStudent === "Yes" ? form.karthikeyanYear : undefined,
+          form.isKarthikeyanStudent === "Yes"
+            ? form.karthikeyanYear
+            : undefined,
         photoUrl: photoUrl || undefined,
       });
 
@@ -163,6 +187,43 @@ export default function PublicRegistration() {
   };
 
   // ── Registration form ─────────────────────────────────────────────────────
+  if (checkingSettings) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+        <div className="flex items-center gap-2 text-slate-500 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Checking registration status…
+        </div>
+      </div>
+    );
+  }
+
+  if (!registrationEnabled) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-slate-100 flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center space-y-4">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto" />
+          <h2 className="text-xl font-bold text-slate-900">
+            Registrations Closed
+          </h2>
+          <p className="text-slate-600 text-sm">
+            Self-registration for the Free Online CBT Test is currently closed.
+            If you have already registered, you can log in to your dashboard
+            with your credentials.
+          </p>
+          <div className="pt-2">
+            <Button
+              onClick={() => navigate("/public/login")}
+              className="bg-indigo-600 hover:bg-indigo-700 w-full"
+            >
+              Go to Login
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-slate-100 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -177,8 +238,10 @@ export default function PublicRegistration() {
           <p className="text-slate-500 mt-1">Registration Form</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-8">
-
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white rounded-2xl shadow-lg p-6 md:p-8 space-y-8"
+        >
           {/* Photo + Personal details */}
           <div className="flex flex-col sm:flex-row gap-6">
             {/* Photo */}
@@ -188,17 +251,39 @@ export default function PublicRegistration() {
                 onClick={() => photoInputRef.current?.click()}
               >
                 {photoPreview ? (
-                  <img src={photoPreview} alt="Photo" className="w-full h-full object-cover" />
+                  <img
+                    src={photoPreview}
+                    alt="Photo"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <>
                     <Camera className="w-7 h-7 text-slate-400 mb-1" />
-                    <span className="text-xs text-red-500 font-medium text-center px-1">Photo *<br/>(Required)</span>
+                    <span className="text-xs text-red-500 font-medium text-center px-1">
+                      Photo *<br />
+                      (Required)
+                    </span>
                   </>
                 )}
               </div>
-              <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePhotoChange}
+              />
               {photoPreview && (
-                <button type="button" className="text-xs text-red-500 hover:underline" onClick={() => { setPhotoFile(null); setPhotoPreview(""); }}>Remove</button>
+                <button
+                  type="button"
+                  className="text-xs text-red-500 hover:underline"
+                  onClick={() => {
+                    setPhotoFile(null);
+                    setPhotoPreview("");
+                  }}
+                >
+                  Remove
+                </button>
               )}
             </div>
 
@@ -206,20 +291,45 @@ export default function PublicRegistration() {
             <div className="flex-1 space-y-4">
               <div>
                 <Label>Student Name *</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Full name" className="mt-1" />
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Full name"
+                  className="mt-1"
+                />
               </div>
               <div>
                 <Label>Father's Name *</Label>
-                <Input value={form.fatherName} onChange={(e) => setForm({ ...form, fatherName: e.target.value })} placeholder="Father's full name" className="mt-1" />
+                <Input
+                  value={form.fatherName}
+                  onChange={(e) =>
+                    setForm({ ...form, fatherName: e.target.value })
+                  }
+                  placeholder="Father's full name"
+                  className="mt-1"
+                />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>Date of Birth *</Label>
-                  <Input type="date" value={form.dob} onChange={(e) => setForm({ ...form, dob: e.target.value })} className="mt-1" />
+                  <Input
+                    type="date"
+                    value={form.dob}
+                    onChange={(e) => setForm({ ...form, dob: e.target.value })}
+                    className="mt-1"
+                  />
                 </div>
                 <div>
                   <Label>Phone No *</Label>
-                  <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="10-digit number" maxLength={10} className="mt-1" />
+                  <Input
+                    value={form.phone}
+                    onChange={(e) =>
+                      setForm({ ...form, phone: e.target.value })
+                    }
+                    placeholder="10-digit number"
+                    maxLength={10}
+                    className="mt-1"
+                  />
                 </div>
               </div>
             </div>
@@ -229,14 +339,31 @@ export default function PublicRegistration() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label>Native District *</Label>
-              <Input value={form.nativeDistrict} onChange={(e) => setForm({ ...form, nativeDistrict: e.target.value })} placeholder="e.g., Chennai" className="mt-1" />
+              <Input
+                value={form.nativeDistrict}
+                onChange={(e) =>
+                  setForm({ ...form, nativeDistrict: e.target.value })
+                }
+                placeholder="e.g., Chennai"
+                className="mt-1"
+              />
             </div>
             <div>
               <Label>Gender *</Label>
               <div className="flex gap-4 mt-2">
                 {(["Male", "Female"] as const).map((g) => (
-                  <label key={g} className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition ${form.gender === g ? "border-indigo-500 bg-indigo-50" : "border-slate-200 hover:border-indigo-300"}`}>
-                    <input type="radio" name="gender" value={g} checked={form.gender === g} onChange={() => setForm({ ...form, gender: g })} className="sr-only" />
+                  <label
+                    key={g}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 cursor-pointer transition ${form.gender === g ? "border-indigo-500 bg-indigo-50" : "border-slate-200 hover:border-indigo-300"}`}
+                  >
+                    <input
+                      type="radio"
+                      name="gender"
+                      value={g}
+                      checked={form.gender === g}
+                      onChange={() => setForm({ ...form, gender: g })}
+                      className="sr-only"
+                    />
                     <span className="font-medium text-sm">{g}</span>
                   </label>
                 ))}
@@ -246,26 +373,44 @@ export default function PublicRegistration() {
 
           {/* Educational qualification */}
           <div>
-            <Label>Educational Qualification * <span className="text-xs font-normal text-slate-500">(select one or both)</span></Label>
+            <Label>
+              Educational Qualification *{" "}
+              <span className="text-xs font-normal text-slate-500">
+                (select one or both)
+              </span>
+            </Label>
             <div className="mt-2 border border-slate-200 rounded-xl overflow-hidden">
               {(["UG", "PG"] as const).map((q) => {
                 const qSubjects = q === "UG" ? UG_SUBJECTS : PG_SUBJECTS;
                 const isSelected = form.educationalQualifications.includes(q);
                 return (
-                  <div key={q} className={`border-b last:border-b-0 ${isSelected ? "bg-indigo-50" : ""}`}>
+                  <div
+                    key={q}
+                    className={`border-b last:border-b-0 ${isSelected ? "bg-indigo-50" : ""}`}
+                  >
                     <label className="flex items-center gap-3 px-4 py-3 cursor-pointer">
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleQualification(q)}
                       />
-                      <span className="font-semibold text-slate-800 w-8">{q}</span>
-                      <span className="text-sm text-slate-500">{qSubjects.join(" / ")}</span>
+                      <span className="font-semibold text-slate-800 w-8">
+                        {q}
+                      </span>
+                      <span className="text-sm text-slate-500">
+                        {qSubjects.join(" / ")}
+                      </span>
                     </label>
                     {isSelected && (
                       <div className="px-12 pb-3 flex flex-wrap gap-3">
                         {qSubjects.map((s) => (
-                          <label key={s} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition ${form.subjects.includes(s) ? "border-indigo-500 bg-indigo-100 text-indigo-800 font-semibold" : "border-slate-200 hover:border-indigo-300"}`}>
-                            <Checkbox checked={form.subjects.includes(s)} onCheckedChange={() => toggleSubject(s)} />
+                          <label
+                            key={s}
+                            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer text-sm transition ${form.subjects.includes(s) ? "border-indigo-500 bg-indigo-100 text-indigo-800 font-semibold" : "border-slate-200 hover:border-indigo-300"}`}
+                          >
+                            <Checkbox
+                              checked={form.subjects.includes(s)}
+                              onCheckedChange={() => toggleSubject(s)}
+                            />
                             {s}
                           </label>
                         ))}
@@ -282,8 +427,24 @@ export default function PublicRegistration() {
             <Label>Are you a student of Karthikeyan Analysis? *</Label>
             <div className="flex gap-4 mt-2">
               {(["Yes", "No"] as const).map((opt) => (
-                <label key={opt} className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border-2 cursor-pointer transition font-medium ${form.isKarthikeyanStudent === opt ? "border-indigo-500 bg-indigo-50 text-indigo-800" : "border-slate-200 hover:border-indigo-300"}`}>
-                  <input type="radio" name="kaStudent" value={opt} checked={form.isKarthikeyanStudent === opt} onChange={() => setForm({ ...form, isKarthikeyanStudent: opt, karthikeyanYear: "" })} className="sr-only" />
+                <label
+                  key={opt}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-lg border-2 cursor-pointer transition font-medium ${form.isKarthikeyanStudent === opt ? "border-indigo-500 bg-indigo-50 text-indigo-800" : "border-slate-200 hover:border-indigo-300"}`}
+                >
+                  <input
+                    type="radio"
+                    name="kaStudent"
+                    value={opt}
+                    checked={form.isKarthikeyanStudent === opt}
+                    onChange={() =>
+                      setForm({
+                        ...form,
+                        isKarthikeyanStudent: opt,
+                        karthikeyanYear: "",
+                      })
+                    }
+                    className="sr-only"
+                  />
                   {opt}
                 </label>
               ))}
@@ -309,7 +470,10 @@ export default function PublicRegistration() {
             <p className="font-semibold text-slate-800 mb-3">Declaration *</p>
             <div className="space-y-3">
               {DECLARATIONS.map((text, i) => (
-                <label key={i} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${declarations[i] ? "border-green-300 bg-green-50" : "border-slate-200 hover:border-indigo-200"}`}>
+                <label
+                  key={i}
+                  className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition ${declarations[i] ? "border-green-300 bg-green-50" : "border-slate-200 hover:border-indigo-200"}`}
+                >
                   <Checkbox
                     checked={declarations[i]}
                     onCheckedChange={() => toggleDeclaration(i)}
@@ -327,13 +491,21 @@ export default function PublicRegistration() {
             </div>
           )}
 
-          <Button type="submit" disabled={submitting} className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 text-base">
+          <Button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-indigo-600 hover:bg-indigo-700 h-11 text-base"
+          >
             {submitting ? "Registering…" : "Register & Get Hall Ticket"}
           </Button>
 
           <p className="text-center text-sm text-slate-500">
             Already registered?{" "}
-            <button type="button" onClick={() => navigate("/public/login")} className="text-indigo-600 font-semibold hover:underline">
+            <button
+              type="button"
+              onClick={() => navigate("/public/login")}
+              className="text-indigo-600 font-semibold hover:underline"
+            >
               Login here
             </button>
           </p>

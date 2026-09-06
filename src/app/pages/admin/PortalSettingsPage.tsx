@@ -9,7 +9,17 @@ import {
 } from "../../components/ui/card";
 import { Label } from "../../components/ui/label";
 import { Switch } from "../../components/ui/switch";
-import { AlertCircle, CheckCircle2, KeyRound, Loader2, Settings2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Globe,
+  GraduationCap,
+  KeyRound,
+  Loader2,
+  Settings2,
+  Sparkles,
+  UserCheck,
+} from "lucide-react";
 import {
   DEFAULT_PORTAL_LOGIN_SETTINGS,
   getPortalLoginSettings,
@@ -59,11 +69,15 @@ export default function PortalSettingsPage() {
     try {
       const saved = await savePortalLoginSettings({
         showGuestLoginButton: settings.showGuestLoginButton,
+        showWebsiteCbtButton: settings.showWebsiteCbtButton,
+        showWebsiteRegisterButton: settings.showWebsiteRegisterButton,
+        showWebsiteStudentLoginButton: settings.showWebsiteStudentLoginButton,
+        allowPublicCbtRegistration: settings.allowPublicCbtRegistration,
       });
       setSettings(saved);
       setMessage({
         type: "success",
-        text: "Login page settings saved. Students will see the update on the next refresh.",
+        text: "Settings saved successfully! Website and portal will update immediately.",
       });
     } catch (error: any) {
       console.error(error);
@@ -77,14 +91,15 @@ export default function PortalSettingsPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-4xl">
       <div>
         <h1 className="text-3xl font-bold text-slate-900 flex items-center gap-2">
           <Settings2 className="w-7 h-7 text-indigo-600" />
-          Portal Settings
+          Portal & Website Visibility Settings
         </h1>
         <p className="text-slate-600 mt-1">
-          Control what students see on the login page.
+          Configure which buttons and self-registration features appear on the
+          public website and student portal login page.
         </p>
       </div>
 
@@ -105,14 +120,19 @@ export default function PortalSettingsPage() {
         </div>
       ) : null}
 
+      {/* Website Buttons Card */}
       <Card className="border-slate-200 shadow-sm">
         <CardHeader>
-          <CardTitle className="text-lg">Student Login Page</CardTitle>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Globe className="w-5 h-5 text-indigo-600" />
+            Main Website Buttons & Tickers
+          </CardTitle>
           <CardDescription>
-            Google sign-in is always shown. Guest passcode join can be shown or hidden.
+            Show or hide the action buttons that appear in the website header,
+            announcement ticker, and mobile drawer.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {loading ? (
             <div className="flex items-center gap-2 text-slate-600 text-sm py-6">
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -120,22 +140,131 @@ export default function PortalSettingsPage() {
             </div>
           ) : (
             <>
+              {/* CBT Attend Button */}
+              <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label
+                    htmlFor="website-cbt-toggle"
+                    className="text-sm font-semibold text-slate-900 flex items-center gap-2"
+                  >
+                    <UserCheck className="w-4 h-4 text-emerald-600" />
+                    Show "Attend CBT Test" Button on Website
+                  </Label>
+                  <p className="text-xs text-slate-600">
+                    Controls visibility of the "Attend Test (Hall Ticket)"
+                    button in the announcement bar and mobile menu.
+                  </p>
+                </div>
+                <Switch
+                  id="website-cbt-toggle"
+                  checked={settings.showWebsiteCbtButton !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      showWebsiteCbtButton: checked,
+                    }))
+                  }
+                />
+              </div>
+
+              {/* CBT Register Button */}
+              <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label
+                    htmlFor="website-register-toggle"
+                    className="text-sm font-semibold text-slate-900 flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    Show "Register Test" Button on Website
+                  </Label>
+                  <p className="text-xs text-slate-600">
+                    Controls visibility of the "Register Test" button in the
+                    announcement ticker linking to the free mock test
+                    registration form.
+                  </p>
+                </div>
+                <Switch
+                  id="website-register-toggle"
+                  checked={settings.showWebsiteRegisterButton !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      showWebsiteRegisterButton: checked,
+                    }))
+                  }
+                />
+              </div>
+
+              {/* Student Login Button */}
+              <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label
+                    htmlFor="website-login-toggle"
+                    className="text-sm font-semibold text-slate-900 flex items-center gap-2"
+                  >
+                    <GraduationCap className="w-4 h-4 text-brand-green" />
+                    Show "Student Login" Button on Website
+                  </Label>
+                  <p className="text-xs text-slate-600">
+                    Controls visibility of the blinking green "Student Login"
+                    link in the top website header and mobile drawer.
+                  </p>
+                </div>
+                <Switch
+                  id="website-login-toggle"
+                  checked={settings.showWebsiteStudentLoginButton !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      showWebsiteStudentLoginButton: checked,
+                    }))
+                  }
+                />
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Student Portal Login Page Card */}
+      <Card className="border-slate-200 shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-indigo-600" />
+            Student Portal Login Options
+          </CardTitle>
+          <CardDescription>
+            Configure options available to students on the student portal login
+            page.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!loading && (
+            <>
+              {/* Google Login note */}
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-900">Google login</p>
+                <p className="text-sm font-semibold text-slate-900">
+                  Google Login & Portal Username Login
+                </p>
                 <p className="text-xs text-slate-600 mt-1">
-                  Always visible on the student login page for every device and browser.
+                  Enrolled students can always sign in using their Google
+                  account or assigned Portal Username & Passcode.
                 </p>
               </div>
 
+              {/* Guest Login Toggle */}
               <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
                 <div className="space-y-1 min-w-0">
-                  <Label htmlFor="guest-login-toggle" className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                  <Label
+                    htmlFor="guest-login-toggle"
+                    className="text-sm font-semibold text-slate-900 flex items-center gap-2"
+                  >
                     <KeyRound className="w-4 h-4 text-indigo-600" />
-                    Show guest login button
+                    Show Guest Passcode Join Button
                   </Label>
                   <p className="text-xs text-slate-600">
-                    When enabled, students see “Join test with passcode (no login)” on the login page.
-                    Turn this off if you only want enrolled Google sign-in.
+                    When enabled, students see “Join test with passcode (no
+                    login)” on the student login page.
                   </p>
                 </div>
                 <Switch
@@ -150,7 +279,35 @@ export default function PortalSettingsPage() {
                 />
               </div>
 
-              <div className="flex justify-end">
+              {/* Public Registration Acceptance Toggle */}
+              <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label
+                    htmlFor="allow-public-toggle"
+                    className="text-sm font-semibold text-slate-900 flex items-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                    Accept New Public CBT Registrations
+                  </Label>
+                  <p className="text-xs text-slate-600">
+                    When enabled, students can submit the online CBT
+                    registration form at /public/register.
+                  </p>
+                </div>
+                <Switch
+                  id="allow-public-toggle"
+                  checked={settings.allowPublicCbtRegistration !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      allowPublicCbtRegistration: checked,
+                    }))
+                  }
+                />
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end pt-2">
                 <Button
                   className="bg-indigo-600 hover:bg-indigo-700"
                   onClick={handleSave}
@@ -162,7 +319,7 @@ export default function PortalSettingsPage() {
                       Saving…
                     </>
                   ) : (
-                    "Save Settings"
+                    "Save All Settings"
                   )}
                 </Button>
               </div>

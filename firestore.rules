@@ -98,6 +98,23 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Public CBT registration & session management
+    match /publicCBTStudents/{id} {
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if isAdmin();
+    }
+
+    match /publicCBTMeta/{id} {
+      allow read, write: if true;
+    }
+
+    // Admission form counter
+    match /admissionMeta/{id} {
+      allow read, write: if true;
+    }
+
     // Student portal data.
     match /batches/{id} {
       allow read: if isSignedIn();

@@ -21,6 +21,16 @@ service firebase.storage {
       return hasUserAdminRole() || hasAdminProfile();
     }
 
+    match /publicCBTPhotos/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /admissionPhotos/{fileName} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     match /{allPaths=**} {
       allow read: if true;
       allow write: if isAdmin();
