@@ -1,7 +1,7 @@
 {
-  "buildCommand": "npm --prefix \"student portal\" install && npm --prefix \"student portal\" run build",
-  "outputDirectory": "student portal/dist",
-  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
   "rewrites": [
     {
       "source": "/api/realtime/:path*",
