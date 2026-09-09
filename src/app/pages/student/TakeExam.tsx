@@ -942,18 +942,38 @@ export default function TakeExam({
 
       let s = 0;
       let max = 0;
+      let correctCount = 0;
+      let wrongCount = 0;
+      let unansweredCount = 0;
+
       questions.forEach((q) => {
         max += q.marks;
         const selected = answers[q.id];
-        if (selected == null) return;
+        if (selected == null) {
+          unansweredCount++;
+          return;
+        }
         const correct = keyById.get(q.id);
         if (correct == null) return;
-        if (selected === correct) s += q.marks;
-        else s -= neg;
+        if (selected === correct) {
+          s += q.marks;
+          correctCount++;
+        } else {
+          s -= neg;
+          wrongCount++;
+        }
       });
       s = Math.max(0, s);
 
-      await submitAttempt({ testId, uid, score: s, maxScore: max });
+      await submitAttempt({
+        testId,
+        uid,
+        score: s,
+        maxScore: max,
+        correctCount,
+        wrongCount,
+        unansweredCount,
+      });
       localStorage.removeItem(examSessionKey);
       localStorage.removeItem(`exam_answers:${testId}:${uid}`);
       setAttemptStatus("submitted");

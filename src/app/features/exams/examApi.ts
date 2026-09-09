@@ -371,14 +371,22 @@ export async function submitAttempt(params: {
   uid: string;
   score: number;
   maxScore: number;
+  correctCount?: number;
+  wrongCount?: number;
+  unansweredCount?: number;
 }) {
-  await updateDoc(examAttemptRef(params.testId, params.uid), {
+  const updateData: Record<string, any> = {
     status: "submitted",
     submittedAt: new Date().toISOString(),
     submittedAtServer: serverTimestamp(),
     score: params.score,
     maxScore: params.maxScore,
-  } as any);
+  };
+  if (params.correctCount != null) updateData.correctCount = params.correctCount;
+  if (params.wrongCount != null) updateData.wrongCount = params.wrongCount;
+  if (params.unansweredCount != null) updateData.unansweredCount = params.unansweredCount;
+
+  await updateDoc(examAttemptRef(params.testId, params.uid), updateData as any);
 }
 
 export async function listAttemptsForAdmin(testId: string): Promise<ExamAttempt[]> {
@@ -410,7 +418,7 @@ export async function forceSubmitAttemptForAdmin(params: {
   testId: string;
   uid: string;
   negativeMarkPerWrong?: number;
-}): Promise<{ score: number; maxScore: number }> {
+}): Promise<{ score: number; maxScore: number; correctCount: number; wrongCount: number; unansweredCount: number }> {
   const [attempt, questions, keys] = await Promise.all([
     getAttempt(params.testId, params.uid),
     listPublicQuestions(params.testId),
@@ -423,19 +431,39 @@ export async function forceSubmitAttemptForAdmin(params: {
   const neg = params.negativeMarkPerWrong ?? 0;
   let s = 0;
   let max = 0;
+  let correctCount = 0;
+  let wrongCount = 0;
+  let unansweredCount = 0;
+
   questions.forEach((q) => {
     max += q.marks;
     const selected = (attempt.answers ?? {})[q.id];
-    if (selected == null) return;
+    if (selected == null) {
+      unansweredCount++;
+      return;
+    }
     const correct = keyById.get(q.id);
     if (correct == null) return;
-    if (selected === correct) s += q.marks;
-    else s -= neg;
+    if (selected === correct) {
+      s += q.marks;
+      correctCount++;
+    } else {
+      s -= neg;
+      wrongCount++;
+    }
   });
   s = Math.max(0, s);
 
-  await submitAttempt({ testId: params.testId, uid: params.uid, score: s, maxScore: max });
-  return { score: s, maxScore: max };
+  await submitAttempt({
+    testId: params.testId,
+    uid: params.uid,
+    score: s,
+    maxScore: max,
+    correctCount,
+    wrongCount,
+    unansweredCount,
+  });
+  return { score: s, maxScore: max, correctCount, wrongCount, unansweredCount };
 }
 
 /** Loads every test and its attempts (one Firestore read per test for attempts). */

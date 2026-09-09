@@ -83,9 +83,32 @@ export function buildResponseSheetHtml({
     return { selected, correct, status };
   });
 
-  const correctCount = questionStatuses.filter((q) => q.status === "Correct").length;
-  const wrongCount = questionStatuses.filter((q) => q.status === "Wrong").length;
-  const unansweredCount = questionStatuses.filter((q) => q.status === "Unanswered").length;
+  const hasKeys = Boolean(keys && keys.length > 0);
+  const calculatedCorrect = questionStatuses.filter((q) => q.status === "Correct").length;
+  const calculatedWrong = questionStatuses.filter((q) => q.status === "Wrong").length;
+  const calculatedUnanswered = questionStatuses.filter((q) => q.status === "Unanswered").length;
+
+  const defaultMark = test.defaultMarksPerQuestion || (test.totalMarks && questions.length ? test.totalMarks / questions.length : 1);
+  const scoreDerivedCorrect = defaultMark > 0 && scoreValue > 0 ? Math.round(scoreValue / defaultMark) : 0;
+  const scoreDerivedWrong = Math.max(0, answeredCount - scoreDerivedCorrect);
+
+  const correctCount = hasKeys
+    ? calculatedCorrect
+    : attempt.correctCount != null
+      ? attempt.correctCount
+      : scoreDerivedCorrect;
+
+  const wrongCount = hasKeys
+    ? calculatedWrong
+    : attempt.wrongCount != null
+      ? attempt.wrongCount
+      : scoreDerivedWrong;
+
+  const unansweredCount = hasKeys
+    ? calculatedUnanswered
+    : attempt.unansweredCount != null
+      ? attempt.unansweredCount
+      : Math.max(0, questions.length - answeredCount);
 
   const rows = questions.map((q, idx) => {
     const { selected, correct, status } = questionStatuses[idx]!;

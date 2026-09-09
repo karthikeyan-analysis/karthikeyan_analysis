@@ -143,4 +143,7 @@ export interface ExamAttempt {
   rejoinApprovalUsedAt?: string;
   score?: number;
   maxScore?: number;
+  correctCount?: number;
+  wrongCount?: number;
+  unansweredCount?: number;
 }

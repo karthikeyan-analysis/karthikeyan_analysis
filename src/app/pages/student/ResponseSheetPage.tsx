@@ -48,23 +48,15 @@ export default function ResponseSheetPage() {
           return;
         }
 
-        // Mirror the canShowAnswers logic from ExamResult
+        // For submitted attempts on the response sheet, fetch private answer keys to calculate
+        // correct vs wrong question breakdowns and review markings accurately.
         let keys: ExamQuestionPrivate[] | null = null;
-        const shouldShowAnswers = (() => {
-          if (attempt.status !== "submitted") return false;
-          if (test.showAnswersAfter === "never") return false;
-          if (test.showAnswersAfter === "immediate") return true;
-          const hardEndAtMs = attempt.hardEndAt
-            ? new Date(attempt.hardEndAt).getTime()
-            : null;
-          if (hardEndAtMs != null) return Date.now() >= hardEndAtMs;
-          return true;
-        })();
-
-        if (shouldShowAnswers) {
+        if (attempt.status === "submitted" && test.showAnswersAfter !== "never") {
           try {
             keys = await listPrivateQuestions(testId);
-          } catch {}
+          } catch (e) {
+            console.error("Could not load question keys for response sheet:", e);
+          }
         }
 
         if (cancelled) return;

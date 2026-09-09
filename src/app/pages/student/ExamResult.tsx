@@ -64,10 +64,6 @@ export default function ExamResult() {
     if (!test || !attempt) return false;
     if (attempt.status !== "submitted") return false;
     if (test.showAnswersAfter === "never") return false;
-    if (test.showAnswersAfter === "immediate") return true;
-    // Prefer per-attempt hard end, not schedule end.
-    const hardEndAtMs = attempt.hardEndAt ? new Date(attempt.hardEndAt).getTime() : null;
-    if (hardEndAtMs != null) return Date.now() >= hardEndAtMs;
     return true;
   }, [attempt, test]);
 
@@ -154,6 +150,38 @@ export default function ExamResult() {
     : user.studentId?.trim() || user.studentRecordId?.trim() || "-";
 
 
+  const { correctCount, wrongCount, unansweredCount } = useMemo(() => {
+    const answered = Object.values(attempt?.answers || {}).filter((v) => v != null).length;
+    const totalQ = questions.length;
+    if (keys && keys.length > 0) {
+      let c = 0;
+      let w = 0;
+      let u = 0;
+      questions.forEach((q) => {
+        const sel = attempt?.answers?.[q.id];
+        if (sel == null) {
+          u++;
+          return;
+        }
+        const cor = correctIndexById.get(q.id);
+        if (cor == null) return;
+        if (sel === cor) c++;
+        else w++;
+      });
+      return { correctCount: c, wrongCount: w, unansweredCount: u };
+    }
+    const defaultMark = test?.defaultMarksPerQuestion || (test?.totalMarks && totalQ ? test.totalMarks / totalQ : 1);
+    const scoreVal = attempt?.score ?? 0;
+    const estC = defaultMark > 0 && scoreVal > 0 ? Math.round(scoreVal / defaultMark) : 0;
+    const estW = Math.max(0, answered - estC);
+    const estU = Math.max(0, totalQ - answered);
+    return {
+      correctCount: attempt?.correctCount ?? estC,
+      wrongCount: attempt?.wrongCount ?? estW,
+      unansweredCount: attempt?.unansweredCount ?? estU,
+    };
+  }, [attempt, correctIndexById, keys, questions, test]);
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -216,32 +244,50 @@ export default function ExamResult() {
 
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="pt-6">
-            <div className="grid gap-4 grid-cols-1 md:grid-cols-3">
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-5">
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="text-xs text-slate-500">Score</div>
-                <div className="text-3xl font-bold text-slate-900">
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900">
                   {attempt.score ?? 0} / {attempt.maxScore ?? test.totalMarks}
                 </div>
+                <div className="text-xs text-slate-500 mt-1">{percent}%</div>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+                <div className="text-xs text-emerald-700 font-semibold uppercase tracking-wider">Correct</div>
+                <div className="text-2xl sm:text-3xl font-bold text-emerald-700">
+                  {correctCount}
+                </div>
+                <div className="text-xs text-emerald-600 mt-1">Questions</div>
+              </div>
+              <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
+                <div className="text-xs text-rose-700 font-semibold uppercase tracking-wider">Wrong</div>
+                <div className="text-2xl sm:text-3xl font-bold text-rose-700">
+                  {wrongCount}
+                </div>
+                <div className="text-xs text-rose-600 mt-1">Questions</div>
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4">
                 <div className="text-xs text-slate-500">Answered</div>
-                <div className="text-3xl font-bold text-slate-900">
-                  {Object.values(attempt.answers || {}).filter((v) => v != null).length} / {questions.length}
+                <div className="text-2xl sm:text-3xl font-bold text-slate-900">
+                  {answeredCount} / {questions.length}
                 </div>
+                <div className="text-xs text-slate-500 mt-1">{unansweredCount} Unanswered</div>
               </div>
-              <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Response sheet</div>
+              <div className="col-span-2 md:col-span-1 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 flex flex-col justify-between">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Response sheet</div>
+                  <p className="text-[11px] text-indigo-800/80 mt-1">
+                    Official response sheet
+                  </p>
+                </div>
                 <div className="mt-2">
                   <Button
-                    className="bg-indigo-600 hover:bg-indigo-700"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-xs sm:text-sm"
                     onClick={() => navigate(`/student/tests/${testId}/response-sheet`)}
                   >
-                    <Download className="w-4 h-4 mr-2" /> View Response Sheet
+                    <Download className="w-4 h-4 mr-1.5" /> View Sheet
                   </Button>
                 </div>
-                <p className="text-[11px] text-indigo-800/80 mt-2">
-                  Download your full response sheet after completing the exam.
-                </p>
               </div>
             </div>
           </CardContent>
