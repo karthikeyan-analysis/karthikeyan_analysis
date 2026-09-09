@@ -64,6 +64,10 @@ export default function ExamResult() {
     if (!test || !attempt) return false;
     if (attempt.status !== "submitted") return false;
     if (test.showAnswersAfter === "never") return false;
+    if (test.showAnswersAfter === "immediate") return true;
+    // Prefer per-attempt hard end, not schedule end.
+    const hardEndAtMs = attempt.hardEndAt ? new Date(attempt.hardEndAt).getTime() : null;
+    if (hardEndAtMs != null) return Date.now() >= hardEndAtMs;
     return true;
   }, [attempt, test]);
 
@@ -292,6 +296,7 @@ export default function ExamResult() {
             </div>
           </CardContent>
         </Card>
+
 
         <Card className="border-slate-200">
           <CardContent className="pt-6 space-y-4">

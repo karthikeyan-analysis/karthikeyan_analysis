@@ -1,4 +1,9 @@
-import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "./types";
+import type {
+  ExamAttempt,
+  ExamQuestionPrivate,
+  ExamQuestionPublic,
+  ExamTest,
+} from "./types";
 import type { ResolvedParticipant } from "./participantUtils";
 import { getStudentPhotoDisplayCandidates } from "../students/studentPhotoUrl";
 
@@ -16,7 +21,8 @@ export function formatResponseSheetTime(totalSeconds: number) {
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = s % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  if (h > 0)
+    return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
@@ -61,35 +67,67 @@ export function buildResponseSheetHtml({
   photoURL,
   generatedBy = "student",
 }: ResponseSheetPdfParams) {
-  const correctIndexById = new Map((keys || []).map((k) => [k.id, k.correctIndex]));
-  const answeredCount = Object.values(attempt.answers || {}).filter((v) => v != null).length;
+  const correctIndexById = new Map(
+    (keys || []).map((k) => [k.id, k.correctIndex]),
+  );
+  const answeredCount = Object.values(attempt.answers || {}).filter(
+    (v) => v != null,
+  ).length;
   const scoreValue = attempt.score ?? 0;
   const maxScoreValue = attempt.maxScore ?? test.totalMarks;
-  const percent = maxScoreValue ? Math.round((scoreValue / maxScoreValue) * 1000) / 10 : 0;
+  const percent = maxScoreValue
+    ? Math.round((scoreValue / maxScoreValue) * 1000) / 10
+    : 0;
   const studentName = participant.name || participant.email || "Student";
-  const studentId = participant.studentId || participant.email || participant.studentRecordId || attempt.uid;
-  const photoCandidates = getStudentPhotoDisplayCandidates(photoURL || participant.photoURL);
+  const studentId =
+    participant.studentId ||
+    participant.email ||
+    participant.studentRecordId ||
+    attempt.uid;
+  const photoCandidates = getStudentPhotoDisplayCandidates(
+    photoURL || participant.photoURL,
+  );
   const passportInner = photoCandidates.length
     ? `<img src="${escapeHtml(photoCandidates[0])}" data-fallback-srcs="${jsonAttr(photoCandidates)}" data-fallback-index="0" alt="" />`
     : `<div class="profile-fallback">${escapeHtml(initialsFromName(studentName))}</div>`;
-  const submittedLabel = attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-";
+  const submittedLabel = attempt.submittedAt
+    ? new Date(attempt.submittedAt).toLocaleString()
+    : "-";
   const generatedLabel = new Date().toLocaleString();
 
   const questionStatuses = questions.map((q) => {
     const selected = attempt.answers?.[q.id] ?? null;
     const correct = keys ? correctIndexById.get(q.id) : undefined;
     const status =
-      selected == null ? "Unanswered" : correct == null ? "Answered" : selected === correct ? "Correct" : "Wrong";
+      selected == null
+        ? "Unanswered"
+        : correct == null
+          ? "Answered"
+          : selected === correct
+            ? "Correct"
+            : "Wrong";
     return { selected, correct, status };
   });
-
   const hasKeys = Boolean(keys && keys.length > 0);
-  const calculatedCorrect = questionStatuses.filter((q) => q.status === "Correct").length;
-  const calculatedWrong = questionStatuses.filter((q) => q.status === "Wrong").length;
-  const calculatedUnanswered = questionStatuses.filter((q) => q.status === "Unanswered").length;
+  const calculatedCorrect = questionStatuses.filter(
+    (q) => q.status === "Correct",
+  ).length;
+  const calculatedWrong = questionStatuses.filter(
+    (q) => q.status === "Wrong",
+  ).length;
+  const calculatedUnanswered = questionStatuses.filter(
+    (q) => q.status === "Unanswered",
+  ).length;
 
-  const defaultMark = test.defaultMarksPerQuestion || (test.totalMarks && questions.length ? test.totalMarks / questions.length : 1);
-  const scoreDerivedCorrect = defaultMark > 0 && scoreValue > 0 ? Math.round(scoreValue / defaultMark) : 0;
+  const defaultMark =
+    test.defaultMarksPerQuestion ||
+    (test.totalMarks && questions.length
+      ? test.totalMarks / questions.length
+      : 1);
+  const scoreDerivedCorrect =
+    defaultMark > 0 && scoreValue > 0
+      ? Math.round(scoreValue / defaultMark)
+      : 0;
   const scoreDerivedWrong = Math.max(0, answeredCount - scoreDerivedCorrect);
 
   const correctCount = hasKeys
@@ -113,9 +151,13 @@ export function buildResponseSheetHtml({
   const rows = questions.map((q, idx) => {
     const { selected, correct, status } = questionStatuses[idx]!;
     const selectedLetter =
-      selected == null || typeof selected !== "number" ? "-" : String.fromCharCode(65 + selected);
+      selected == null || typeof selected !== "number"
+        ? "-"
+        : String.fromCharCode(65 + selected);
     const correctLetter =
-      correct == null || typeof correct !== "number" ? "-" : String.fromCharCode(65 + correct);
+      correct == null || typeof correct !== "number"
+        ? "-"
+        : String.fromCharCode(65 + correct);
 
     const optionsHtml = q.options
       .map((opt, oi) => {
@@ -433,10 +475,9 @@ export function openResponseSheetInTab(
   // Convert to a fully-qualified URL so every browser loads it correctly.
   const fixedParams: ResponseSheetPdfParams = {
     ...params,
-    bannerImage:
-      params.bannerImage.startsWith("/")
-        ? `${window.location.origin}${params.bannerImage}`
-        : params.bannerImage,
+    bannerImage: params.bannerImage.startsWith("/")
+      ? `${window.location.origin}${params.bannerImage}`
+      : params.bannerImage,
   };
 
   const htmlContent = buildResponseSheetHtml(fixedParams);
@@ -449,7 +490,9 @@ export function openResponseSheetInTab(
     // Popup blocked: download as an HTML file the user can open and print
     downloadAsHtml(
       htmlContent,
-      (filename || safeResponseSheetFileName(params.participant.name || "student") + "-response-sheet") + ".html",
+      (filename ||
+        safeResponseSheetFileName(params.participant.name || "student") +
+          "-response-sheet") + ".html",
     );
   }
 }
@@ -479,7 +522,9 @@ export async function downloadResponseSheetPdf(
   params: ResponseSheetPdfParams,
   filename = "response-sheet.pdf",
 ): Promise<void> {
-  let html2canvas: ((el: HTMLElement, opts?: any) => Promise<HTMLCanvasElement>) | null = null;
+  let html2canvas:
+    | ((el: HTMLElement, opts?: any) => Promise<HTMLCanvasElement>)
+    | null = null;
   let jsPDF: any = null;
   try {
     [{ default: html2canvas }, { jsPDF }] = await Promise.all([
@@ -488,7 +533,10 @@ export async function downloadResponseSheetPdf(
     ]);
   } catch {
     // Libraries failed to load — download as HTML so student can open and print
-    downloadAsHtml(buildResponseSheetHtml(params), filename.replace(/\.pdf$/i, ".html"));
+    downloadAsHtml(
+      buildResponseSheetHtml(params),
+      filename.replace(/\.pdf$/i, ".html"),
+    );
     return;
   }
 
@@ -508,29 +556,43 @@ export async function downloadResponseSheetPdf(
 
   try {
     await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("iframe load timeout")), 15_000);
+      const timeout = setTimeout(
+        () => reject(new Error("iframe load timeout")),
+        15_000,
+      );
 
       iframe.onload = async () => {
         clearTimeout(timeout);
         try {
           const iframeDoc = iframe.contentDocument;
-          if (!iframeDoc) { reject(new Error("iframe contentDocument unavailable")); return; }
+          if (!iframeDoc) {
+            reject(new Error("iframe contentDocument unavailable"));
+            return;
+          }
 
           // Remove elements that don't belong in the PDF or cause html2canvas issues
-          const saveBar = iframeDoc.querySelector(".save-bar") as HTMLElement | null;
+          const saveBar = iframeDoc.querySelector(
+            ".save-bar",
+          ) as HTMLElement | null;
           if (saveBar) saveBar.remove();
           // The full-screen loading overlay must never appear in the captured canvas —
           // remove it and unhide the content instead of waiting on its own reveal timing.
-          const loadOverlay = iframeDoc.querySelector(".load-overlay") as HTMLElement | null;
+          const loadOverlay = iframeDoc.querySelector(
+            ".load-overlay",
+          ) as HTMLElement | null;
           if (loadOverlay) loadOverlay.remove();
           iframeDoc.body.classList.remove("is-loading");
           // position:fixed causes html2canvas to render the watermark on every page;
           // switching to absolute makes it appear once at the correct vertical position.
-          const watermark = iframeDoc.querySelector(".watermark") as HTMLElement | null;
+          const watermark = iframeDoc.querySelector(
+            ".watermark",
+          ) as HTMLElement | null;
           if (watermark) watermark.style.position = "absolute";
 
           // Wait for custom fonts (Inter) so text renders at the correct dimensions
-          try { if ((iframeDoc as any).fonts) await (iframeDoc as any).fonts.ready; } catch {}
+          try {
+            if ((iframeDoc as any).fonts) await (iframeDoc as any).fonts.ready;
+          } catch {}
 
           // Wait for all images
           const images = Array.from(iframeDoc.querySelectorAll("img"));
@@ -538,7 +600,10 @@ export async function downloadResponseSheetPdf(
             images.map(
               (img) =>
                 new Promise<void>((res) => {
-                  if (img.complete && img.naturalWidth > 0) { res(); return; }
+                  if (img.complete && img.naturalWidth > 0) {
+                    res();
+                    return;
+                  }
                   img.addEventListener("load", () => res(), { once: true });
                   img.addEventListener("error", () => res(), { once: true });
                   setTimeout(res, 6_000);
@@ -584,7 +649,11 @@ export async function downloadResponseSheetPdf(
             scrollY: 0,
           });
 
-          const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+          const pdf = new jsPDF({
+            orientation: "portrait",
+            unit: "mm",
+            format: "a4",
+          });
           const pageW = pdf.internal.pageSize.getWidth();
           const pageH = pdf.internal.pageSize.getHeight();
           const imgH = (canvas.height * pageW) / canvas.width;
