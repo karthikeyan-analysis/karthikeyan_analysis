@@ -486,7 +486,8 @@ export default function EnrollmentManagement() {
             f.batchId === selectedBatch ||
             (f.scheduledFormId &&
               scheduledForms.some(
-                (sf) => sf.id === f.scheduledFormId && sf.batchId === selectedBatch,
+                (sf) =>
+                  sf.id === f.scheduledFormId && sf.batchId === selectedBatch,
               )),
         );
 
@@ -537,7 +538,7 @@ export default function EnrollmentManagement() {
     (f) =>
       f.approvalStatus === "pending" ||
       (!f.approvalStatus &&
-        (f.status === "submitted" || !f.status || f.status === "pending")),
+        (f.status === "submitted" || !f.status || (f.status as string) === "pending")),
   );
   const approvedForms = filteredForms.filter(
     (f) => f.approvalStatus === "approved" || f.status === "approved",
@@ -984,7 +985,10 @@ export default function EnrollmentManagement() {
       </Card>
 
       {/* SECTION 2: CANDIDATE APPLICATIONS & APPROVAL MANAGEMENT */}
-      <Card id="applications-section" className="border-slate-200 shadow-sm scroll-mt-6">
+      <Card
+        id="applications-section"
+        className="border-slate-200 shadow-sm scroll-mt-6"
+      >
         <CardHeader className="py-4 px-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <CardTitle className="text-lg font-bold text-slate-900">
@@ -1007,11 +1011,17 @@ export default function EnrollmentManagement() {
                   onChange={(e) => setSelectedFormFilter(e.target.value)}
                 >
                   <option value="all">
-                    All Forms ({selectedBatch === "all" ? forms.length : batchForms.length})
+                    All Forms (
+                    {selectedBatch === "all" ? forms.length : batchForms.length}
+                    )
                   </option>
-                  {(selectedBatch === "all" ? scheduledForms : batchScheduledForms).map((sf) => (
+                  {(selectedBatch === "all"
+                    ? scheduledForms
+                    : batchScheduledForms
+                  ).map((sf) => (
                     <option key={sf.id} value={sf.id}>
-                      {sf.formTitle} ({forms.filter((f) => f.scheduledFormId === sf.id).length})
+                      {sf.formTitle} (
+                      {forms.filter((f) => f.scheduledFormId === sf.id).length})
                     </option>
                   ))}
                 </select>
