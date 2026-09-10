@@ -34,7 +34,27 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
-import { UserPlus, Pencil, Trash2, Search, Upload, Loader2, FileSpreadsheet, X, Monitor, RotateCcw, KeyRound, Copy, CheckCheck, Eye, EyeOff } from "lucide-react";
+import {
+  UserPlus,
+  Pencil,
+  Trash2,
+  Search,
+  Upload,
+  Loader2,
+  FileSpreadsheet,
+  X,
+  Monitor,
+  RotateCcw,
+  KeyRound,
+  Copy,
+  CheckCheck,
+  Eye,
+  EyeOff,
+  Layers,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -60,7 +80,14 @@ import {
 import { db } from "../../../config/firebase";
 import { doc, updateDoc } from "firebase/firestore";
 
-type StudentSortKey = "name" | "studentId" | "email" | "batch" | "enrolledNewest" | "enrolledOldest" | "status";
+type StudentSortKey =
+  | "name"
+  | "studentId"
+  | "email"
+  | "batch"
+  | "enrolledNewest"
+  | "enrolledOldest"
+  | "status";
 
 function StudentPhotoFields({
   previewUrl,
@@ -111,14 +138,22 @@ function StudentPhotoFields({
           }}
         />
         {canRemove ? (
-          <Button type="button" variant="outline" size="sm" onClick={() => void onRemove()}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void onRemove()}
+          >
             <X className="w-4 h-4 mr-1" />
             Remove
           </Button>
         ) : null}
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="student-photo-url" className="text-xs font-normal text-slate-600">
+        <Label
+          htmlFor="student-photo-url"
+          className="text-xs font-normal text-slate-600"
+        >
           Or paste image URL (Google Drive link or any https image)
         </Label>
         <Input
@@ -133,8 +168,9 @@ function StudentPhotoFields({
         />
       </div>
       <p className="text-xs text-slate-500">
-        Upload saves to Firebase Storage. Pasted links are stored as-is (Drive links are converted for display).
-        Photos appear when the student logs in, during tests, and on result PDFs.
+        Upload saves to Firebase Storage. Pasted links are stored as-is (Drive
+        links are converted for display). Photos appear when the student logs
+        in, during tests, and on result PDFs.
       </p>
     </div>
   );
@@ -145,14 +181,24 @@ function StudentPhotoFields({
 function generatePortalUsername(studentId: string, name: string): string {
   // Build a short, memorable username from the student ID or name
   const base = studentId
-    ? studentId.replace(/[^a-z0-9]/gi, "").toLowerCase().slice(0, 8)
-    : name.split(" ")[0]?.replace(/[^a-z]/gi, "").toLowerCase().slice(0, 6) || "student";
+    ? studentId
+        .replace(/[^a-z0-9]/gi, "")
+        .toLowerCase()
+        .slice(0, 8)
+    : name
+        .split(" ")[0]
+        ?.replace(/[^a-z]/gi, "")
+        .toLowerCase()
+        .slice(0, 6) || "student";
   return `ka-${base}`;
 }
 
 function generatePortalPassword(): string {
   const chars = "abcdefghjkmnpqrstuvwxyz23456789";
-  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+  return Array.from(
+    { length: 8 },
+    () => chars[Math.floor(Math.random() * chars.length)],
+  ).join("");
 }
 
 function PortalCredentialsDialog({
@@ -169,8 +215,9 @@ function PortalCredentialsDialog({
   const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [copiedField, setCopiedField] = useState<"username" | "password" | "all" | null>(null);
-
+  const [copiedField, setCopiedField] = useState<
+    "username" | "password" | "all" | null
+  >(null);
 
   // Reset state when a different student is opened
   useEffect(() => {
@@ -228,7 +275,8 @@ function PortalCredentialsDialog({
             Portal Credentials
           </DialogTitle>
           <DialogDescription>
-            Generate and share a username + password so {student.name} can log in without Google.
+            Generate and share a username + password so {student.name} can log
+            in without Google.
           </DialogDescription>
         </DialogHeader>
 
@@ -246,12 +294,17 @@ function PortalCredentialsDialog({
 
           {/* Username field */}
           <div className="space-y-1.5">
-            <Label htmlFor={`pcred-username-${student.id}`} className="text-xs">Username</Label>
+            <Label htmlFor={`pcred-username-${student.id}`} className="text-xs">
+              Username
+            </Label>
             <div className="flex gap-2">
               <Input
                 id={`pcred-username-${student.id}`}
                 value={username}
-                onChange={(e) => { setUsername(e.target.value); setSaved(false); }}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setSaved(false);
+                }}
                 placeholder="e.g. ka-stu001"
                 className="font-mono text-sm"
               />
@@ -263,21 +316,30 @@ function PortalCredentialsDialog({
                 onClick={() => handleCopy("username")}
                 title="Copy username"
               >
-                {copiedField === "username" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                {copiedField === "username" ? (
+                  <CheckCheck className="w-4 h-4 text-green-600" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </div>
 
           {/* Password field */}
           <div className="space-y-1.5">
-            <Label htmlFor={`pcred-password-${student.id}`} className="text-xs">Password</Label>
+            <Label htmlFor={`pcred-password-${student.id}`} className="text-xs">
+              Password
+            </Label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <Input
                   id={`pcred-password-${student.id}`}
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); setSaved(false); }}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setSaved(false);
+                  }}
                   placeholder="Enter or generate password"
                   className="font-mono text-sm pr-9"
                 />
@@ -287,7 +349,11 @@ function PortalCredentialsDialog({
                   onClick={() => setShowPassword((v) => !v)}
                   tabIndex={-1}
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
               <Button
@@ -298,7 +364,11 @@ function PortalCredentialsDialog({
                 onClick={() => handleCopy("password")}
                 title="Copy password"
               >
-                {copiedField === "password" ? <CheckCheck className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
+                {copiedField === "password" ? (
+                  <CheckCheck className="w-4 h-4 text-green-600" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
               </Button>
             </div>
           </div>
@@ -306,7 +376,9 @@ function PortalCredentialsDialog({
           {/* Share summary */}
           {hasCredentials && (
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2">
-              <p className="text-xs text-slate-500 font-medium">Share with student (Can log in with Username or Email)</p>
+              <p className="text-xs text-slate-500 font-medium">
+                Share with student (Can log in with Username or Email)
+              </p>
               <p className="text-xs text-slate-700 font-mono whitespace-pre-line leading-relaxed">
                 {`URL: ${portalUrl}\nUsername: ${username} (or Email: ${student.email})\nPassword: ${showPassword ? password : "•".repeat(password.length)}`}
               </p>
@@ -318,9 +390,15 @@ function PortalCredentialsDialog({
                 onClick={() => handleCopy("all")}
               >
                 {copiedField === "all" ? (
-                  <><CheckCheck className="w-3.5 h-3.5 mr-1.5 text-green-600" />Copied!</>
+                  <>
+                    <CheckCheck className="w-3.5 h-3.5 mr-1.5 text-green-600" />
+                    Copied!
+                  </>
                 ) : (
-                  <><Copy className="w-3.5 h-3.5 mr-1.5" />Copy all details to share</>  
+                  <>
+                    <Copy className="w-3.5 h-3.5 mr-1.5" />
+                    Copy all details to share
+                  </>
                 )}
               </Button>
             </div>
@@ -335,14 +413,23 @@ function PortalCredentialsDialog({
         </div>
 
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+          <Button type="button" variant="outline" onClick={onClose}>
+            Close
+          </Button>
           <Button
             type="button"
             className="bg-indigo-600 hover:bg-indigo-700"
             onClick={() => void handleSave()}
             disabled={saving || !hasCredentials}
           >
-            {saving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving…</> : "Save Credentials"}
+            {saving ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Saving…
+              </>
+            ) : (
+              "Save Credentials"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -351,14 +438,31 @@ function PortalCredentialsDialog({
 }
 
 export default function StudentManagement() {
-  const { students, batches, addStudent, enrollStudentInBatch, updateStudent, deleteStudent, clearStudentPhoto, clearStudentDevice } =
-    useData();
-  const [resettingDeviceIds, setResettingDeviceIds] = useState<Set<string>>(new Set());
+  const {
+    students,
+    batches,
+    addStudent,
+    enrollStudentInBatch,
+    updateStudent,
+    deleteStudent,
+    clearStudentPhoto,
+    clearStudentDevice,
+  } = useData();
+  const [resettingDeviceIds, setResettingDeviceIds] = useState<Set<string>>(
+    new Set(),
+  );
   // Portal credentials dialog state
-  const [credDialogStudent, setCredDialogStudent] = useState<Student | null>(null);
+  const [credDialogStudent, setCredDialogStudent] = useState<Student | null>(
+    null,
+  );
 
   const handleResetDevice = async (studentId: string) => {
-    if (!confirm("Reset this student's device? They will be able to log in from any device again.")) return;
+    if (
+      !confirm(
+        "Reset this student's device? They will be able to log in from any device again.",
+      )
+    )
+      return;
     setResettingDeviceIds((prev) => new Set(prev).add(studentId));
     try {
       await clearStudentDevice(studentId);
@@ -382,10 +486,18 @@ export default function StudentManagement() {
 
   const [importOpen, setImportOpen] = useState(false);
   const [importBatchId, setImportBatchId] = useState<string>("");
-  const [importStatus, setImportStatus] = useState<"active" | "inactive">("active");
+  const [importStatus, setImportStatus] = useState<"active" | "inactive">(
+    "active",
+  );
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importRows, setImportRows] = useState<
-    Array<{ studentId: string; name: string; email: string; enrolledDate?: string; photoURL?: string }>
+    Array<{
+      studentId: string;
+      name: string;
+      email: string;
+      enrolledDate?: string;
+      photoURL?: string;
+    }>
   >([]);
   const [importError, setImportError] = useState("");
   const [importing, setImporting] = useState(false);
@@ -449,7 +561,9 @@ export default function StudentManagement() {
         ? [...students]
         : selectedBatch === "unassigned"
           ? students.filter((student) => studentHasNoBatch(student))
-          : students.filter((student) => studentBelongsToBatch(student, selectedBatch));
+          : students.filter((student) =>
+              studentBelongsToBatch(student, selectedBatch),
+            );
 
     if (q) {
       list = list.filter(
@@ -464,22 +578,29 @@ export default function StudentManagement() {
     }
 
     return list.sort((a, b) => {
-      if (studentSortKey === "studentId") return textValue(a.studentId).localeCompare(textValue(b.studentId));
-      if (studentSortKey === "email") return textValue(a.email).localeCompare(textValue(b.email));
+      if (studentSortKey === "studentId")
+        return textValue(a.studentId).localeCompare(textValue(b.studentId));
+      if (studentSortKey === "email")
+        return textValue(a.email).localeCompare(textValue(b.email));
       if (studentSortKey === "batch") {
         return getStudentBatchLabels(a)
           .join(", ")
           .localeCompare(getStudentBatchLabels(b).join(", "));
       }
-      if (studentSortKey === "enrolledNewest") return dateValue(b.enrolledDate) - dateValue(a.enrolledDate);
-      if (studentSortKey === "enrolledOldest") return dateValue(a.enrolledDate) - dateValue(b.enrolledDate);
-      if (studentSortKey === "status") return textValue(a.status).localeCompare(textValue(b.status));
+      if (studentSortKey === "enrolledNewest")
+        return dateValue(b.enrolledDate) - dateValue(a.enrolledDate);
+      if (studentSortKey === "enrolledOldest")
+        return dateValue(a.enrolledDate) - dateValue(b.enrolledDate);
+      if (studentSortKey === "status")
+        return textValue(a.status).localeCompare(textValue(b.status));
       return textValue(a.name).localeCompare(textValue(b.name));
     });
   }, [batches, searchQuery, selectedBatch, studentSortKey, students]);
 
   const existingEmailSet = useMemo(() => {
-    return new Set(students.map((s) => s.email.trim().toLowerCase()).filter(Boolean));
+    return new Set(
+      students.map((s) => s.email.trim().toLowerCase()).filter(Boolean),
+    );
   }, [students]);
 
   const normalizeEmail = (value: unknown) => {
@@ -505,14 +626,30 @@ export default function StudentManagement() {
     const h = normalizeHeader(header);
     if (!h) return null;
     if (h.includes("email")) return "email";
-    if (h.includes("student id") || h === "id" || h.includes("studentid")) return "studentId";
-    if (h.includes("photo") || h.includes("picture") || h.includes("image") || h.includes("drive"))
+    if (h.includes("student id") || h === "id" || h.includes("studentid"))
+      return "studentId";
+    if (
+      h.includes("photo") ||
+      h.includes("picture") ||
+      h.includes("image") ||
+      h.includes("drive")
+    )
       return "photoURL";
-    if (h.includes("profile") && (h.includes("url") || h.includes("link") || h.includes("photo")))
+    if (
+      h.includes("profile") &&
+      (h.includes("url") || h.includes("link") || h.includes("photo"))
+    )
       return "photoURL";
-    if ((h.includes("url") || h.includes("link")) && !h.includes("email")) return "photoURL";
-    if (h.includes("full name") || (h.includes("name") && !h.includes("file"))) return "name";
-    if (h.includes("enrolled") || h.includes("join") || h.includes("date") || h.includes("timestamp"))
+    if ((h.includes("url") || h.includes("link")) && !h.includes("email"))
+      return "photoURL";
+    if (h.includes("full name") || (h.includes("name") && !h.includes("file")))
+      return "name";
+    if (
+      h.includes("enrolled") ||
+      h.includes("join") ||
+      h.includes("date") ||
+      h.includes("timestamp")
+    )
       return "enrolledDate";
     return null;
   };
@@ -520,8 +657,15 @@ export default function StudentManagement() {
   const inferMappingFromValues = (
     headers: string[],
     sampleRows: Record<string, unknown>[],
-  ): Partial<Record<"studentId" | "name" | "email" | "enrolledDate" | "photoURL", string>> => {
-    const mapping: Partial<Record<"studentId" | "name" | "email" | "enrolledDate" | "photoURL", string>> = {};
+  ): Partial<
+    Record<"studentId" | "name" | "email" | "enrolledDate" | "photoURL", string>
+  > => {
+    const mapping: Partial<
+      Record<
+        "studentId" | "name" | "email" | "enrolledDate" | "photoURL",
+        string
+      >
+    > = {};
     const sample = sampleRows.slice(0, 15);
 
     for (const h of headers) {
@@ -531,7 +675,9 @@ export default function StudentManagement() {
 
     if (!mapping.email) {
       for (const h of headers) {
-        const hits = sample.filter((r) => isLikelyEmail(normalizeEmail(String(r[h] ?? "")))).length;
+        const hits = sample.filter((r) =>
+          isLikelyEmail(normalizeEmail(String(r[h] ?? ""))),
+        ).length;
         if (hits >= Math.max(1, Math.ceil(sample.length * 0.4))) {
           mapping.email = h;
           break;
@@ -543,7 +689,9 @@ export default function StudentManagement() {
       const emailIdx = headers.indexOf(mapping.email);
       if (emailIdx > 0) {
         const candidate = headers[emailIdx - 1];
-        const hits = sample.filter((r) => String(r[candidate] ?? "").trim().length > 1).length;
+        const hits = sample.filter(
+          (r) => String(r[candidate] ?? "").trim().length > 1,
+        ).length;
         if (hits > 0) mapping.name = candidate;
       }
     }
@@ -561,7 +709,8 @@ export default function StudentManagement() {
 
     if (!mapping.enrolledDate) {
       for (const h of headers) {
-        if (h === mapping.name || h === mapping.email || h === mapping.photoURL) continue;
+        if (h === mapping.name || h === mapping.email || h === mapping.photoURL)
+          continue;
         const hits = sample.filter((r) => {
           const v = String(r[h] ?? "").trim();
           return v.length > 4 && !looksLikePhotoUrl(v) && !isLikelyEmail(v);
@@ -584,13 +733,19 @@ export default function StudentManagement() {
   ) => {
     for (let c = colStart; c <= colEnd; c++) {
       const addr = XLSX.utils.encode_cell({ r: sheetRow, c });
-      const url = extractUrlFromExcelCell(ws[addr] as { v?: unknown; l?: { Target?: string }; f?: string });
+      const url = extractUrlFromExcelCell(
+        ws[addr] as { v?: unknown; l?: { Target?: string }; f?: string },
+      );
       if (url && looksLikePhotoUrl(url)) return url;
     }
     return undefined;
   };
 
-  const detectHeaderRowIndex = (ws: XLSX.WorkSheet, colStart: number, colEnd: number) => {
+  const detectHeaderRowIndex = (
+    ws: XLSX.WorkSheet,
+    colStart: number,
+    colEnd: number,
+  ) => {
     const ref = ws["!ref"];
     if (!ref) return 0;
     const range = XLSX.utils.decode_range(ref);
@@ -607,7 +762,11 @@ export default function StudentManagement() {
   };
 
   const buildStudentId = (email: string, index: number) => {
-    const base = email.split("@")[0]?.replace(/[^a-z0-9]/gi, "")?.slice(0, 6) || "STU";
+    const base =
+      email
+        .split("@")[0]
+        ?.replace(/[^a-z0-9]/gi, "")
+        ?.slice(0, 6) || "STU";
     const suffix = String(index + 1).padStart(3, "0");
     return `${base.toUpperCase()}${suffix}`;
   };
@@ -626,7 +785,9 @@ export default function StudentManagement() {
     const sheetRange = ws["!ref"] ? XLSX.utils.decode_range(ws["!ref"]) : null;
     const colStart = sheetRange?.s.c ?? 0;
     const colEnd = sheetRange?.e.c ?? 0;
-    const headerRowIndex = sheetRange ? detectHeaderRowIndex(ws, colStart, colEnd) : 0;
+    const headerRowIndex = sheetRange
+      ? detectHeaderRowIndex(ws, colStart, colEnd)
+      : 0;
 
     const rows = XLSX.utils.sheet_to_json<Record<string, any>>(ws, {
       defval: "",
@@ -655,18 +816,26 @@ export default function StudentManagement() {
       .map((r, idx) => {
         const email = normalizeEmail(r[mapping.email!]);
         const name = String(r[mapping.name!]).trim();
-        const studentIdFromSheet = mapping.studentId ? String(r[mapping.studentId]).trim() : "";
-        const enrolledDate = mapping.enrolledDate ? String(r[mapping.enrolledDate]).trim() : "";
-        let photoRaw = mapping.photoURL ? String(r[mapping.photoURL] ?? "").trim() : "";
+        const studentIdFromSheet = mapping.studentId
+          ? String(r[mapping.studentId]).trim()
+          : "";
+        const enrolledDate = mapping.enrolledDate
+          ? String(r[mapping.enrolledDate]).trim()
+          : "";
+        let photoRaw = mapping.photoURL
+          ? String(r[mapping.photoURL] ?? "").trim()
+          : "";
         if (!looksLikePhotoUrl(photoRaw)) {
           photoRaw = findPhotoUrlInValues(Object.values(r)) ?? "";
         }
         if (!looksLikePhotoUrl(photoRaw) && sheetRange) {
           const sheetRow = headerRowIndex + 1 + idx;
-          photoRaw = extractPhotoFromSheetRow(ws, sheetRow, colStart, colEnd) ?? "";
+          photoRaw =
+            extractPhotoFromSheetRow(ws, sheetRow, colStart, colEnd) ?? "";
         }
         const photoURL = normalizeStudentPhotoUrl(photoRaw);
-        const studentId = studentIdFromSheet || (email ? buildStudentId(email, idx) : "");
+        const studentId =
+          studentIdFromSheet || (email ? buildStudentId(email, idx) : "");
         const duplicateInFile = email ? seenInFile.has(email) : false;
         if (email) seenInFile.add(email);
         return {
@@ -681,7 +850,9 @@ export default function StudentManagement() {
       .filter((r) => r.email && r.name);
 
     if (!parsed.length) {
-      throw new Error("No valid rows found. Make sure Email and Name cells are filled.");
+      throw new Error(
+        "No valid rows found. Make sure Email and Name cells are filled.",
+      );
     }
 
     // Keep duplicates in preview so user can see why rows may skip later
@@ -691,7 +862,9 @@ export default function StudentManagement() {
     const withPhoto = previewRows.filter((p) => p.photoURL).length;
     const warnings: string[] = [];
     if (parsed.some((p) => p.duplicateInFile)) {
-      warnings.push("Your Excel has duplicate emails. Duplicates will be skipped during import.");
+      warnings.push(
+        "Your Excel has duplicate emails. Duplicates will be skipped during import.",
+      );
     }
     if (withPhoto === 0) {
       warnings.push(
@@ -755,7 +928,8 @@ export default function StudentManagement() {
           name: row.name,
           studentId: row.studentId,
           status: importStatus,
-          enrolledDate: row.enrolledDate || new Date().toISOString().split("T")[0],
+          enrolledDate:
+            row.enrolledDate || new Date().toISOString().split("T")[0],
           ...(row.photoURL ? { photoURL: row.photoURL } : {}),
         });
         if (result.created) {
@@ -772,7 +946,10 @@ export default function StudentManagement() {
         existingEmailSet.add(email);
       } catch (e: any) {
         failed += 1;
-        failures.push({ email, reason: e?.message || "Failed to create student" });
+        failures.push({
+          email,
+          reason: e?.message || "Failed to create student",
+        });
       }
     }
 
@@ -805,7 +982,9 @@ export default function StudentManagement() {
     if (editingStudent) {
       try {
         await clearStudentPhoto(editingStudent.id);
-        setEditingStudent((prev) => (prev ? { ...prev, photoURL: undefined } : null));
+        setEditingStudent((prev) =>
+          prev ? { ...prev, photoURL: undefined } : null,
+        );
       } catch (err) {
         console.error(err);
         setError("Could not remove photo from storage.");
@@ -946,220 +1125,176 @@ export default function StudentManagement() {
     });
   };
 
+  const pillsContainerRef = React.useRef<HTMLDivElement>(null);
+  const scrollPills = (direction: "left" | "right") => {
+    if (pillsContainerRef.current) {
+      const scrollAmount = 240;
+      pillsContainerRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-2 flex-wrap">
-        <Dialog
-          open={isAddDialogOpen}
-          onOpenChange={(open) => {
-            setIsAddDialogOpen(open);
-            resetForm();
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button className="bg-indigo-600 hover:bg-indigo-700">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Add Student
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>
-                {editingStudent ? "Edit Student" : "Enroll New Student"}
-              </DialogTitle>
-              <DialogDescription>
-                {editingStudent
-                  ? "Update student information"
-                  : "Add a student or enroll an existing email into another batch"}
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleSubmit}>
-              <div className="space-y-4 py-4">
-                {error && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-sm text-red-800">{error}</p>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="studentId">Student ID</Label>
-                  <Input
-                    id="studentId"
-                    placeholder="STU2024XXX"
-                    value={formData.studentId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, studentId: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input
-                    id="name"
-                    placeholder="John Doe"
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="student@edu.com"
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="batch">Batch</Label>
-                  <Select
-                    value={formData.batchId}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        batchId: value,
-                        batchIds: value ? [value] : [],
-                      })
-                    }
-                  >
-                    <SelectTrigger id="batch">
-                      <SelectValue placeholder="Select a batch" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {batches.map((batch) => (
-                        <SelectItem key={batch.id} value={batch.id}>
-                          {batch.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-slate-500">
-                    If this email already exists, they will be added to this batch (same Google login).
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={formData.status}
-                    onValueChange={(value) =>
-                      setFormData({
-                        ...formData,
-                        status: value as "active" | "inactive",
-                      })
-                    }
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active</SelectItem>
-                      <SelectItem value="inactive">Inactive</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <StudentPhotoFields
-                  previewUrl={photoPreviewDisplay}
-                  displayName={formData.name}
-                  photoUrlText={photoUrlText}
-                  onPhotoUrlTextChange={setPhotoUrlText}
-                  onPickFile={setPhotoFile}
-                  onRemove={handleRemovePhoto}
-                  canRemove={!!(photoFile || photoUrlText.trim() || editingStudent?.photoURL)}
-                />
-              </div>
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsAddDialogOpen(false);
-                    resetForm();
-                  }}
-                  disabled={isLoading}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-700"
-                  disabled={isLoading}
-                >
-                  {isLoading
-                    ? "Saving..."
-                    : editingStudent
-                      ? "Update Student"
-                      : "Add Student"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
+    <div className="space-y-6 max-w-full">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-xl border border-slate-200 shadow-xs">
+        {/* Left: Search & Sort */}
+        <div className="flex flex-1 flex-wrap items-center gap-2.5 min-w-0">
+          <div className="relative flex-1 min-w-[200px] max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+            <Input
+              placeholder="Search by name, email, ID, or batch..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-8 h-9 text-xs sm:text-sm border-slate-200"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
-        <Dialog open={importOpen} onOpenChange={setImportOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <FileSpreadsheet className="w-4 h-4" />
-              Import Excel
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-            <DialogHeader>
-              <DialogTitle>Import students from Excel</DialogTitle>
-              <DialogDescription>
-                Upload an <span className="font-medium">.xlsx</span> file to create students in bulk. Required:{" "}
-                <span className="font-medium">Email</span> and <span className="font-medium">Name</span>. Optional:{" "}
-                <span className="font-medium">Photo URL</span> (Google Drive share links work — file must be shared as
-                &quot;Anyone with the link&quot;). Column order like Date → Name → Email → Photo URL is detected
-                automatically.
-              </DialogDescription>
-            </DialogHeader>
+          <Select
+            value={studentSortKey}
+            onValueChange={(value) =>
+              setStudentSortKey(value as StudentSortKey)
+            }
+          >
+            <SelectTrigger
+              className="w-[160px] h-9 text-xs font-medium border-slate-200 bg-white"
+              aria-label="Sort students"
+            >
+              <SelectValue placeholder="Sort students" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="name">Name A-Z</SelectItem>
+              <SelectItem value="studentId">Student ID A-Z</SelectItem>
+              <SelectItem value="email">Email A-Z</SelectItem>
+              <SelectItem value="batch">Batch A-Z</SelectItem>
+              <SelectItem value="enrolledNewest">Newest enrolled</SelectItem>
+              <SelectItem value="enrolledOldest">Oldest enrolled</SelectItem>
+              <SelectItem value="status">Status</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
 
-            <div className="flex-1 overflow-y-auto pr-1">
-              <div className="space-y-4 py-2">
-                {importError && (
-                  <div
-                    className={`p-3 border rounded-lg text-sm ${
-                      /Could not detect|No rows found|No sheets found|No valid rows|Failed to parse/i.test(
-                        importError,
-                      )
-                        ? "bg-red-50 border-red-200 text-red-800"
-                        : importError.includes("No photo links were found")
-                          ? "bg-amber-50 border-amber-200 text-amber-900"
-                          : "bg-sky-50 border-sky-200 text-sky-900"
-                    }`}
-                  >
-                    {importError}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Right: Actions */}
+        <div className="flex items-center gap-2 self-end md:self-auto shrink-0">
+          <Dialog
+            open={isAddDialogOpen}
+            onOpenChange={(open) => {
+              setIsAddDialogOpen(open);
+              resetForm();
+            }}
+          >
+            <DialogTrigger asChild>
+              <Button className="bg-indigo-600 hover:bg-indigo-700">
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add Student
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>
+                  {editingStudent ? "Edit Student" : "Enroll New Student"}
+                </DialogTitle>
+                <DialogDescription>
+                  {editingStudent
+                    ? "Update student information"
+                    : "Add a student or enroll an existing email into another batch"}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit}>
+                <div className="space-y-4 py-4">
+                  {error && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <p className="text-sm text-red-800">{error}</p>
+                    </div>
+                  )}
                   <div className="space-y-2">
-                    <Label>Assign batch *</Label>
-                    <Select value={importBatchId} onValueChange={setImportBatchId}>
-                      <SelectTrigger>
+                    <Label htmlFor="studentId">Student ID</Label>
+                    <Input
+                      id="studentId"
+                      placeholder="STU2024XXX"
+                      value={formData.studentId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, studentId: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      placeholder="John Doe"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email Address</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="student@edu.com"
+                      value={formData.email}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="batch">Batch</Label>
+                    <Select
+                      value={formData.batchId}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          batchId: value,
+                          batchIds: value ? [value] : [],
+                        })
+                      }
+                    >
+                      <SelectTrigger id="batch">
                         <SelectValue placeholder="Select a batch" />
                       </SelectTrigger>
                       <SelectContent>
-                        {batches.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>
-                            {b.name}
+                        {batches.map((batch) => (
+                          <SelectItem key={batch.id} value={batch.id}>
+                            {batch.name}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    <p className="text-xs text-slate-500">
+                      If this email already exists, they will be added to this
+                      batch (same Google login).
+                    </p>
                   </div>
-
                   <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select value={importStatus} onValueChange={(v) => setImportStatus(v as "active" | "inactive")}>
-                      <SelectTrigger>
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(value) =>
+                        setFormData({
+                          ...formData,
+                          status: value as "active" | "inactive",
+                        })
+                      }
+                    >
+                      <SelectTrigger id="status">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -1168,439 +1303,576 @@ export default function StudentManagement() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <StudentPhotoFields
+                    previewUrl={photoPreviewDisplay}
+                    displayName={formData.name}
+                    photoUrlText={photoUrlText}
+                    onPhotoUrlTextChange={setPhotoUrlText}
+                    onPickFile={setPhotoFile}
+                    onRemove={handleRemovePhoto}
+                    canRemove={
+                      !!(
+                        photoFile ||
+                        photoUrlText.trim() ||
+                        editingStudent?.photoURL
+                      )
+                    }
+                  />
                 </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsAddDialogOpen(false);
+                      resetForm();
+                    }}
+                    disabled={isLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="bg-indigo-600 hover:bg-indigo-700"
+                    disabled={isLoading}
+                  >
+                    {isLoading
+                      ? "Saving..."
+                      : editingStudent
+                        ? "Update Student"
+                        : "Add Student"}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
 
-                <div className="space-y-2">
-                  <Label>Excel file (.xlsx) *</Label>
-                  <div className="flex flex-col md:flex-row md:items-center gap-3">
-                    <Input
-                      type="file"
-                      accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                      onChange={async (e) => {
-                        const f = e.target.files?.[0] || null;
-                        setImportFile(f);
-                        setImportSummary(null);
-                        setImportRows([]);
-                        setImportError("");
-                        if (!f) return;
-                        try {
-                          await parseImportFile(f);
-                        } catch (err: any) {
-                          setImportError(err?.message || "Failed to parse Excel.");
+          <Dialog open={importOpen} onOpenChange={setImportOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" className="gap-2">
+                <FileSpreadsheet className="w-4 h-4" />
+                Import Excel
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+              <DialogHeader>
+                <DialogTitle>Import students from Excel</DialogTitle>
+                <DialogDescription>
+                  Upload an <span className="font-medium">.xlsx</span> file to
+                  create students in bulk. Required:{" "}
+                  <span className="font-medium">Email</span> and{" "}
+                  <span className="font-medium">Name</span>. Optional:{" "}
+                  <span className="font-medium">Photo URL</span> (Google Drive
+                  share links work — file must be shared as &quot;Anyone with
+                  the link&quot;). Column order like Date → Name → Email → Photo
+                  URL is detected automatically.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="flex-1 overflow-y-auto pr-1">
+                <div className="space-y-4 py-2">
+                  {importError && (
+                    <div
+                      className={`p-3 border rounded-lg text-sm ${
+                        /Could not detect|No rows found|No sheets found|No valid rows|Failed to parse/i.test(
+                          importError,
+                        )
+                          ? "bg-red-50 border-red-200 text-red-800"
+                          : importError.includes("No photo links were found")
+                            ? "bg-amber-50 border-amber-200 text-amber-900"
+                            : "bg-sky-50 border-sky-200 text-sky-900"
+                      }`}
+                    >
+                      {importError}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label>Assign batch *</Label>
+                      <Select
+                        value={importBatchId}
+                        onValueChange={setImportBatchId}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a batch" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {batches.map((b) => (
+                            <SelectItem key={b.id} value={b.id}>
+                              {b.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select
+                        value={importStatus}
+                        onValueChange={(v) =>
+                          setImportStatus(v as "active" | "inactive")
                         }
-                      }}
-                    />
-                    <div className="text-xs text-slate-500 flex items-center gap-2">
-                      <Upload className="w-4 h-4" />
-                      First sheet will be imported
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="inactive">Inactive</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                </div>
 
-                {importRows.length > 0 && (
-                  <Card className="border-slate-200">
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm flex flex-wrap items-center justify-between gap-2">
-                        <span>Preview ({importRows.length} rows)</span>
-                        <span className="text-xs font-normal text-slate-500">
-                          {importRows.filter((r) => r.photoURL).length} with photo link
-                        </span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead className="w-12">Photo</TableHead>
-                              <TableHead>Student ID</TableHead>
-                              <TableHead>Name</TableHead>
-                              <TableHead>Email</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {importRows.slice(0, 10).map((r, idx) => (
-                              <TableRow key={`${r.email}-${idx}`}>
-                                <TableCell>
-                                  <StudentAvatar name={r.name} photoURL={r.photoURL} size="sm" />
-                                </TableCell>
-                                <TableCell className="font-medium">{r.studentId}</TableCell>
-                                <TableCell>{r.name}</TableCell>
-                                <TableCell className="text-sm text-slate-600">{r.email}</TableCell>
+                  <div className="space-y-2">
+                    <Label>Excel file (.xlsx) *</Label>
+                    <div className="flex flex-col md:flex-row md:items-center gap-3">
+                      <Input
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0] || null;
+                          setImportFile(f);
+                          setImportSummary(null);
+                          setImportRows([]);
+                          setImportError("");
+                          if (!f) return;
+                          try {
+                            await parseImportFile(f);
+                          } catch (err: any) {
+                            setImportError(
+                              err?.message || "Failed to parse Excel.",
+                            );
+                          }
+                        }}
+                      />
+                      <div className="text-xs text-slate-500 flex items-center gap-2">
+                        <Upload className="w-4 h-4" />
+                        First sheet will be imported
+                      </div>
+                    </div>
+                  </div>
+
+                  {importRows.length > 0 && (
+                    <Card className="border-slate-200">
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm flex flex-wrap items-center justify-between gap-2">
+                          <span>Preview ({importRows.length} rows)</span>
+                          <span className="text-xs font-normal text-slate-500">
+                            {importRows.filter((r) => r.photoURL).length} with
+                            photo link
+                          </span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-12">Photo</TableHead>
+                                <TableHead>Student ID</TableHead>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Email</TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                      {importRows.length > 10 && (
+                            </TableHeader>
+                            <TableBody>
+                              {importRows.slice(0, 10).map((r, idx) => (
+                                <TableRow key={`${r.email}-${idx}`}>
+                                  <TableCell>
+                                    <StudentAvatar
+                                      name={r.name}
+                                      photoURL={r.photoURL}
+                                      size="sm"
+                                    />
+                                  </TableCell>
+                                  <TableCell className="font-medium">
+                                    {r.studentId}
+                                  </TableCell>
+                                  <TableCell>{r.name}</TableCell>
+                                  <TableCell className="text-sm text-slate-600">
+                                    {r.email}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                        {importRows.length > 10 && (
+                          <p className="text-xs text-slate-500 mt-2">
+                            Showing first 10 rows.
+                          </p>
+                        )}
                         <p className="text-xs text-slate-500 mt-2">
-                          Showing first 10 rows.
+                          Existing emails are enrolled into this batch (not
+                          skipped). Already-in-batch rows are skipped.
                         </p>
-                      )}
-                      <p className="text-xs text-slate-500 mt-2">
-                        Existing emails are enrolled into this batch (not skipped). Already-in-batch rows are skipped.
-                      </p>
-                    </CardContent>
-                  </Card>
-                )}
+                      </CardContent>
+                    </Card>
+                  )}
 
-                {importSummary && (
-                  <Card className="border-slate-200">
-                    <CardHeader className="py-3">
-                      <CardTitle className="text-sm">Import summary</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pt-0 space-y-2 text-sm">
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="outline">Total: {importSummary.total}</Badge>
-                        <Badge className="bg-emerald-100 text-emerald-800">Created: {importSummary.created}</Badge>
-                        <Badge className="bg-indigo-100 text-indigo-800">Added to batch: {importSummary.updated}</Badge>
-                        <Badge className="bg-slate-100 text-slate-800">Skipped: {importSummary.skipped}</Badge>
-                        {importSummary.failed > 0 ? (
-                          <Badge className="bg-rose-100 text-rose-800">Failed: {importSummary.failed}</Badge>
-                        ) : null}
-                      </div>
-                      {importSummary.failed > 0 && (
-                        <div className="text-xs text-slate-600">
-                          {importSummary.failures.slice(0, 5).map((f, idx) => (
-                            <div key={idx}>
-                              {f.email || "Row"}: {f.reason}
-                            </div>
-                          ))}
-                          {importSummary.failures.length > 5 ? (
-                            <div>…and {importSummary.failures.length - 5} more</div>
+                  {importSummary && (
+                    <Card className="border-slate-200">
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm">
+                          Import summary
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-0 space-y-2 text-sm">
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">
+                            Total: {importSummary.total}
+                          </Badge>
+                          <Badge className="bg-emerald-100 text-emerald-800">
+                            Created: {importSummary.created}
+                          </Badge>
+                          <Badge className="bg-indigo-100 text-indigo-800">
+                            Added to batch: {importSummary.updated}
+                          </Badge>
+                          <Badge className="bg-slate-100 text-slate-800">
+                            Skipped: {importSummary.skipped}
+                          </Badge>
+                          {importSummary.failed > 0 ? (
+                            <Badge className="bg-rose-100 text-rose-800">
+                              Failed: {importSummary.failed}
+                            </Badge>
                           ) : null}
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
+                        {importSummary.failed > 0 && (
+                          <div className="text-xs text-slate-600">
+                            {importSummary.failures
+                              .slice(0, 5)
+                              .map((f, idx) => (
+                                <div key={idx}>
+                                  {f.email || "Row"}: {f.reason}
+                                </div>
+                              ))}
+                            {importSummary.failures.length > 5 ? (
+                              <div>
+                                …and {importSummary.failures.length - 5} more
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               </div>
-            </div>
 
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setImportOpen(false);
-                  setImportFile(null);
-                  setImportRows([]);
-                  setImportError("");
-                  setImportSummary(null);
-                }}
-                disabled={importing}
-              >
-                Close
-              </Button>
-              <Button
-                type="button"
-                className="bg-indigo-600 hover:bg-indigo-700"
-                onClick={() => void runImport()}
-                disabled={importing || !importRows.length}
-              >
-                {importing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Importing...
-                  </>
-                ) : (
-                  "Import Students"
-                )}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setImportOpen(false);
+                    setImportFile(null);
+                    setImportRows([]);
+                    setImportError("");
+                    setImportSummary(null);
+                  }}
+                  disabled={importing}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-indigo-600 hover:bg-indigo-700"
+                  onClick={() => void runImport()}
+                  disabled={importing || !importRows.length}
+                >
+                  {importing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    "Import Students"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
-      {/* Batch Tabs - Horizontal at Top */}
-      <div className="border-b border-slate-200 bg-white rounded-lg">
-        <Tabs
-          value={selectedBatch}
-          onValueChange={setSelectedBatch}
-          className="w-full"
-        >
-          <div className="flex items-center justify-between px-6 pt-4">
-            <TabsList className="flex gap-1 bg-transparent p-0 h-auto">
-              {/* All Students Tab */}
-              <TabsTrigger
-                value="all"
-                className="px-4 py-2 rounded-t-lg data-[state=active]:bg-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 bg-slate-100"
-              >
-                <div className="text-center">
-                  <div className="font-medium text-sm">All Students</div>
-                  <div className="text-xs text-slate-500">
-                    {students.length}
-                  </div>
-                </div>
-              </TabsTrigger>
-
-              {/* Individual Batch Tabs */}
-              {batches.map((batch) => {
-                const studentCount = getStudentCountByBatch(batch.id);
-                return (
-                  <TabsTrigger
-                    key={batch.id}
-                    value={batch.id}
-                    className="px-4 py-2 rounded-t-lg data-[state=active]:bg-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 bg-slate-100"
-                  >
-                    <div className="text-center">
-                      <div className="font-medium text-sm truncate">
-                        {batch.name}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {studentCount}
-                      </div>
-                    </div>
-                  </TabsTrigger>
-                );
-              })}
-
-              {/* Unassigned Students Tab */}
-              {getUnassignedStudentCount() > 0 && (
-                <TabsTrigger
-                  value="unassigned"
-                  className="px-4 py-2 rounded-t-lg data-[state=active]:bg-white data-[state=active]:border-b-2 data-[state=active]:border-indigo-600 bg-slate-100"
-                >
-                  <div className="text-center">
-                    <div className="font-medium text-sm">Not Assigned</div>
-                    <div className="text-xs text-slate-500">
-                      {getUnassignedStudentCount()}
-                    </div>
-                  </div>
-                </TabsTrigger>
-              )}
-            </TabsList>
-
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Select value={studentSortKey} onValueChange={(value) => setStudentSortKey(value as StudentSortKey)}>
-                <SelectTrigger className="w-[190px]" aria-label="Sort students">
-                  <SelectValue placeholder="Sort students" />
+      {/* Main Content Card: Batch Filter Bar + Student Table */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        {/* Batch Filter Bar */}
+        <div className="p-4 border-b border-slate-200 bg-slate-50/60">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-3">
+            {/* Quick Batch Selector Dropdown */}
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                <Layers className="w-4 h-4 text-indigo-600" />
+                <span>Batch:</span>
+              </div>
+              <Select value={selectedBatch} onValueChange={setSelectedBatch}>
+                <SelectTrigger className="w-full sm:w-[230px] h-9 bg-white text-xs font-medium border-slate-200 shadow-xs">
+                  <SelectValue placeholder="Select Batch" />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name A-Z</SelectItem>
-                  <SelectItem value="studentId">Student ID A-Z</SelectItem>
-                  <SelectItem value="email">Email A-Z</SelectItem>
-                  <SelectItem value="batch">Batch A-Z</SelectItem>
-                  <SelectItem value="enrolledNewest">Newest enrolled</SelectItem>
-                  <SelectItem value="enrolledOldest">Oldest enrolled</SelectItem>
-                  <SelectItem value="status">Status</SelectItem>
+                <SelectContent className="max-h-[300px]">
+                  <SelectItem value="all">
+                    🌟 All Students ({students.length})
+                  </SelectItem>
+                  {batches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.name} ({getStudentCountByBatch(b.id)})
+                    </SelectItem>
+                  ))}
+                  {getUnassignedStudentCount() > 0 && (
+                    <SelectItem value="unassigned">
+                      ⚠️ Not Assigned ({getUnassignedStudentCount()})
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
-              <div className="relative w-64">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  placeholder="Search students..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+            </div>
+
+            {/* Divider */}
+            <div className="hidden lg:block h-6 w-px bg-slate-200 shrink-0" />
+
+            {/* Horizontal Scrollable Pills with Scroll Controls */}
+            <div className="relative min-w-0 flex-1 flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => scrollPills("left")}
+                className="hidden sm:flex shrink-0 w-7 h-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors shadow-xs"
+                title="Scroll left"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <div
+                ref={pillsContainerRef}
+                className="flex items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden py-1 scroll-smooth w-full"
+              >
+                {/* All Students Pill */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedBatch("all")}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                    selectedBatch === "all"
+                      ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
+                      : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-xs"
+                  }`}
+                >
+                  <span>All Students</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                      selectedBatch === "all"
+                        ? "bg-indigo-700/80 text-white"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {students.length}
+                  </span>
+                </button>
+
+                {/* Batch Pills */}
+                {batches.map((batch) => {
+                  const count = getStudentCountByBatch(batch.id);
+                  const isSelected = selectedBatch === batch.id;
+                  return (
+                    <button
+                      key={batch.id}
+                      type="button"
+                      onClick={() => setSelectedBatch(batch.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                        isSelected
+                          ? "bg-indigo-600 text-white shadow-sm ring-1 ring-indigo-500"
+                          : "bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 shadow-xs"
+                      }`}
+                    >
+                      <span className="max-w-[150px] truncate">
+                        {batch.name}
+                      </span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                          isSelected
+                            ? "bg-indigo-700/80 text-white"
+                            : "bg-slate-100 text-slate-600"
+                        }`}
+                      >
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {/* Unassigned Pill */}
+                {getUnassignedStudentCount() > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedBatch("unassigned")}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                      selectedBatch === "unassigned"
+                        ? "bg-amber-600 text-white shadow-sm ring-1 ring-amber-500"
+                        : "bg-white hover:bg-slate-100 text-amber-700 border border-amber-200 shadow-xs"
+                    }`}
+                  >
+                    <span>Not Assigned</span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                        selectedBatch === "unassigned"
+                          ? "bg-amber-700 text-white"
+                          : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {getUnassignedStudentCount()}
+                    </span>
+                  </button>
+                )}
               </div>
+
+              <button
+                type="button"
+                onClick={() => scrollPills("right")}
+                className="hidden sm:flex shrink-0 w-7 h-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors shadow-xs"
+                title="Scroll right"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
-          {/* All Students Content */}
-          <TabsContent value="all" className="px-6 pb-6">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-14">Photo</TableHead>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Batch</TableHead>
-                    <TableHead>Enrolled Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Active Device</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredStudents.length > 0 ? (
-                    filteredStudents.map((student) => (
-                      <StudentRow
-                        key={student.id}
-                        student={student}
-                        editingStudent={editingStudent}
-                        formData={formData}
-                        setFormData={setFormData}
-                        batches={batches}
-                        onEdit={handleEdit}
-                        onDelete={handleDelete}
-                        onSubmit={handleSubmit}
-                        onReset={resetForm}
-                        getBatchName={getBatchName}
-                        getStudentBatchLabels={getStudentBatchLabels}
-                        toggleFormBatchId={toggleFormBatchId}
-                        photoPreviewUrl={
-                          editingStudent?.id === student.id
-                            ? photoPreviewDisplay
-                            : student.photoURL || null
-                        }
-                        photoUrlText={photoUrlText}
-                        onPhotoUrlTextChange={setPhotoUrlText}
-                        onPhotoPick={setPhotoFile}
-                        onPhotoRemove={handleRemovePhoto}
-                        canRemovePhoto={
-                          editingStudent?.id === student.id
-                            ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
-                            : false
-                        }
-                        onResetDevice={() => handleResetDevice(student.id)}
-                        isResettingDevice={resettingDeviceIds.has(student.id)}
-                        onPortalCredentials={setCredDialogStudent}
-                      />
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8">
-                        <p className="text-slate-500">No students found</p>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+          {/* Active Filter Info / Reset Summary */}
+          {(selectedBatch !== "all" || searchQuery) && (
+            <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+              <div className="flex flex-wrap items-center gap-2">
+                <span>
+                  Showing{" "}
+                  <strong className="text-slate-800 font-semibold">
+                    {filteredStudents.length}
+                  </strong>{" "}
+                  {filteredStudents.length === 1 ? "student" : "students"}
+                </span>
+                {selectedBatch !== "all" && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
+                    Batch:{" "}
+                    {selectedBatch === "unassigned"
+                      ? "Not Assigned"
+                      : getBatchName(selectedBatch)}
+                  </span>
+                )}
+                {searchQuery && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700">
+                    Matching &ldquo;{searchQuery}&rdquo;
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedBatch("all");
+                  setSearchQuery("");
+                }}
+                className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline text-xs"
+              >
+                Reset Filters
+              </button>
             </div>
-          </TabsContent>
-
-          {/* Individual Batch Content */}
-          {batches.map((batch) => (
-            <TabsContent key={batch.id} value={batch.id} className="px-6 pb-6">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-14">Photo</TableHead>
-                      <TableHead>Student ID</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Enrolled Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Active Device</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((student) => (
-                        <StudentRow
-                          key={student.id}
-                          student={student}
-                          editingStudent={editingStudent}
-                          formData={formData}
-                          setFormData={setFormData}
-                          batches={batches}
-                          onEdit={handleEdit}
-                          onDelete={handleDelete}
-                          onSubmit={handleSubmit}
-                          onReset={resetForm}
-                          getBatchName={getBatchName}
-                        getStudentBatchLabels={getStudentBatchLabels}
-                        toggleFormBatchId={toggleFormBatchId}
-                          showBatchColumn={false}
-                          photoPreviewUrl={
-                            editingStudent?.id === student.id
-                              ? photoPreviewDisplay
-                              : student.photoURL || null
-                          }
-                          photoUrlText={photoUrlText}
-                          onPhotoUrlTextChange={setPhotoUrlText}
-                          onPhotoPick={setPhotoFile}
-                          onPhotoRemove={handleRemovePhoto}
-                          canRemovePhoto={
-                            editingStudent?.id === student.id
-                              ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
-                              : false
-                          }
-                          onResetDevice={() => handleResetDevice(student.id)}
-                          isResettingDevice={resettingDeviceIds.has(student.id)}
-                          onPortalCredentials={setCredDialogStudent}
-                        />
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
-                          <p className="text-slate-500">
-                            No students in this batch
-                          </p>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
-          ))}
-
-          {/* Unassigned Students Content */}
-          {getUnassignedStudentCount() > 0 && (
-            <TabsContent value="unassigned" className="px-6 pb-6">
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-14">Photo</TableHead>
-                      <TableHead>Student ID</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Enrolled Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Active Device</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredStudents.length > 0 ? (
-                      filteredStudents.map((student) => (
-                        <StudentRow
-                          key={student.id}
-                          student={student}
-                          editingStudent={editingStudent}
-                          formData={formData}
-                          setFormData={setFormData}
-                          batches={batches}
-                          onEdit={handleEdit}
-                          onDelete={handleDelete}
-                          onSubmit={handleSubmit}
-                          onReset={resetForm}
-                          getBatchName={getBatchName}
-                        getStudentBatchLabels={getStudentBatchLabels}
-                        toggleFormBatchId={toggleFormBatchId}
-                          showBatchColumn={false}
-                          photoPreviewUrl={
-                            editingStudent?.id === student.id
-                              ? photoPreviewDisplay
-                              : student.photoURL || null
-                          }
-                          photoUrlText={photoUrlText}
-                          onPhotoUrlTextChange={setPhotoUrlText}
-                          onPhotoPick={setPhotoFile}
-                          onPhotoRemove={handleRemovePhoto}
-                          canRemovePhoto={
-                            editingStudent?.id === student.id
-                              ? !!(photoFile || photoUrlText.trim() || editingStudent.photoURL)
-                              : false
-                          }
-                          onResetDevice={() => handleResetDevice(student.id)}
-                          isResettingDevice={resettingDeviceIds.has(student.id)}
-                          onPortalCredentials={setCredDialogStudent}
-                        />
-                      ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
-                          <p className="text-slate-500">
-                            No unassigned students
-                          </p>
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </TabsContent>
           )}
-        </Tabs>
+        </div>
+
+        {/* Unified Table Content */}
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-slate-50/75 hover:bg-slate-50/75">
+                <TableHead className="w-14">Photo</TableHead>
+                <TableHead>Student ID</TableHead>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+                {selectedBatch === "all" && <TableHead>Batch</TableHead>}
+                <TableHead>Enrolled Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Active Device</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredStudents.length > 0 ? (
+                filteredStudents.map((student) => (
+                  <StudentRow
+                    key={student.id}
+                    student={student}
+                    editingStudent={editingStudent}
+                    formData={formData}
+                    setFormData={setFormData}
+                    batches={batches}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onSubmit={handleSubmit}
+                    onReset={resetForm}
+                    getBatchName={getBatchName}
+                    getStudentBatchLabels={getStudentBatchLabels}
+                    toggleFormBatchId={toggleFormBatchId}
+                    showBatchColumn={selectedBatch === "all"}
+                    photoPreviewUrl={
+                      editingStudent?.id === student.id
+                        ? photoPreviewDisplay
+                        : student.photoURL || null
+                    }
+                    photoUrlText={photoUrlText}
+                    onPhotoUrlTextChange={setPhotoUrlText}
+                    onPhotoPick={setPhotoFile}
+                    onPhotoRemove={handleRemovePhoto}
+                    canRemovePhoto={
+                      editingStudent?.id === student.id
+                        ? !!(
+                            photoFile ||
+                            photoUrlText.trim() ||
+                            editingStudent.photoURL
+                          )
+                        : false
+                    }
+                    onResetDevice={() => handleResetDevice(student.id)}
+                    isResettingDevice={resettingDeviceIds.has(student.id)}
+                    onPortalCredentials={setCredDialogStudent}
+                  />
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={selectedBatch === "all" ? 9 : 8}
+                    className="text-center py-12"
+                  >
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                        <Search className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-medium text-slate-700">
+                        No students found
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {searchQuery
+                          ? `No students matching "${searchQuery}"`
+                          : selectedBatch !== "all"
+                            ? "No students enrolled in this batch yet"
+                            : "Start by adding or importing students"}
+                      </p>
+                      {(searchQuery || selectedBatch !== "all") && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2 text-xs"
+                          onClick={() => {
+                            setSelectedBatch("all");
+                            setSearchQuery("");
+                          }}
+                        >
+                          Clear Filters
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
       </div>
 
       {/* Portal credentials dialog */}
@@ -1614,7 +1886,6 @@ export default function StudentManagement() {
     </div>
   );
 }
-
 
 // Student Row Component
 interface StudentRowProps {
@@ -1643,7 +1914,6 @@ interface StudentRowProps {
 }
 
 function StudentRow({
-
   student,
   editingStudent,
   formData,
@@ -1684,7 +1954,11 @@ function StudentRow({
   return (
     <TableRow key={student.id}>
       <TableCell>
-        <StudentAvatar name={student.name} photoURL={student.photoURL} size="sm" />
+        <StudentAvatar
+          name={student.name}
+          photoURL={student.photoURL}
+          size="sm"
+        />
       </TableCell>
       <TableCell className="font-medium">{student.studentId}</TableCell>
       <TableCell>{student.name}</TableCell>
@@ -1805,7 +2079,9 @@ function StudentRow({
                     <Label>Batches (multi-enroll)</Label>
                     <div className="max-h-40 overflow-y-auto rounded-lg border border-slate-200 divide-y">
                       {batches.map((batch) => {
-                        const checked = (formData.batchIds || []).includes(batch.id);
+                        const checked = (formData.batchIds || []).includes(
+                          batch.id,
+                        );
                         return (
                           <label
                             key={batch.id}
@@ -1823,7 +2099,8 @@ function StudentRow({
                       })}
                     </div>
                     <p className="text-xs text-slate-500">
-                      Select every batch this student should access. They will pick an active batch after Google login.
+                      Select every batch this student should access. They will
+                      pick an active batch after Google login.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1879,9 +2156,11 @@ function StudentRow({
               title="Reset device — allows student to log in from any device"
               className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
             >
-              {isResettingDevice
-                ? <Loader2 className="w-4 h-4 animate-spin" />
-                : <RotateCcw className="w-4 h-4" />}
+              {isResettingDevice ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RotateCcw className="w-4 h-4" />
+              )}
             </Button>
           )}
           {/* Portal credentials button */}
@@ -1889,8 +2168,16 @@ function StudentRow({
             variant="ghost"
             size="icon"
             onClick={() => onPortalCredentials(student)}
-            title={student.portalUsername ? `Portal credentials: ${student.portalUsername}` : "Generate portal credentials"}
-            className={student.portalUsername ? "text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50" : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"}
+            title={
+              student.portalUsername
+                ? `Portal credentials: ${student.portalUsername}`
+                : "Generate portal credentials"
+            }
+            className={
+              student.portalUsername
+                ? "text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+            }
           >
             <KeyRound className="w-4 h-4" />
           </Button>
