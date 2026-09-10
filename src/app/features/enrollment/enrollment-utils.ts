@@ -16,12 +16,122 @@ import type {
   BatchEnrollmentConfig,
   EnrollmentForm,
   EnrollmentFormDTO,
+  ScheduledEnrollmentForm,
   ShareableFormLink,
 } from "./enrollment-types";
 
 const ENROLLMENT_FORMS_COLLECTION = "enrollmentForms";
 const SHAREABLE_LINKS_COLLECTION = "shareableFormLinks";
 const BATCH_ENROLLMENT_CONFIGS_COLLECTION = "batchEnrollmentConfigs";
+const SCHEDULED_FORMS_COLLECTION = "scheduledEnrollmentForms";
+
+// ─────────────────────────────────────────────────────────────
+// SCHEDULED ENROLLMENT FORMS (Create & Schedule Multiple Forms)
+// ─────────────────────────────────────────────────────────────
+
+export async function createScheduledEnrollmentForm(
+  data: Omit<ScheduledEnrollmentForm, "id" | "createdAt" | "updatedAt">,
+): Promise<ScheduledEnrollmentForm> {
+  const now = Timestamp.now();
+  const docRef = await addDoc(collection(db, SCHEDULED_FORMS_COLLECTION), {
+    ...data,
+    createdAt: now,
+    updatedAt: now,
+  });
+  return {
+    id: docRef.id,
+    ...data,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateScheduledEnrollmentForm(
+  id: string,
+  updates: Partial<ScheduledEnrollmentForm>,
+): Promise<void> {
+  const docRef = doc(db, SCHEDULED_FORMS_COLLECTION, id);
+  await updateDoc(docRef, {
+    ...updates,
+    updatedAt: Timestamp.now(),
+  });
+}
+
+export async function deleteScheduledEnrollmentForm(id: string): Promise<void> {
+  await deleteDoc(doc(db, SCHEDULED_FORMS_COLLECTION, id));
+}
+
+export async function getScheduledEnrollmentForms(
+  batchId?: string,
+): Promise<ScheduledEnrollmentForm[]> {
+  try {
+    let q = collection(db, SCHEDULED_FORMS_COLLECTION) as any;
+    if (batchId) {
+      q = query(q, where("batchId", "==", batchId));
+    }
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({
+      id: d.id,
+      ...d.data(),
+    })) as ScheduledEnrollmentForm[];
+  } catch (err) {
+    console.error("Failed to get scheduled forms:", err);
+    return [];
+  }
+}
+
+export async function getScheduledEnrollmentFormById(
+  id: string,
+): Promise<ScheduledEnrollmentForm | null> {
+  try {
+    const docRef = doc(db, SCHEDULED_FORMS_COLLECTION, id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return {
+        id: snap.id,
+        ...snap.data(),
+      } as ScheduledEnrollmentForm;
+    }
+  } catch (err) {
+    console.error("Failed to get scheduled form by ID:", err);
+  }
+  return null;
+}
+
+export function computeScheduledFormStatus(form: ScheduledEnrollmentForm): {
+  status: "active" | "scheduled" | "closed";
+  message?: string;
+} {
+  if (form.isOpen === false) {
+    return {
+      status: "closed",
+      message: "Admissions currently closed by administrator",
+    };
+  }
+
+  const now = Date.now();
+  if (form.scheduleStart) {
+    const startMs = new Date(form.scheduleStart).getTime();
+    if (!isNaN(startMs) && now < startMs) {
+      return {
+        status: "scheduled",
+        message: `Admissions will open on ${new Date(startMs).toLocaleString()}`,
+      };
+    }
+  }
+
+  if (form.scheduleEnd) {
+    const endMs = new Date(form.scheduleEnd).getTime();
+    if (!isNaN(endMs) && now > endMs) {
+      return {
+        status: "closed",
+        message: `Admissions closed on ${new Date(endMs).toLocaleString()}`,
+      };
+    }
+  }
+
+  return { status: "active" };
+}
 
 // ─────────────────────────────────────────────────────────────
 // BATCH ENROLLMENT CONFIGURATION (Admin / Editable Box)
@@ -125,6 +235,8 @@ export async function submitBatchEnrollment(data: EnrollmentFormDTO): Promise<{
     batchId: data.batchId,
     batchName: data.batchName || "",
     courseName: data.courseName || "",
+    scheduledFormId: data.scheduledFormId || "",
+    scheduledFormTitle: data.scheduledFormTitle || "",
     status: "submitted",
     approvalStatus: "pending",
     submittedBy: candidateEmail,

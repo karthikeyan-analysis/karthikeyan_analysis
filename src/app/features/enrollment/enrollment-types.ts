@@ -14,6 +14,26 @@ export interface BatchEnrollmentConfig {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SCHEDULED ENROLLMENT FORMS (Multiple forms under any batch)
+// ─────────────────────────────────────────────────────────────
+export interface ScheduledEnrollmentForm {
+  id: string;
+  formTitle: string; // Display title, e.g. "Crash Course October Batch Enrollment"
+  batchId: string; // Target Batch ID
+  batchName?: string;
+  courseName: string; // Online Live Crash Course Name
+  startingDate: string; // Starting date
+  duration: string; // Duration e.g. "60 Days / 120 Hours"
+  note?: string; // Banner note / instructions
+  scheduleStart?: string; // Optional ISO string for scheduled start
+  scheduleEnd?: string; // Optional ISO string for deadline / expiry
+  status: "active" | "scheduled" | "closed";
+  isOpen: boolean; // Manual master toggle
+  createdAt: Timestamp | Date | any;
+  updatedAt?: Timestamp | Date | any;
+}
+
+// ─────────────────────────────────────────────────────────────
 // SECTION A: PERSONAL & CONTACT DETAILS
 // ─────────────────────────────────────────────────────────────
 export interface PersonalDetails {
@@ -135,6 +155,8 @@ export interface EnrollmentForm {
   batchId: string;
   batchName?: string;
   courseName?: string;
+  scheduledFormId?: string;
+  scheduledFormTitle?: string;
 
   // Generated Login Credentials
   portalUsername: string; // e.g. "KA-2026-XXXX"
@@ -162,6 +184,8 @@ export interface EnrollmentFormDTO {
   batchId: string;
   batchName?: string;
   courseName?: string;
+  scheduledFormId?: string;
+  scheduledFormTitle?: string;
   personalDetails: PersonalDetails;
   addressDetails: AddressDetails;
   educationalDetails: EducationalDetails;

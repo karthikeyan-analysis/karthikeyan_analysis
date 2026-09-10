@@ -52,25 +52,29 @@ import {
   CheckCheck,
   Users,
   Search,
+  Pencil,
+  FileSpreadsheet,
+  AlertCircle,
+  Filter,
 } from "lucide-react";
 import type {
   BatchEnrollmentConfig,
   EnrollmentForm,
-  ShareableFormLink,
+  ScheduledEnrollmentForm,
 } from "../../features/enrollment/enrollment-types";
 import {
   getAllEnrollmentForms,
-  getEnrollmentFormsByBatch,
   getBatchEnrollmentConfig,
   saveBatchEnrollmentConfig,
   approveStudentEnrollment,
   rejectStudentEnrollment,
   deleteEnrollmentForm,
   getDirectBatchEnrollmentUrl,
-  createShareableLink,
-  getShareableLinksByBatch,
-  revokeShareableLink,
-  generateShareableUrl,
+  createScheduledEnrollmentForm,
+  updateScheduledEnrollmentForm,
+  deleteScheduledEnrollmentForm,
+  getScheduledEnrollmentForms,
+  computeScheduledFormStatus,
 } from "../../features/enrollment/enrollment-utils";
 import {
   exportEnrollmentFormsToExcel,
@@ -79,6 +83,19 @@ import {
 import { downloadEnrollmentPDF } from "../../features/enrollment/enrollment-pdf";
 import { EnrollmentFormPreview } from "../../features/enrollment/enrollment-form-components";
 import { Timestamp } from "firebase/firestore";
+
+interface ScheduledFormModalState {
+  id?: string;
+  batchId: string;
+  formTitle: string;
+  courseName: string;
+  startingDate: string;
+  duration: string;
+  note: string;
+  scheduleStart: string;
+  scheduleEnd: string;
+  isOpen: boolean;
+}
 
 export default function EnrollmentManagement() {
   const { user } = useAuth();
@@ -97,33 +114,35 @@ export default function EnrollmentManagement() {
   );
 
   const [forms, setForms] = useState<EnrollmentForm[]>([]);
+  const [scheduledForms, setScheduledForms] = useState<
+    ScheduledEnrollmentForm[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  // Batch Configuration State
-  const [config, setConfig] = useState<BatchEnrollmentConfig>({
-    batchId: selectedBatch,
-    courseName: "",
-    startingDate: "",
-    duration: "",
-    note: "",
-    isOpen: true,
-  });
-  const [configSaving, setConfigSaving] = useState(false);
-  const [configSavedToast, setConfigSavedToast] = useState(false);
-
   // Link Copy states
   const [copiedDirectLink, setCopiedDirectLink] = useState(false);
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
+  const [copiedFormId, setCopiedFormId] = useState<string | null>(null);
 
-  // Search filter
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedFormFilter, setSelectedFormFilter] = useState<string>("all");
 
-  // Shareable Links (legacy/custom)
-  const [shareableLinks, setShareableLinks] = useState<ShareableFormLink[]>([]);
-  const [showNewLinkDialog, setShowNewLinkDialog] = useState(false);
-  const [newLinkExpiry, setNewLinkExpiry] = useState<string>("30");
+  // Create / Edit Scheduled Form Dialog
+  const [showFormModal, setShowFormModal] = useState(false);
+  const [modalData, setModalData] = useState<ScheduledFormModalState>({
+    batchId: selectedBatch,
+    formTitle: "",
+    courseName: "",
+    startingDate: "",
+    duration: "60 Days / 120 Hours",
+    note: "Admissions strictly based on qualification verification.",
+    scheduleStart: "",
+    scheduleEnd: "",
+    isOpen: true,
+  });
+  const [modalSaving, setModalSaving] = useState(false);
 
   const currentBatch = batches.find((b) => b.id === selectedBatch);
 
@@ -134,31 +153,17 @@ export default function EnrollmentManagement() {
     }
   }, [batches, paramBatchId, selectedBatch]);
 
-  // Load forms and batch enrollment config
+  // Load forms and scheduled forms
   const loadData = async () => {
     setLoading(true);
     try {
-      const [allForms, batchConfig, links] = await Promise.all([
+      const [allForms, allScheduledForms] = await Promise.all([
         getAllEnrollmentForms(),
-        selectedBatch ? getBatchEnrollmentConfig(selectedBatch) : null,
-        selectedBatch ? getShareableLinksByBatch(selectedBatch) : [],
+        getScheduledEnrollmentForms(),
       ]);
 
       setForms(allForms);
-      setShareableLinks(links);
-
-      if (batchConfig) {
-        setConfig(batchConfig);
-      } else if (currentBatch) {
-        setConfig({
-          batchId: selectedBatch,
-          courseName: currentBatch.name || "",
-          startingDate: currentBatch.schedule || "",
-          duration: "60 Days / 120 Hours",
-          note: "Admissions strictly based on qualification verification.",
-          isOpen: true,
-        });
-      }
+      setScheduledForms(allScheduledForms);
     } catch (error) {
       console.error("Failed to load enrollment data:", error);
     } finally {
@@ -168,37 +173,156 @@ export default function EnrollmentManagement() {
   };
 
   useEffect(() => {
-    if (selectedBatch) {
-      loadData();
-    }
-  }, [selectedBatch]);
+    loadData();
+  }, []);
 
   const handleBatchChange = (newBatchId: string) => {
     setSelectedBatch(newBatchId);
+    setSelectedFormFilter("all");
     navigate(`/admin/enrollments?batchId=${newBatchId}`, { replace: true });
   };
 
-  // Save Batch Header Information (Admin / Editable Box)
-  const handleSaveConfig = async () => {
-    if (!selectedBatch) return;
-    setConfigSaving(true);
+  // Open Create Form Dialog
+  const handleOpenCreateForm = () => {
+    setModalData({
+      batchId: selectedBatch || batches[0]?.id || "",
+      formTitle: `${currentBatch?.name || "Batch"} Enrollment Form`,
+      courseName: currentBatch?.name || "ONLINE LIVE CRASH COURSE",
+      startingDate: currentBatch?.schedule || "Immediate / To be announced",
+      duration: "60 Days / 120 Hours",
+      note: "Admissions strictly based on qualification verification. Keep video ON during live CBT tests.",
+      scheduleStart: "",
+      scheduleEnd: "",
+      isOpen: true,
+    });
+    setShowFormModal(true);
+  };
+
+  // Open Edit Form Dialog
+  const handleOpenEditForm = (form: ScheduledEnrollmentForm) => {
+    setModalData({
+      id: form.id,
+      batchId: form.batchId,
+      formTitle: form.formTitle,
+      courseName: form.courseName,
+      startingDate: form.startingDate,
+      duration: form.duration,
+      note: form.note || "",
+      scheduleStart: form.scheduleStart || "",
+      scheduleEnd: form.scheduleEnd || "",
+      isOpen: form.isOpen ?? true,
+    });
+    setShowFormModal(true);
+  };
+
+  // Save Scheduled Form (Create or Edit)
+  const handleSaveScheduledForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modalData.formTitle.trim() || !modalData.batchId) {
+      alert("Please provide a Form Title and select a Target Batch.");
+      return;
+    }
+
+    setModalSaving(true);
     try {
-      await saveBatchEnrollmentConfig({
-        ...config,
-        batchId: selectedBatch,
-      });
-      setConfigSavedToast(true);
-      setTimeout(() => setConfigSavedToast(false), 3000);
-    } catch (err) {
-      console.error("Failed to save config:", err);
-      alert("Failed to save batch enrollment configuration.");
+      const targetBatch = batches.find((b) => b.id === modalData.batchId);
+      const batchName = targetBatch?.name || "";
+
+      if (modalData.id) {
+        // Edit
+        await updateScheduledEnrollmentForm(modalData.id, {
+          batchId: modalData.batchId,
+          batchName,
+          formTitle: modalData.formTitle.trim(),
+          courseName: modalData.courseName.trim(),
+          startingDate: modalData.startingDate.trim(),
+          duration: modalData.duration.trim(),
+          note: modalData.note.trim(),
+          scheduleStart: modalData.scheduleStart || undefined,
+          scheduleEnd: modalData.scheduleEnd || undefined,
+          isOpen: modalData.isOpen,
+          status: modalData.isOpen ? "active" : "closed",
+        });
+      } else {
+        // Create
+        await createScheduledEnrollmentForm({
+          batchId: modalData.batchId,
+          batchName,
+          formTitle: modalData.formTitle.trim(),
+          courseName: modalData.courseName.trim(),
+          startingDate: modalData.startingDate.trim(),
+          duration: modalData.duration.trim(),
+          note: modalData.note.trim(),
+          scheduleStart: modalData.scheduleStart || undefined,
+          scheduleEnd: modalData.scheduleEnd || undefined,
+          isOpen: modalData.isOpen,
+          status: modalData.isOpen ? "active" : "closed",
+        });
+      }
+
+      setShowFormModal(false);
+      await loadData();
+    } catch (err: any) {
+      console.error("Save scheduled form failed:", err);
+      alert(err?.message || "Failed to save scheduled form.");
     } finally {
-      setConfigSaving(false);
+      setModalSaving(false);
     }
   };
 
-  // Copy Direct Link
-  const handleCopyDirectLink = () => {
+  // Delete Scheduled Form
+  const handleDeleteScheduledForm = async (formId: string) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this scheduled form? Its link will be deactivated.",
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteScheduledEnrollmentForm(formId);
+      setScheduledForms((prev) => prev.filter((f) => f.id !== formId));
+    } catch (err) {
+      console.error("Delete form failed:", err);
+      alert("Failed to delete form.");
+    }
+  };
+
+  // Toggle Form Open/Close
+  const handleToggleFormStatus = async (form: ScheduledEnrollmentForm) => {
+    const nextIsOpen = !form.isOpen;
+    try {
+      await updateScheduledEnrollmentForm(form.id, {
+        isOpen: nextIsOpen,
+        status: nextIsOpen ? "active" : "closed",
+      });
+      setScheduledForms((prev) =>
+        prev.map((f) =>
+          f.id === form.id
+            ? {
+                ...f,
+                isOpen: nextIsOpen,
+                status: nextIsOpen ? "active" : "closed",
+              }
+            : f,
+        ),
+      );
+    } catch (err) {
+      console.error("Toggle form status failed:", err);
+      alert("Failed to toggle form status.");
+    }
+  };
+
+  // Copy Link for a Scheduled Form
+  const handleCopyFormLink = (formId: string) => {
+    const url = `${window.location.origin}/enroll/${formId}`;
+    navigator.clipboard.writeText(url);
+    setCopiedFormId(formId);
+    setTimeout(() => setCopiedFormId(null), 2500);
+  };
+
+  // Copy Default Batch Link
+  const handleCopyDirectBatchLink = () => {
     const url = getDirectBatchEnrollmentUrl(selectedBatch);
     navigator.clipboard.writeText(url);
     setCopiedDirectLink(true);
@@ -217,7 +341,6 @@ export default function EnrollmentManagement() {
     setActionLoadingId(formId);
     try {
       await approveStudentEnrollment(formId, user?.email || "admin");
-      // Update local state
       setForms((prev) =>
         prev.map((f) =>
           f.id === formId
@@ -265,7 +388,7 @@ export default function EnrollmentManagement() {
   };
 
   // Delete Application
-  const handleDelete = async (formId: string) => {
+  const handleDeleteApplication = async (formId: string) => {
     if (
       !window.confirm(
         "Are you sure you want to delete this application permanently?",
@@ -282,10 +405,25 @@ export default function EnrollmentManagement() {
     }
   };
 
-  // Filter batch forms
-  const batchForms = forms.filter((f) => f.batchId === selectedBatch);
+  // Scheduled forms under currently selected batch (or all)
+  const batchScheduledForms = scheduledForms.filter((f) =>
+    selectedBatch ? f.batchId === selectedBatch : true,
+  );
+
+  // Filter applications by selected batch & form filter & search
+  const batchForms = forms.filter((f) =>
+    selectedBatch ? f.batchId === selectedBatch : true,
+  );
 
   const filteredForms = batchForms.filter((f) => {
+    // Form filter
+    if (
+      selectedFormFilter !== "all" &&
+      f.scheduledFormId !== selectedFormFilter
+    ) {
+      return false;
+    }
+    // Search filter
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
     const name = (
@@ -325,20 +463,20 @@ export default function EnrollmentManagement() {
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-slate-900 flex items-center gap-2.5">
             <Users className="w-8 h-8 text-indigo-600" />
-            Batch Enrollment &amp; Approvals
+            Batch Enrollment &amp; Scheduled Forms
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Configure course enrollment details, copy public student form link,
-            and verify &amp; approve applicants.
+            Create and schedule enrollment forms as needed under any batch, copy
+            unique form links, and approve registered students.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <Button
             variant="outline"
             size="sm"
@@ -355,29 +493,23 @@ export default function EnrollmentManagement() {
             Refresh
           </Button>
 
-          {selectedBatch && (
-            <Button
-              size="sm"
-              onClick={handleCopyDirectLink}
-              className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
-            >
-              {copiedDirectLink ? (
-                <CheckCheck className="w-4 h-4 text-emerald-300" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-              {copiedDirectLink ? "Copied Link!" : "Copy Form Link"}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            onClick={handleOpenCreateForm}
+            className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Create &amp; Schedule Form
+          </Button>
         </div>
       </div>
 
-      {/* Batch Selector */}
+      {/* Target Batch Bar */}
       <Card className="border-indigo-100 bg-white shadow-sm">
         <CardContent className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 justify-between">
           <div className="flex items-center gap-3">
             <span className="text-xs font-bold text-slate-700 uppercase tracking-wider whitespace-nowrap">
-              Target Batch:
+              Active Batch:
             </span>
             <select
               className="px-3.5 py-2 bg-slate-50 border border-slate-300 rounded-lg text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none min-w-[260px]"
@@ -394,10 +526,13 @@ export default function EnrollmentManagement() {
 
           <div className="flex items-center gap-2 flex-wrap text-xs">
             <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-medium">
+              Forms: {batchScheduledForms.length}
+            </span>
+            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium">
               Total Applicants: {batchForms.length}
             </span>
             <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 font-bold border border-amber-200">
-              Pending Approval: {pendingForms.length}
+              Pending: {pendingForms.length}
             </span>
             <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-bold border border-emerald-200">
               Approved: {approvedForms.length}
@@ -406,180 +541,304 @@ export default function EnrollmentManagement() {
         </CardContent>
       </Card>
 
-      {/* Section 1: Header & Course Information (Admin / Editable Box) */}
+      {/* SECTION 1: SCHEDULED ENROLLMENT FORMS LIST */}
       <Card className="border-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="bg-gradient-to-r from-indigo-50 via-purple-50 to-white border-b border-indigo-100 py-4 px-6 flex flex-row items-center justify-between">
+        <CardHeader className="bg-gradient-to-r from-indigo-50 via-purple-50 to-white border-b border-indigo-100 py-4 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <CardTitle className="text-base md:text-lg font-bold text-indigo-950 flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-indigo-600" />
-              1. Header &amp; Course Information (Editable Box for Students)
+              <Calendar className="w-5 h-5 text-indigo-600" />
+              Scheduled Enrollment Forms ({batchScheduledForms.length})
             </CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">
-              These details are prominently displayed at the top of the public
-              student enrollment form for this batch.
+              Create and schedule different forms under this batch (e.g. Early
+              Bird, Regular Admission, Test Series). Each gets its own unique
+              public URL.
             </p>
           </div>
 
           <Button
             size="sm"
-            onClick={handleSaveConfig}
-            disabled={configSaving}
-            className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold"
+            onClick={handleOpenCreateForm}
+            className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0"
           >
-            <Save className="w-3.5 h-3.5" />
-            {configSaving ? "Saving..." : "Save Header Info"}
+            <Plus className="w-3.5 h-3.5" />+ New Form for this Batch
           </Button>
         </CardHeader>
 
-        <CardContent className="p-6 space-y-4">
-          {configSavedToast && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Batch course information saved successfully! The public enrollment
-              form will reflect these updates immediately.
+        <CardContent className="p-6">
+          {batchScheduledForms.length === 0 ? (
+            <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
+              <Calendar className="w-10 h-10 text-slate-400 mx-auto" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-700">
+                  No scheduled forms created for this batch yet
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  Click the button below to create your first scheduled
+                  enrollment form. You can schedule dates, specify course
+                  details, and copy the public student link.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleOpenCreateForm}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Create First Form
+              </Button>
+            </div>
+          ) : (
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <Table>
+                <TableHeader className="bg-slate-50">
+                  <TableRow>
+                    <TableHead className="text-xs font-bold uppercase">
+                      Form Title &amp; Course
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase">
+                      Schedule Window
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase">
+                      Status
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase">
+                      Submissions
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase">
+                      Public Link
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase text-right">
+                      Actions
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {batchScheduledForms.map((item) => {
+                    const statusCheck = computeScheduledFormStatus(item);
+                    const formSubmissions = forms.filter(
+                      (f) => f.scheduledFormId === item.id,
+                    );
+                    const formPending = formSubmissions.filter(
+                      (f) => f.approvalStatus === "pending",
+                    );
+                    const formUrl = `${window.location.origin}/enroll/${item.id}`;
+                    const isCopied = copiedFormId === item.id;
+
+                    return (
+                      <TableRow key={item.id} className="hover:bg-slate-50/80">
+                        <TableCell>
+                          <div className="font-bold text-slate-900 text-sm">
+                            {item.formTitle}
+                          </div>
+                          <div className="text-xs font-medium text-indigo-700 mt-0.5">
+                            {item.courseName}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            Start: {item.startingDate || "—"} • Duration:{" "}
+                            {item.duration || "—"}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="text-xs space-y-0.5">
+                            <div>
+                              <span className="text-slate-400">Opens:</span>{" "}
+                              <span className="font-medium text-slate-700">
+                                {item.scheduleStart
+                                  ? new Date(item.scheduleStart).toLocaleString(
+                                      [],
+                                      {
+                                        dateStyle: "short",
+                                        timeStyle: "short",
+                                      },
+                                    )
+                                  : "Immediate"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400">Closes:</span>{" "}
+                              <span className="font-medium text-slate-700">
+                                {item.scheduleEnd
+                                  ? new Date(item.scheduleEnd).toLocaleString(
+                                      [],
+                                      {
+                                        dateStyle: "short",
+                                        timeStyle: "short",
+                                      },
+                                    )
+                                  : "Until Closed"}
+                              </span>
+                            </div>
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="space-y-1">
+                            <span
+                              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider ${
+                                statusCheck.status === "active"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : statusCheck.status === "scheduled"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-rose-100 text-rose-800"
+                              }`}
+                            >
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full mr-1.5 ${
+                                  statusCheck.status === "active"
+                                    ? "bg-emerald-500 animate-pulse"
+                                    : statusCheck.status === "scheduled"
+                                      ? "bg-amber-500"
+                                      : "bg-rose-500"
+                                }`}
+                              />
+                              {statusCheck.status === "active"
+                                ? "Active / Open"
+                                : statusCheck.status === "scheduled"
+                                  ? "Scheduled"
+                                  : "Closed"}
+                            </span>
+                            {statusCheck.message && (
+                              <div
+                                className="text-[10px] text-slate-400 max-w-[160px] truncate"
+                                title={statusCheck.message}
+                              >
+                                {statusCheck.message}
+                              </div>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="text-xs">
+                            <span className="font-bold text-slate-900">
+                              {formSubmissions.length}
+                            </span>{" "}
+                            Total
+                            {formPending.length > 0 && (
+                              <Badge className="ml-1.5 bg-amber-500 text-[10px] px-1.5 py-0">
+                                {formPending.length} Pending
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleCopyFormLink(item.id)}
+                              className="h-8 px-2 text-xs font-semibold text-indigo-700 border-indigo-200 hover:bg-indigo-50 gap-1"
+                            >
+                              {isCopied ? (
+                                <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                              {isCopied ? "Copied" : "Copy Link"}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => window.open(formUrl, "_blank")}
+                              className="h-8 w-8 p-0 text-slate-500 hover:text-indigo-600"
+                              title="Open public form"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleOpenEditForm(item)}
+                              className="h-8 px-2 text-slate-600 hover:text-indigo-600"
+                              title="Edit Form Settings"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleToggleFormStatus(item)}
+                              className={`h-8 px-2 text-xs font-medium ${item.isOpen ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50"}`}
+                              title={
+                                item.isOpen
+                                  ? "Close admissions"
+                                  : "Open admissions"
+                              }
+                            >
+                              {item.isOpen ? "Close" : "Open"}
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteScheduledForm(item.id)}
+                              className="h-8 px-2 text-slate-400 hover:text-rose-600"
+                              title="Delete Form"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
             </div>
           )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Online Live Crash Course Name *
-              </label>
-              <Input
-                placeholder="e.g. TNPSC COMBINED STATISTICAL SERVICES EXAMINATION - ONLINE LIVE CRASH COURSE"
-                value={config.courseName}
-                onChange={(e) =>
-                  setConfig({ ...config, courseName: e.target.value })
-                }
-                className="font-semibold text-indigo-950"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Starting Date (Dynamic / Editable) *
-              </label>
-              <Input
-                placeholder="e.g. 15th October 2026 / Immediate"
-                value={config.startingDate}
-                onChange={(e) =>
-                  setConfig({ ...config, startingDate: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Duration (Dynamic / Editable) *
-              </label>
-              <Input
-                placeholder="e.g. 60 Days / 120 Hours"
-                value={config.duration}
-                onChange={(e) =>
-                  setConfig({ ...config, duration: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Admissions Status
-              </label>
-              <select
-                className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-medium focus:ring-2 focus:ring-indigo-500 bg-white"
-                value={config.isOpen ? "open" : "closed"}
-                onChange={(e) =>
-                  setConfig({ ...config, isOpen: e.target.value === "open" })
-                }
-              >
-                <option value="open">
-                  Admissions Open (Students can enroll)
-                </option>
-                <option value="closed">
-                  Admissions Closed (Form disabled)
-                </option>
-              </select>
-            </div>
-
-            <div className="md:col-span-3">
-              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Admin Banner Note for Students (Optional)
-              </label>
-              <Textarea
-                placeholder="e.g. Admission closes strictly 2 days before commencement of live sessions. Video must be ON during live CBT tests."
-                value={config.note || ""}
-                onChange={(e) => setConfig({ ...config, note: e.target.value })}
-                rows={2}
-              />
-            </div>
-          </div>
-
-          {/* Shareable Link Display */}
-          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-indigo-600" />
-                Public Student Enrollment Link
-              </span>
-              <p className="text-xs text-slate-600 font-mono break-all select-all">
-                {getDirectBatchEnrollmentUrl(selectedBatch)}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <Button
-                size="sm"
-                onClick={handleCopyDirectLink}
-                className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
-              >
-                {copiedDirectLink ? (
-                  <CheckCheck className="w-3.5 h-3.5 text-emerald-300" />
-                ) : (
-                  <Copy className="w-3.5 h-3.5" />
-                )}
-                {copiedDirectLink ? "Copied!" : "Copy Link"}
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  window.open(
-                    getDirectBatchEnrollmentUrl(selectedBatch),
-                    "_blank",
-                  )
-                }
-                className="gap-1.5 text-xs text-indigo-700 border-indigo-300"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                Open Form
-              </Button>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
-      {/* Section 2: Student Applications & Approvals */}
+      {/* SECTION 2: CANDIDATE APPLICATIONS & APPROVAL MANAGEMENT */}
       <Card className="border-slate-200 shadow-sm">
-        <CardHeader className="py-4 px-6 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <CardHeader className="py-4 px-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <CardTitle className="text-lg font-bold text-slate-900">
               Candidate Applications &amp; Approval Management
             </CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">
-              Review registered candidates. Students cannot log in until
-              approved by an administrator.
+              Review and approve registered candidates. Students cannot log in
+              with Google or Username/Password until approved.
             </p>
           </div>
 
-          {/* Search bar */}
-          <div className="relative w-full sm:w-64">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <Input
-              placeholder="Search by name, email..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 text-xs"
-            />
+          {/* Form Filter & Search Bar */}
+          <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto">
+            {batchScheduledForms.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <Filter className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  className="px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded-md text-xs font-medium text-slate-800 focus:ring-1 focus:ring-indigo-500"
+                  value={selectedFormFilter}
+                  onChange={(e) => setSelectedFormFilter(e.target.value)}
+                >
+                  <option value="all">All Forms ({batchForms.length})</option>
+                  {batchScheduledForms.map((sf) => (
+                    <option key={sf.id} value={sf.id}>
+                      {sf.formTitle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div className="relative flex-1 md:w-64">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search candidate, email..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 text-xs"
+              />
+            </div>
           </div>
         </CardHeader>
 
@@ -624,7 +883,6 @@ export default function EnrollmentManagement() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Render table for each tab */}
             {["pending", "approved", "rejected", "all"].map((tabKey) => {
               const currentList =
                 tabKey === "pending"
@@ -650,6 +908,9 @@ export default function EnrollmentManagement() {
                               Candidate Name
                             </TableHead>
                             <TableHead className="text-xs font-bold uppercase">
+                              Form / Course
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
                               Contact Info
                             </TableHead>
                             <TableHead className="text-xs font-bold uppercase">
@@ -659,7 +920,7 @@ export default function EnrollmentManagement() {
                               Work &amp; Experience
                             </TableHead>
                             <TableHead className="text-xs font-bold uppercase">
-                              Generated Credentials
+                              Portal Credentials
                             </TableHead>
                             <TableHead className="text-xs font-bold uppercase">
                               Status
@@ -694,6 +955,17 @@ export default function EnrollmentManagement() {
                                   </div>
                                   <div className="text-[11px] text-slate-400 capitalize">
                                     {p?.gender} • {d?.maritalStatus}
+                                  </div>
+                                </TableCell>
+
+                                <TableCell>
+                                  <div className="text-xs font-bold text-indigo-900">
+                                    {form.scheduledFormTitle ||
+                                      form.courseName ||
+                                      "Default Form"}
+                                  </div>
+                                  <div className="text-[10px] text-slate-500 mt-0.5">
+                                    Batch: {form.batchName || "—"}
                                   </div>
                                 </TableCell>
 
@@ -798,7 +1070,6 @@ export default function EnrollmentManagement() {
 
                                 <TableCell className="text-right">
                                   <div className="flex items-center justify-end gap-1.5">
-                                    {/* Approve Button */}
                                     {isPending && (
                                       <Button
                                         size="sm"
@@ -811,7 +1082,6 @@ export default function EnrollmentManagement() {
                                       </Button>
                                     )}
 
-                                    {/* Reject Button */}
                                     {isPending && (
                                       <Button
                                         size="sm"
@@ -819,12 +1089,13 @@ export default function EnrollmentManagement() {
                                         onClick={() => handleReject(form.id)}
                                         disabled={actionLoadingId === form.id}
                                         className="text-rose-600 border-rose-200 hover:bg-rose-50 text-xs h-8 px-2"
+                                        title="Reject Application"
                                       >
                                         <XCircle className="w-3.5 h-3.5" />
                                       </Button>
                                     )}
 
-                                    {/* View Details Dialog */}
+                                    {/* View Full Modal */}
                                     <Dialog>
                                       <DialogTrigger asChild>
                                         <Button
@@ -838,7 +1109,7 @@ export default function EnrollmentManagement() {
                                       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                                         <DialogHeader>
                                           <DialogTitle>
-                                            Candidate Application:{" "}
+                                            Application:{" "}
                                             {p?.studentName || p?.candidateName}
                                           </DialogTitle>
                                         </DialogHeader>
@@ -872,7 +1143,6 @@ export default function EnrollmentManagement() {
                                       </DialogContent>
                                     </Dialog>
 
-                                    {/* Download PDF */}
                                     <Button
                                       variant="ghost"
                                       size="sm"
@@ -885,13 +1155,14 @@ export default function EnrollmentManagement() {
                                       <FileDown className="w-3.5 h-3.5" />
                                     </Button>
 
-                                    {/* Delete Button */}
                                     <Button
                                       variant="ghost"
                                       size="sm"
                                       title="Delete Record"
                                       className="h-8 px-2 text-slate-400 hover:text-rose-600"
-                                      onClick={() => handleDelete(form.id)}
+                                      onClick={() =>
+                                        handleDeleteApplication(form.id)
+                                      }
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
                                     </Button>
@@ -912,8 +1183,8 @@ export default function EnrollmentManagement() {
           {/* Export Actions */}
           <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-500">
-              Export all {batchForms.length} submitted applications for this
-              batch to an Excel spreadsheet.
+              Export all {batchForms.length} applications for this batch to an
+              Excel spreadsheet (.xlsx).
             </span>
             <Button
               variant="outline"
@@ -933,6 +1204,213 @@ export default function EnrollmentManagement() {
           </div>
         </CardContent>
       </Card>
+
+      {/* CREATE / EDIT SCHEDULED FORM MODAL */}
+      <Dialog open={showFormModal} onOpenChange={setShowFormModal}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-indigo-600" />
+              {modalData.id
+                ? "Edit Scheduled Enrollment Form"
+                : "Create & Schedule New Enrollment Form"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveScheduledForm} className="space-y-4 pt-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Target Batch *
+              </label>
+              <select
+                className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-lg text-sm font-semibold text-slate-900 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                value={modalData.batchId}
+                onChange={(e) => {
+                  const bId = e.target.value;
+                  const b = batches.find((x) => x.id === bId);
+                  setModalData({
+                    ...modalData,
+                    batchId: bId,
+                    courseName: modalData.courseName || b?.name || "",
+                  });
+                }}
+                required
+              >
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name} ({b.studentCount || 0} students)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Form Title / Campaign Name *
+              </label>
+              <Input
+                placeholder="e.g. October Batch Regular Admission / Fast-Track Crash Course"
+                value={modalData.formTitle}
+                onChange={(e) =>
+                  setModalData({ ...modalData, formTitle: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Online Live Crash Course Name (Displayed on Form Banner) *
+              </label>
+              <Input
+                placeholder="e.g. TNPSC COMBINED STATISTICAL SERVICES EXAMINATION - ONLINE LIVE CRASH COURSE"
+                value={modalData.courseName}
+                onChange={(e) =>
+                  setModalData({ ...modalData, courseName: e.target.value })
+                }
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Starting Date *
+                </label>
+                <Input
+                  placeholder="e.g. 15th October 2026 / Immediate"
+                  value={modalData.startingDate}
+                  onChange={(e) =>
+                    setModalData({ ...modalData, startingDate: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                  Course Duration *
+                </label>
+                <Input
+                  placeholder="e.g. 60 Days / 120 Hours"
+                  value={modalData.duration}
+                  onChange={(e) =>
+                    setModalData({ ...modalData, duration: e.target.value })
+                  }
+                  required
+                />
+              </div>
+            </div>
+
+            {/* Schedule Window */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+              <div className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                Schedule Opening &amp; Closing Window (Optional)
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Form Opening Date &amp; Time
+                  </label>
+                  <Input
+                    type="datetime-local"
+                    value={modalData.scheduleStart}
+                    onChange={(e) =>
+                      setModalData({
+                        ...modalData,
+                        scheduleStart: e.target.value,
+                      })
+                    }
+                    className="text-xs"
+                  />
+                  <span className="text-[10px] text-slate-400">
+                    Leave blank for immediate opening
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Deadline / Closing Date &amp; Time
+                  </label>
+                  <Input
+                    type="datetime-local"
+                    value={modalData.scheduleEnd}
+                    onChange={(e) =>
+                      setModalData({
+                        ...modalData,
+                        scheduleEnd: e.target.value,
+                      })
+                    }
+                    className="text-xs"
+                  />
+                  <span className="text-[10px] text-slate-400">
+                    Leave blank for no automatic deadline
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Admin Banner Note for Students (Optional)
+              </label>
+              <Textarea
+                placeholder="e.g. Admissions strictly based on qualification verification. Keep video ON during live CBT tests."
+                value={modalData.note}
+                onChange={(e) =>
+                  setModalData({ ...modalData, note: e.target.value })
+                }
+                rows={2}
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
+                Form Status
+              </label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-md text-sm font-medium focus:ring-2 focus:ring-indigo-500"
+                value={modalData.isOpen ? "open" : "closed"}
+                onChange={(e) =>
+                  setModalData({
+                    ...modalData,
+                    isOpen: e.target.value === "open",
+                  })
+                }
+              >
+                <option value="open">
+                  Open / Active (Students can enroll)
+                </option>
+                <option value="closed">Closed / Disabled</option>
+              </select>
+            </div>
+
+            <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowFormModal(false)}
+                disabled={modalSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={modalSaving}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold"
+              >
+                {modalSaving
+                  ? "Saving..."
+                  : modalData.id
+                    ? "Update Form"
+                    : "Create Form & Generate Link"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

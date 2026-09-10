@@ -32,6 +32,8 @@ import type {
 import {
   getBatchById,
   getBatchEnrollmentConfig,
+  getScheduledEnrollmentFormById,
+  computeScheduledFormStatus,
   getShareableLinkByToken,
   recordShareableLinkClick,
   submitBatchEnrollment,
@@ -45,10 +47,12 @@ export default function PublicEnrollmentForm() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Resolved Batch Info
+  // Resolved Batch & Scheduled Form Info
   const [batchId, setBatchId] = useState<string>("");
   const [batchName, setBatchName] = useState<string>("");
   const [config, setConfig] = useState<BatchEnrollmentConfig | null>(null);
+  const [scheduledFormId, setScheduledFormId] = useState<string>("");
+  const [scheduledFormTitle, setScheduledFormTitle] = useState<string>("");
 
   // Success State with Generated Credentials
   const [submittedResult, setSubmittedResult] = useState<{
@@ -116,24 +120,53 @@ export default function PublicEnrollmentForm() {
       setError(null);
 
       try {
-        let resolvedBatchId = params.batchId || "";
+        const lookupId = params.batchId || params.token || "";
 
-        if (!resolvedBatchId && params.token) {
-          // Attempt to match token from shareableFormLinks
+        if (!lookupId) {
+          setError(
+            "No enrollment form or batch specified. Please check the link.",
+          );
+          setLoading(false);
+          return;
+        }
+
+        // 1. Check if lookupId is a Scheduled Enrollment Form
+        const scheduledForm = await getScheduledEnrollmentFormById(lookupId);
+        if (scheduledForm && !cancelled) {
+          const statusCheck = computeScheduledFormStatus(scheduledForm);
+          if (statusCheck.status !== "active") {
+            setError(
+              statusCheck.message ||
+                "Admissions for this form are currently closed.",
+            );
+            setLoading(false);
+            return;
+          }
+
+          setScheduledFormId(scheduledForm.id);
+          setScheduledFormTitle(scheduledForm.formTitle);
+          setBatchId(scheduledForm.batchId);
+          setBatchName(scheduledForm.batchName || "");
+          setConfig({
+            batchId: scheduledForm.batchId,
+            courseName: scheduledForm.courseName,
+            startingDate: scheduledForm.startingDate,
+            duration: scheduledForm.duration,
+            note: scheduledForm.note,
+            isOpen: scheduledForm.isOpen,
+          });
+          setLoading(false);
+          return;
+        }
+
+        // 2. Fallback: Lookup by token in shareableFormLinks or direct batchId
+        let resolvedBatchId = lookupId;
+        if (params.token) {
           const link = await getShareableLinkByToken(params.token);
           if (link) {
             resolvedBatchId = link.batchId;
             void recordShareableLinkClick(link.id);
-          } else {
-            // Fallback: token in URL might be a raw batchId
-            resolvedBatchId = params.token;
           }
-        }
-
-        if (!resolvedBatchId) {
-          setError("No batch specified for enrollment. Please check the link.");
-          setLoading(false);
-          return;
         }
 
         // Fetch batch and enrollment config in parallel
@@ -244,6 +277,8 @@ export default function PublicEnrollmentForm() {
         batchId,
         batchName,
         courseName: config?.courseName || batchName,
+        scheduledFormId: scheduledFormId || undefined,
+        scheduledFormTitle: scheduledFormTitle || undefined,
         personalDetails: {
           ...personalDetails,
           studentName:
