@@ -1367,18 +1367,6 @@ export default function EnrollmentManagement() {
                                     >
                                       <FileDown className="w-3.5 h-3.5" />
                                     </Button>
-
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      title="Delete Record"
-                                      className="h-8 px-2 text-slate-400 hover:text-rose-600"
-                                      onClick={() =>
-                                        handleDeleteApplication(form.id)
-                                      }
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
                                   </div>
                                 </TableCell>
                               </TableRow>

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useData } from "../../context/DataContext";
 import type { Student } from "../../context/DataContext";
 import { Button } from "../../components/ui/button";
@@ -476,8 +477,18 @@ export default function StudentManagement() {
       });
     }
   };
+  const [searchParams] = useSearchParams();
+  const paramBatchId = searchParams.get("batchId");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBatch, setSelectedBatch] = useState<string>("all");
+  const [selectedBatch, setSelectedBatch] = useState<string>(
+    paramBatchId || "all",
+  );
+
+  useEffect(() => {
+    if (paramBatchId) {
+      setSelectedBatch(paramBatchId);
+    }
+  }, [paramBatchId]);
   const [studentSortKey, setStudentSortKey] = useState<StudentSortKey>("name");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
