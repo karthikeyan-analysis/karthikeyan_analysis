@@ -145,13 +145,17 @@ export default function PublicEnrollmentForm() {
         if (cancelled) return;
 
         if (!batch) {
-          setError("The requested batch was not found. Please contact the administrator.");
+          setError(
+            "The requested batch was not found. Please contact the administrator.",
+          );
           setLoading(false);
           return;
         }
 
         if (enrollmentConfig && enrollmentConfig.isOpen === false) {
-          setError("Enrollment for this batch is currently closed by the administrator.");
+          setError(
+            "Enrollment for this batch is currently closed by the administrator.",
+          );
           setLoading(false);
           return;
         }
@@ -227,7 +231,9 @@ export default function PublicEnrollmentForm() {
     }
 
     if (missing.length > 0) {
-      setError(`Please complete the following required fields:\n• ${missing.join("\n• ")}`);
+      setError(
+        `Please complete the following required fields:\n• ${missing.join("\n• ")}`,
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -240,7 +246,8 @@ export default function PublicEnrollmentForm() {
         courseName: config?.courseName || batchName,
         personalDetails: {
           ...personalDetails,
-          studentName: `${personalDetails.candidateName.trim()} ${personalDetails.initials.trim()}`.trim(),
+          studentName:
+            `${personalDetails.candidateName.trim()} ${personalDetails.initials.trim()}`.trim(),
         },
         addressDetails,
         educationalDetails,
@@ -257,7 +264,10 @@ export default function PublicEnrollmentForm() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
       console.error("Submission failed:", err);
-      setError(err?.message || "Failed to submit enrollment application. Please try again.");
+      setError(
+        err?.message ||
+          "Failed to submit enrollment application. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -268,7 +278,9 @@ export default function PublicEnrollmentForm() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
         <div className="text-center space-y-3">
           <Loader2 className="w-10 h-10 animate-spin mx-auto text-indigo-600" />
-          <p className="text-sm font-semibold text-slate-700">Loading batch enrollment form...</p>
+          <p className="text-sm font-semibold text-slate-700">
+            Loading batch enrollment form...
+          </p>
         </div>
       </div>
     );
@@ -282,9 +294,12 @@ export default function PublicEnrollmentForm() {
           <Card className="border-emerald-200 shadow-xl overflow-hidden bg-white">
             <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white text-center">
               <CheckCircle2 className="w-16 h-16 mx-auto mb-3 text-emerald-100" />
-              <h1 className="text-2xl md:text-3xl font-extrabold">Application Registered!</h1>
+              <h1 className="text-2xl md:text-3xl font-extrabold">
+                Application Registered!
+              </h1>
               <p className="text-emerald-100 text-sm mt-1">
-                Your batch enrollment application has been recorded successfully.
+                Your batch enrollment application has been recorded
+                successfully.
               </p>
             </div>
 
@@ -297,7 +312,12 @@ export default function PublicEnrollmentForm() {
                     Verification Status: Pending Admin Approval
                   </span>
                   <p className="text-xs md:text-sm text-amber-800 leading-relaxed">
-                    The institute administrator must verify and approve your registration before your student account is activated. Once approved, you will be authorized to log in via <strong>Continue with Google</strong> using your registered email (<code>{personalDetails.email}</code>) or with the portal credentials below.
+                    The institute administrator must verify and approve your
+                    registration before your student account is activated. Once
+                    approved, you will be authorized to log in via{" "}
+                    <strong>Continue with Google</strong> using your registered
+                    email (<code>{personalDetails.email}</code>) or with the
+                    portal credentials below.
                   </p>
                 </div>
               </div>
@@ -332,28 +352,46 @@ export default function PublicEnrollmentForm() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">Candidate Name</span>
-                    <span className="text-sm font-bold text-slate-900 mt-0.5 block">{submittedResult.candidateName}</span>
+                    <span className="text-xs text-slate-500 font-medium block">
+                      Candidate Name
+                    </span>
+                    <span className="text-sm font-bold text-slate-900 mt-0.5 block">
+                      {submittedResult.candidateName}
+                    </span>
                   </div>
 
                   <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">Student ID / Reg No</span>
-                    <span className="text-sm font-bold text-indigo-700 font-mono mt-0.5 block">{submittedResult.studentId}</span>
+                    <span className="text-xs text-slate-500 font-medium block">
+                      Student ID / Reg No
+                    </span>
+                    <span className="text-sm font-bold text-indigo-700 font-mono mt-0.5 block">
+                      {submittedResult.studentId}
+                    </span>
                   </div>
 
                   <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">Portal Username</span>
-                    <span className="text-base font-bold text-indigo-900 font-mono mt-0.5 block">{submittedResult.username}</span>
+                    <span className="text-xs text-slate-500 font-medium block">
+                      Portal Username
+                    </span>
+                    <span className="text-base font-bold text-indigo-900 font-mono mt-0.5 block">
+                      {submittedResult.username}
+                    </span>
                   </div>
 
                   <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">Portal Password</span>
-                    <span className="text-base font-bold text-indigo-900 font-mono mt-0.5 block">{submittedResult.password}</span>
+                    <span className="text-xs text-slate-500 font-medium block">
+                      Portal Password
+                    </span>
+                    <span className="text-base font-bold text-indigo-900 font-mono mt-0.5 block">
+                      {submittedResult.password}
+                    </span>
                   </div>
                 </div>
 
                 <p className="text-[11px] text-slate-500 italic">
-                  * Please save or screenshot these credentials. You will need them to access CBT tests, study material, and live classes once the admin approves your account.
+                  * Please save or screenshot these credentials. You will need
+                  them to access CBT tests, study material, and live classes
+                  once the admin approves your account.
                 </p>
               </div>
 
@@ -426,15 +464,13 @@ export default function PublicEnrollmentForm() {
           />
 
           {/* Section 5: Declaration & Terms */}
-          <DeclarationTermsForm
-            terms={terms}
-            onChange={setTerms}
-          />
+          <DeclarationTermsForm terms={terms} onChange={setTerms} />
 
           {/* Submit Button */}
           <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="text-xs text-slate-500 text-center sm:text-left">
-              Make sure all details are accurate before submitting. Credentials will be generated upon submission.
+              Make sure all details are accurate before submitting. Credentials
+              will be generated upon submission.
             </div>
 
             <Button

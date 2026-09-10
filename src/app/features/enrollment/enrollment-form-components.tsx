@@ -30,7 +30,8 @@ import type {
 
 const INPUT_CLS =
   "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-sm";
-const LABEL_CLS = "block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5";
+const LABEL_CLS =
+  "block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5";
 const SELECT_CLS =
   "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all text-sm";
 
@@ -65,7 +66,8 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
               KARTHIKEYAN TNPSC STUDY CIRCLE
             </h1>
             <p className="text-sm md:text-base text-indigo-100 max-w-2xl font-medium">
-              Premier Coaching Institute for Tamil Nadu Statistical Services &amp; Competitive Examinations
+              Premier Coaching Institute for Tamil Nadu Statistical Services
+              &amp; Competitive Examinations
             </p>
           </div>
 
@@ -75,7 +77,9 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
             </span>
             <span className="text-base md:text-lg font-bold text-white flex items-center justify-center gap-1.5 mt-1">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-              {config?.isOpen === false ? "Admissions Closed" : "Admissions Open"}
+              {config?.isOpen === false
+                ? "Admissions Closed"
+                : "Admissions Open"}
             </span>
           </div>
         </div>
@@ -154,14 +158,18 @@ interface PersonalContactFormProps {
   onChange: (data: PersonalDetails) => void;
 }
 
-export function PersonalContactForm({ data, onChange }: PersonalContactFormProps) {
+export function PersonalContactForm({
+  data,
+  onChange,
+}: PersonalContactFormProps) {
   const set = (key: keyof PersonalDetails, value: any) => {
     onChange({ ...data, [key]: value });
   };
 
   const handleCandidateNameChange = (val: string) => {
     const uppercaseVal = val.toUpperCase();
-    const fullName = `${uppercaseVal} ${(data.initials || "").toUpperCase()}`.trim();
+    const fullName =
+      `${uppercaseVal} ${(data.initials || "").toUpperCase()}`.trim();
     onChange({
       ...data,
       candidateName: uppercaseVal,
@@ -171,7 +179,8 @@ export function PersonalContactForm({ data, onChange }: PersonalContactFormProps
 
   const handleInitialsChange = (val: string) => {
     const uppercaseVal = val.toUpperCase();
-    const fullName = `${(data.candidateName || "").toUpperCase()} ${uppercaseVal}`.trim();
+    const fullName =
+      `${(data.candidateName || "").toUpperCase()} ${uppercaseVal}`.trim();
     onChange({
       ...data,
       initials: uppercaseVal,
@@ -279,7 +288,9 @@ export function PersonalContactForm({ data, onChange }: PersonalContactFormProps
               className={INPUT_CLS}
               placeholder="student@example.com"
               value={data.email || ""}
-              onChange={(e) => set("email", e.target.value.toLowerCase().trim())}
+              onChange={(e) =>
+                set("email", e.target.value.toLowerCase().trim())
+              }
               required
             />
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -469,7 +480,10 @@ export function EducationalQualificationsForm({
     onChange({ records: updated });
   };
 
-  const handleUpdateRow = (index: number, updates: Partial<EducationRecord>) => {
+  const handleUpdateRow = (
+    index: number,
+    updates: Partial<EducationRecord>,
+  ) => {
     const updated = [...records];
     updated[index] = { ...updated[index], ...updates };
     onChange({ records: updated });
@@ -501,15 +515,22 @@ export function EducationalQualificationsForm({
         <div className="bg-indigo-50/70 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-900 flex items-start gap-2">
           <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
           <span>
-            <strong>Hierarchical Rule:</strong> Degree selection follows a sequential order (must add <strong>B.Sc.</strong> first before unlocking <strong>M.Sc.</strong>, and M.Sc. before unlocking <strong>M.Phil. / Ph.D.</strong>).
+            <strong>Hierarchical Rule:</strong> Degree selection follows a
+            sequential order (must add <strong>B.Sc.</strong> first before
+            unlocking <strong>M.Sc.</strong>, and M.Sc. before unlocking{" "}
+            <strong>M.Phil. / Ph.D.</strong>).
           </span>
         </div>
 
         {records.length === 0 ? (
           <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
             <GraduationCap className="w-10 h-10 text-slate-400 mx-auto mb-2" />
-            <p className="text-sm font-semibold text-slate-700">No educational qualifications added yet</p>
-            <p className="text-xs text-slate-500 mt-1 mb-4">Click below to start with your first degree (B.Sc.)</p>
+            <p className="text-sm font-semibold text-slate-700">
+              No educational qualifications added yet
+            </p>
+            <p className="text-xs text-slate-500 mt-1 mb-4">
+              Click below to start with your first degree (B.Sc.)
+            </p>
             <Button
               type="button"
               size="sm"
@@ -542,7 +563,9 @@ export function EducationalQualificationsForm({
                           className={SELECT_CLS}
                           value={rec.degree}
                           onChange={(e) =>
-                            handleUpdateRow(index, { degree: e.target.value as AllowedDegree })
+                            handleUpdateRow(index, {
+                              degree: e.target.value as AllowedDegree,
+                            })
                           }
                         >
                           {index === 0 && <option value="BSc">B.Sc.</option>}
@@ -577,7 +600,9 @@ export function EducationalQualificationsForm({
                             placeholder="Enter Subject / Major"
                             value={rec.otherMajor || ""}
                             onChange={(e) =>
-                              handleUpdateRow(index, { otherMajor: e.target.value })
+                              handleUpdateRow(index, {
+                                otherMajor: e.target.value,
+                              })
                             }
                             required
                           />
@@ -592,7 +617,9 @@ export function EducationalQualificationsForm({
                           placeholder="e.g. 78.5%"
                           value={rec.percentage || ""}
                           onChange={(e) =>
-                            handleUpdateRow(index, { percentage: e.target.value })
+                            handleUpdateRow(index, {
+                              percentage: e.target.value,
+                            })
                           }
                           required
                         />
@@ -692,7 +719,9 @@ export function DemographicDetailsForm({
 
           {/* Previous TNPSC Exam Experience */}
           <div>
-            <label className={LABEL_CLS}>Previous TNPSC Exam Experience *</label>
+            <label className={LABEL_CLS}>
+              Previous TNPSC Exam Experience *
+            </label>
             <select
               className={SELECT_CLS}
               value={data.previousTnpscExperience || "First Attempt"}
@@ -762,7 +791,10 @@ interface DeclarationTermsFormProps {
   onChange: (terms: TermsAndConditions) => void;
 }
 
-export function DeclarationTermsForm({ terms, onChange }: DeclarationTermsFormProps) {
+export function DeclarationTermsForm({
+  terms,
+  onChange,
+}: DeclarationTermsFormProps) {
   const toggleFinalAgree = (checked: boolean) => {
     onChange({
       ...terms,
@@ -797,7 +829,8 @@ export function DeclarationTermsForm({ terms, onChange }: DeclarationTermsFormPr
             DECLARATION &amp; TERMS AND CONDITIONS
           </p>
           <p>
-            By submitting this application, I acknowledge and agree to the following terms and conditions:
+            By submitting this application, I acknowledge and agree to the
+            following terms and conditions:
           </p>
           <ol className="list-decimal list-inside space-y-2 text-slate-800 font-normal">
             {DECLARATION_TERMS_LIST.map((text, i) => (
@@ -819,7 +852,8 @@ export function DeclarationTermsForm({ terms, onChange }: DeclarationTermsFormPr
               required
             />
             <span className="text-sm font-bold text-indigo-950">
-              I read and confirm the above details are correct, and I agree to the above Declaration &amp; Terms and Conditions. *
+              I read and confirm the above details are correct, and I agree to
+              the above Declaration &amp; Terms and Conditions. *
             </span>
           </label>
         </div>
@@ -850,8 +884,14 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
             Generated Student Credentials
           </span>
           <div className="text-sm font-semibold text-slate-900 mt-0.5">
-            Username: <code className="bg-white px-2 py-0.5 rounded border border-indigo-200 font-mono text-indigo-700">{form.portalUsername}</code>
-            {" • "}Password: <code className="bg-white px-2 py-0.5 rounded border border-indigo-200 font-mono text-indigo-700">{form.portalPassword}</code>
+            Username:{" "}
+            <code className="bg-white px-2 py-0.5 rounded border border-indigo-200 font-mono text-indigo-700">
+              {form.portalUsername}
+            </code>
+            {" • "}Password:{" "}
+            <code className="bg-white px-2 py-0.5 rounded border border-indigo-200 font-mono text-indigo-700">
+              {form.portalPassword}
+            </code>
           </div>
         </div>
         <span
@@ -877,12 +917,38 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
           Personal &amp; Contact Details
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-          <div><span className="text-slate-500">Candidate Name:</span> <span className="font-semibold text-slate-800">{p?.studentName || p?.candidateName}</span></div>
-          <div><span className="text-slate-500">Gender:</span> <span className="font-semibold text-slate-800 capitalize">{p?.gender}</span></div>
-          <div><span className="text-slate-500">Father's Name:</span> <span className="font-semibold text-slate-800">{p?.fatherName}</span></div>
-          <div><span className="text-slate-500">Email:</span> <span className="font-semibold text-slate-800">{p?.email}</span></div>
-          <div><span className="text-slate-500">Mobile:</span> <span className="font-semibold text-slate-800">{p?.mobileNo}</span></div>
-          <div><span className="text-slate-500">WhatsApp:</span> <span className="font-semibold text-slate-800">{p?.whatsappNo}</span></div>
+          <div>
+            <span className="text-slate-500">Candidate Name:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {p?.studentName || p?.candidateName}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Gender:</span>{" "}
+            <span className="font-semibold text-slate-800 capitalize">
+              {p?.gender}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Father's Name:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {p?.fatherName}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Email:</span>{" "}
+            <span className="font-semibold text-slate-800">{p?.email}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">Mobile:</span>{" "}
+            <span className="font-semibold text-slate-800">{p?.mobileNo}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">WhatsApp:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {p?.whatsappNo}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -892,11 +958,28 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
           Address Breakdown
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-          <div><span className="text-slate-500">Door No:</span> <span className="font-semibold text-slate-800">{a?.doorNo}</span></div>
-          <div><span className="text-slate-500">Street Name:</span> <span className="font-semibold text-slate-800">{a?.streetName || a?.streetNagar}</span></div>
-          <div><span className="text-slate-500">Taluk:</span> <span className="font-semibold text-slate-800">{a?.taluk}</span></div>
-          <div><span className="text-slate-500">District:</span> <span className="font-semibold text-slate-800">{a?.district}</span></div>
-          <div><span className="text-slate-500">Pincode:</span> <span className="font-semibold text-slate-800">{a?.pincode}</span></div>
+          <div>
+            <span className="text-slate-500">Door No:</span>{" "}
+            <span className="font-semibold text-slate-800">{a?.doorNo}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">Street Name:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {a?.streetName || a?.streetNagar}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Taluk:</span>{" "}
+            <span className="font-semibold text-slate-800">{a?.taluk}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">District:</span>{" "}
+            <span className="font-semibold text-slate-800">{a?.district}</span>
+          </div>
+          <div>
+            <span className="text-slate-500">Pincode:</span>{" "}
+            <span className="font-semibold text-slate-800">{a?.pincode}</span>
+          </div>
         </div>
       </div>
 
@@ -919,8 +1002,14 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
               {ed?.records?.map((r, i) => (
                 <tr key={i}>
                   <td className="p-2 font-semibold">{r.degree || r.tier}</td>
-                  <td className="p-2">{r.major === "Other" ? r.otherMajor : (r.major || r.majorStream)}</td>
-                  <td className="p-2">{r.percentage || r.percentageOfMarks}%</td>
+                  <td className="p-2">
+                    {r.major === "Other"
+                      ? r.otherMajor
+                      : r.major || r.majorStream}
+                  </td>
+                  <td className="p-2">
+                    {r.percentage || r.percentageOfMarks}%
+                  </td>
                   <td className="p-2">{r.pstm || "No"}</td>
                 </tr>
               ))}
@@ -935,13 +1024,38 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
           Demographic &amp; Background Details
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-          <div><span className="text-slate-500">Date of Birth:</span> <span className="font-semibold text-slate-800">{d?.dateOfBirth}</span></div>
-          <div><span className="text-slate-500">Marital Status:</span> <span className="font-semibold text-slate-800">{d?.maritalStatus}</span></div>
-          <div><span className="text-slate-500">Work Status:</span> <span className="font-semibold text-slate-800">{d?.workStatus}</span></div>
+          <div>
+            <span className="text-slate-500">Date of Birth:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {d?.dateOfBirth}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Marital Status:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {d?.maritalStatus}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Work Status:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {d?.workStatus}
+            </span>
+          </div>
           {d?.departmentName && (
-            <div className="col-span-2"><span className="text-slate-500">Department:</span> <span className="font-semibold text-slate-800">{d.departmentName}</span></div>
+            <div className="col-span-2">
+              <span className="text-slate-500">Department:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {d.departmentName}
+              </span>
+            </div>
           )}
-          <div><span className="text-slate-500">TNPSC Experience:</span> <span className="font-semibold text-slate-800">{d?.previousTnpscExperience}</span></div>
+          <div>
+            <span className="text-slate-500">TNPSC Experience:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {d?.previousTnpscExperience}
+            </span>
+          </div>
         </div>
       </div>
     </div>

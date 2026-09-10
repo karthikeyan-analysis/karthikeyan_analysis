@@ -70,25 +70,38 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         if (s.status !== "active") return false;
         if (!studentBatchId) return true;
         if (s.batchId === studentBatchId) return true;
-        if (s.batchIds && Array.isArray(s.batchIds) && s.batchIds.includes(studentBatchId)) return true;
+        if (
+          s.batchIds &&
+          Array.isArray(s.batchIds) &&
+          s.batchIds.includes(studentBatchId)
+        )
+          return true;
         return false;
       });
 
       const activeSessionsCount = relevantSessions.length;
 
-      const q2 = query(collection(db, "liveClasses"), where("status", "==", "active"));
-      onSnapshot(q2, (snap2) => {
-        const liveClassActiveTests = snap2.docs.filter((d) => {
-          const data = d.data();
-          if (!data.liveTestId || data.liveTestActive !== true) return false;
-          if (!studentBatchId) return true;
-          const bIds: string[] = data.batchIds || (data.batchId ? [data.batchId] : []);
-          return bIds.includes(studentBatchId);
-        }).length;
-        setActiveLiveTestCount(activeSessionsCount + liveClassActiveTests);
-      }, () => {
-        setActiveLiveTestCount(activeSessionsCount);
-      });
+      const q2 = query(
+        collection(db, "liveClasses"),
+        where("status", "==", "active"),
+      );
+      onSnapshot(
+        q2,
+        (snap2) => {
+          const liveClassActiveTests = snap2.docs.filter((d) => {
+            const data = d.data();
+            if (!data.liveTestId || data.liveTestActive !== true) return false;
+            if (!studentBatchId) return true;
+            const bIds: string[] =
+              data.batchIds || (data.batchId ? [data.batchId] : []);
+            return bIds.includes(studentBatchId);
+          }).length;
+          setActiveLiveTestCount(activeSessionsCount + liveClassActiveTests);
+        },
+        () => {
+          setActiveLiveTestCount(activeSessionsCount);
+        },
+      );
     });
 
     return () => {
@@ -238,10 +251,26 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
       label: "Live Classes Studio",
       icon: Video,
       items: [
-        { to: "/admin/live-classes?tab=overview", icon: Activity, label: "Overview" },
-        { to: "/admin/live-classes?tab=meetings", icon: Video, label: "Meeting Links" },
-        { to: "/admin/live-classes?tab=recordings", icon: Download, label: "Recordings" },
-        { to: "/admin/live-classes?tab=attendance", icon: FileText, label: "Attendance" },
+        {
+          to: "/admin/live-classes?tab=overview",
+          icon: Activity,
+          label: "Overview",
+        },
+        {
+          to: "/admin/live-classes?tab=meetings",
+          icon: Video,
+          label: "Meeting Links",
+        },
+        {
+          to: "/admin/live-classes?tab=recordings",
+          icon: Download,
+          label: "Recordings",
+        },
+        {
+          to: "/admin/live-classes?tab=attendance",
+          icon: FileText,
+          label: "Attendance",
+        },
         { to: "/admin/live-tests", icon: Award, label: "Live Test Monitor" },
       ],
     },
@@ -250,10 +279,30 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   // Student Categories
   const studentCategories: PrimaryCategory[] = [
     { id: "s_dash", label: "Dashboard", icon: LayoutDashboard, to: "/student" },
-    { id: "s_live", label: "Live Classes", icon: Video, to: "/student/live-classes" },
-    { id: "s_live_test", label: "Live Test", icon: Award, to: "/student/tests?view=live" },
-    { id: "s_media", label: "Media Library", icon: BookOpen, to: "/student/media" },
-    { id: "s_tests", label: "Tests & Exams", icon: ClipboardList, to: "/student/tests" },
+    {
+      id: "s_live",
+      label: "Live Classes",
+      icon: Video,
+      to: "/student/live-classes",
+    },
+    {
+      id: "s_live_test",
+      label: "Live Test",
+      icon: Award,
+      to: "/student/tests?view=live",
+    },
+    {
+      id: "s_media",
+      label: "Media Library",
+      icon: BookOpen,
+      to: "/student/media",
+    },
+    {
+      id: "s_tests",
+      label: "Tests & Exams",
+      icon: ClipboardList,
+      to: "/student/tests",
+    },
   ];
 
   const categories = isAdmin
@@ -270,8 +319,7 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
     const matched = categories.find((cat) =>
       cat.items?.some(
         (item) =>
-          fullPath === item.to ||
-          location.pathname === item.to.split("?")[0],
+          fullPath === item.to || location.pathname === item.to.split("?")[0],
       ),
     );
     if (matched) {
@@ -286,7 +334,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
   return (
     <>
       {isOpen && (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden" onClick={onClose} />
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-xs lg:hidden"
+          onClick={onClose}
+        />
       )}
 
       <aside
@@ -315,7 +366,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         {/* Navigation Content Area */}
         <nav className="flex-1 space-y-3 overflow-y-auto px-3 py-4 scrollbar-thin scrollbar-thumb-slate-800">
           {/* LEVEL 2: DRILL-DOWN SUB-OPTIONS VIEW */}
-          {activeCategory && selectedCategoryObj && selectedCategoryObj.items ? (
+          {activeCategory &&
+          selectedCategoryObj &&
+          selectedCategoryObj.items ? (
             <div className="space-y-3">
               {/* Sleek Back Button to Level 1 */}
               <button
@@ -348,10 +401,12 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                   Category Options
                 </p>
                 {selectedCategoryObj.items.map((sub) => {
-                  const isItemActive =
-                    sub.to.includes("?")
-                      ? fullPath === sub.to || (location.pathname === "/admin/live-classes" && !location.search && sub.to.endsWith("tab=overview"))
-                      : location.pathname === sub.to;
+                  const isItemActive = sub.to.includes("?")
+                    ? fullPath === sub.to ||
+                      (location.pathname === "/admin/live-classes" &&
+                        !location.search &&
+                        sub.to.endsWith("tab=overview"))
+                    : location.pathname === sub.to;
 
                   return (
                     <NavLink
@@ -369,7 +424,9 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                         <sub.icon
                           className={cn(
                             "h-4 w-4",
-                            isItemActive ? "text-white" : "text-indigo-400 group-hover:text-white",
+                            isItemActive
+                              ? "text-white"
+                              : "text-indigo-400 group-hover:text-white",
                           )}
                         />
                         <span>{sub.label}</span>
@@ -390,9 +447,13 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               </p>
               <div className="space-y-1.5">
                 {categories.map((cat) => {
-                  const hasSubItems = Boolean(cat.items && cat.items.length > 0);
+                  const hasSubItems = Boolean(
+                    cat.items && cat.items.length > 0,
+                  );
                   const isCategoryActive = cat.to
-                    ? location.pathname === cat.to || (cat.to !== "/admin" && location.pathname.startsWith(cat.to))
+                    ? location.pathname === cat.to ||
+                      (cat.to !== "/admin" &&
+                        location.pathname.startsWith(cat.to))
                     : cat.items?.some(
                         (item) =>
                           fullPath === item.to ||
@@ -406,7 +467,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                       cat.id === "s_live_test"
                         ? isLiveView
                         : cat.id === "s_tests"
-                          ? location.pathname === "/student/tests" && !isLiveView
+                          ? location.pathname === "/student/tests" &&
+                            !isLiveView
                           : cat.to === "/student"
                             ? location.pathname === "/student"
                             : cat.to === "/admin"
@@ -427,10 +489,18 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
                       >
                         <div className="flex items-center justify-between w-full">
                           <div className="flex items-center gap-3">
-                            <cat.icon className={cn("h-4 w-4", isDirectActive ? "text-white" : "text-indigo-400")} />
+                            <cat.icon
+                              className={cn(
+                                "h-4 w-4",
+                                isDirectActive
+                                  ? "text-white"
+                                  : "text-indigo-400",
+                              )}
+                            />
                             <span>{cat.label}</span>
                           </div>
-                          {cat.id === "s_live_test" && activeLiveTestCount > 0 ? (
+                          {cat.id === "s_live_test" &&
+                          activeLiveTestCount > 0 ? (
                             <span className="flex items-center gap-1 rounded-full bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold text-white animate-pulse">
                               <Radio className="h-2.5 w-2.5" /> LIVE
                             </span>
@@ -497,7 +567,10 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
               {(user?.name || user?.email || "A").charAt(0).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-semibold text-white" title={user?.name || user?.email}>
+              <p
+                className="truncate text-xs font-semibold text-white"
+                title={user?.name || user?.email}
+              >
                 {user?.name || user?.email}
               </p>
               <div className="flex items-center gap-1 mt-0.5">

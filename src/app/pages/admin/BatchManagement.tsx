@@ -91,7 +91,9 @@ export default function BatchManagement() {
   };
 
   const removeSubjectFromForm = (subjectToRemove: string) => {
-    const nextSubjects = currentSubjects.filter((subject) => subject !== subjectToRemove);
+    const nextSubjects = currentSubjects.filter(
+      (subject) => subject !== subjectToRemove,
+    );
     setFormData((prev) => ({ ...prev, subjects: nextSubjects.join(", ") }));
   };
 
@@ -119,7 +121,9 @@ export default function BatchManagement() {
       if (editingBatchId) {
         await updateBatch(editingBatchId, batchData);
       } else {
-        await addBatch(batchData as Omit<Batch, "id" | "createdDate" | "studentCount">);
+        await addBatch(
+          batchData as Omit<Batch, "id" | "createdDate" | "studentCount">,
+        );
       }
 
       resetForm();
@@ -148,7 +152,9 @@ export default function BatchManagement() {
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingBatch ? "Edit Batch" : "Create New Batch"}</DialogTitle>
+              <DialogTitle>
+                {editingBatch ? "Edit Batch" : "Create New Batch"}
+              </DialogTitle>
               <DialogDescription>
                 {editingBatch
                   ? "Update batch details and add or remove subjects."
@@ -206,7 +212,8 @@ export default function BatchManagement() {
                   }
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Add or remove subjects separated by commas. Example: Physics, Chemistry, Maths
+                  Add or remove subjects separated by commas. Example: Physics,
+                  Chemistry, Maths
                 </p>
                 {currentSubjects.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -332,7 +339,9 @@ export default function BatchManagement() {
                     variant="outline"
                     size="sm"
                     className="w-full text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border-indigo-200 gap-1.5 font-semibold text-xs"
-                    onClick={() => navigate(`/admin/enrollments?batchId=${batch.id}`)}
+                    onClick={() =>
+                      navigate(`/admin/enrollments?batchId=${batch.id}`)
+                    }
                   >
                     <UserPlus className="w-4 h-4 text-indigo-600" />
                     Batch Enrollment &amp; Form Link

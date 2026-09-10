@@ -45,20 +45,31 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
     Education: (form.educationalDetails?.records || [])
       .map(
         (r) =>
-          `${r.degree || r.tier || "Degree"} (${r.major === "Other" ? r.otherMajor : (r.major || r.majorStream || "Major")}: ${r.percentage || r.percentageOfMarks}% PSTM:${r.pstm || "No"})`,
+          `${r.degree || r.tier || "Degree"} (${r.major === "Other" ? r.otherMajor : r.major || r.majorStream || "Major"}: ${r.percentage || r.percentageOfMarks}% PSTM:${r.pstm || "No"})`,
       )
       .join("; "),
 
     // Other / Demographic Details
-    "Marital Status": form.demographicDetails?.maritalStatus || form.otherDetails?.maritalStatus || "—",
-    "Work Status": form.demographicDetails?.workStatus || form.otherDetails?.workStatus || "—",
-    "Department Name": form.demographicDetails?.departmentName || form.otherDetails?.natureOfWork || "",
+    "Marital Status":
+      form.demographicDetails?.maritalStatus ||
+      form.otherDetails?.maritalStatus ||
+      "—",
+    "Work Status":
+      form.demographicDetails?.workStatus ||
+      form.otherDetails?.workStatus ||
+      "—",
+    "Department Name":
+      form.demographicDetails?.departmentName ||
+      form.otherDetails?.natureOfWork ||
+      "",
     "TNPSC Experience": form.demographicDetails?.previousTnpscExperience || "—",
 
     // Portal Credentials & Status
     "Portal Username": form.portalUsername || "",
     "Portal Password": form.portalPassword || "",
-    "Approval Status": form.approvalStatus || (form.status === "approved" ? "approved" : "pending"),
+    "Approval Status":
+      form.approvalStatus ||
+      (form.status === "approved" ? "approved" : "pending"),
 
     // Batch Details
     "Batch Name": form.batchDetails?.batchName || form.batchName || "",

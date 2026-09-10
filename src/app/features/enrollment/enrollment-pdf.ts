@@ -40,7 +40,7 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
       (r) => `
       <tr>
         <td>${r.degree || r.tier || "—"}</td>
-        <td>${r.major === "Other" ? (r.otherMajor || "Other") : (r.major || r.majorStream || "—")}</td>
+        <td>${r.major === "Other" ? r.otherMajor || "Other" : r.major || r.majorStream || "—"}</td>
         <td>${r.percentage || r.percentageOfMarks || "—"}%</td>
         <td>${r.pstm || r.yearOfPassing || "—"}</td>
       </tr>`,

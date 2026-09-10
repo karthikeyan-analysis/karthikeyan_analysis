@@ -207,7 +207,11 @@ export default function EnrollmentManagement() {
 
   // Approve Application
   const handleApprove = async (formId: string) => {
-    if (!window.confirm("Approve this student application? This will create their student portal account and enable Google/Username login.")) {
+    if (
+      !window.confirm(
+        "Approve this student application? This will create their student portal account and enable Google/Username login.",
+      )
+    ) {
       return;
     }
     setActionLoadingId(formId);
@@ -231,7 +235,10 @@ export default function EnrollmentManagement() {
 
   // Reject Application
   const handleReject = async (formId: string) => {
-    const reason = window.prompt("Enter rejection reason (optional):", "Incomplete or unverified qualifications");
+    const reason = window.prompt(
+      "Enter rejection reason (optional):",
+      "Incomplete or unverified qualifications",
+    );
     if (reason === null) return;
 
     setActionLoadingId(formId);
@@ -240,7 +247,12 @@ export default function EnrollmentManagement() {
       setForms((prev) =>
         prev.map((f) =>
           f.id === formId
-            ? { ...f, status: "rejected", approvalStatus: "rejected", rejectionReason: reason }
+            ? {
+                ...f,
+                status: "rejected",
+                approvalStatus: "rejected",
+                rejectionReason: reason,
+              }
             : f,
         ),
       );
@@ -254,7 +266,11 @@ export default function EnrollmentManagement() {
 
   // Delete Application
   const handleDelete = async (formId: string) => {
-    if (!window.confirm("Are you sure you want to delete this application permanently?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this application permanently?",
+      )
+    ) {
       return;
     }
     try {
@@ -272,18 +288,33 @@ export default function EnrollmentManagement() {
   const filteredForms = batchForms.filter((f) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
-    const name = (f.personalDetails?.studentName || f.personalDetails?.candidateName || "").toLowerCase();
+    const name = (
+      f.personalDetails?.studentName ||
+      f.personalDetails?.candidateName ||
+      ""
+    ).toLowerCase();
     const email = (f.personalDetails?.email || "").toLowerCase();
     const mobile = (f.personalDetails?.mobileNo || "").toLowerCase();
     const username = (f.portalUsername || "").toLowerCase();
-    return name.includes(q) || email.includes(q) || mobile.includes(q) || username.includes(q);
+    return (
+      name.includes(q) ||
+      email.includes(q) ||
+      mobile.includes(q) ||
+      username.includes(q)
+    );
   });
 
   const pendingForms = filteredForms.filter(
-    (f) => f.approvalStatus === "pending" || (!f.approvalStatus && f.status === "submitted"),
+    (f) =>
+      f.approvalStatus === "pending" ||
+      (!f.approvalStatus && f.status === "submitted"),
   );
-  const approvedForms = filteredForms.filter((f) => f.approvalStatus === "approved");
-  const rejectedForms = filteredForms.filter((f) => f.approvalStatus === "rejected");
+  const approvedForms = filteredForms.filter(
+    (f) => f.approvalStatus === "approved",
+  );
+  const rejectedForms = filteredForms.filter(
+    (f) => f.approvalStatus === "rejected",
+  );
 
   const formatDate = (date: any): string => {
     if (!date) return "—";
@@ -302,7 +333,8 @@ export default function EnrollmentManagement() {
             Batch Enrollment &amp; Approvals
           </h1>
           <p className="text-sm text-slate-600 mt-1">
-            Configure course enrollment details, copy public student form link, and verify &amp; approve applicants.
+            Configure course enrollment details, copy public student form link,
+            and verify &amp; approve applicants.
           </p>
         </div>
 
@@ -317,7 +349,9 @@ export default function EnrollmentManagement() {
             disabled={refreshing || loading}
             className="gap-1.5"
           >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            <RefreshCw
+              className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
+            />
             Refresh
           </Button>
 
@@ -327,7 +361,11 @@ export default function EnrollmentManagement() {
               onClick={handleCopyDirectLink}
               className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
             >
-              {copiedDirectLink ? <CheckCheck className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+              {copiedDirectLink ? (
+                <CheckCheck className="w-4 h-4 text-emerald-300" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
               {copiedDirectLink ? "Copied Link!" : "Copy Form Link"}
             </Button>
           )}
@@ -377,7 +415,8 @@ export default function EnrollmentManagement() {
               1. Header &amp; Course Information (Editable Box for Students)
             </CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">
-              These details are prominently displayed at the top of the public student enrollment form for this batch.
+              These details are prominently displayed at the top of the public
+              student enrollment form for this batch.
             </p>
           </div>
 
@@ -396,7 +435,8 @@ export default function EnrollmentManagement() {
           {configSavedToast && (
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-semibold text-emerald-800 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              Batch course information saved successfully! The public enrollment form will reflect these updates immediately.
+              Batch course information saved successfully! The public enrollment
+              form will reflect these updates immediately.
             </div>
           )}
 
@@ -408,7 +448,9 @@ export default function EnrollmentManagement() {
               <Input
                 placeholder="e.g. TNPSC COMBINED STATISTICAL SERVICES EXAMINATION - ONLINE LIVE CRASH COURSE"
                 value={config.courseName}
-                onChange={(e) => setConfig({ ...config, courseName: e.target.value })}
+                onChange={(e) =>
+                  setConfig({ ...config, courseName: e.target.value })
+                }
                 className="font-semibold text-indigo-950"
               />
             </div>
@@ -420,7 +462,9 @@ export default function EnrollmentManagement() {
               <Input
                 placeholder="e.g. 15th October 2026 / Immediate"
                 value={config.startingDate}
-                onChange={(e) => setConfig({ ...config, startingDate: e.target.value })}
+                onChange={(e) =>
+                  setConfig({ ...config, startingDate: e.target.value })
+                }
               />
             </div>
 
@@ -431,7 +475,9 @@ export default function EnrollmentManagement() {
               <Input
                 placeholder="e.g. 60 Days / 120 Hours"
                 value={config.duration}
-                onChange={(e) => setConfig({ ...config, duration: e.target.value })}
+                onChange={(e) =>
+                  setConfig({ ...config, duration: e.target.value })
+                }
               />
             </div>
 
@@ -442,10 +488,16 @@ export default function EnrollmentManagement() {
               <select
                 className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-medium focus:ring-2 focus:ring-indigo-500 bg-white"
                 value={config.isOpen ? "open" : "closed"}
-                onChange={(e) => setConfig({ ...config, isOpen: e.target.value === "open" })}
+                onChange={(e) =>
+                  setConfig({ ...config, isOpen: e.target.value === "open" })
+                }
               >
-                <option value="open">Admissions Open (Students can enroll)</option>
-                <option value="closed">Admissions Closed (Form disabled)</option>
+                <option value="open">
+                  Admissions Open (Students can enroll)
+                </option>
+                <option value="closed">
+                  Admissions Closed (Form disabled)
+                </option>
               </select>
             </div>
 
@@ -480,13 +532,22 @@ export default function EnrollmentManagement() {
                 onClick={handleCopyDirectLink}
                 className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
               >
-                {copiedDirectLink ? <CheckCheck className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedDirectLink ? (
+                  <CheckCheck className="w-3.5 h-3.5 text-emerald-300" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
                 {copiedDirectLink ? "Copied!" : "Copy Link"}
               </Button>
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => window.open(getDirectBatchEnrollmentUrl(selectedBatch), "_blank")}
+                onClick={() =>
+                  window.open(
+                    getDirectBatchEnrollmentUrl(selectedBatch),
+                    "_blank",
+                  )
+                }
                 className="gap-1.5 text-xs text-indigo-700 border-indigo-300"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
@@ -505,7 +566,8 @@ export default function EnrollmentManagement() {
               Candidate Applications &amp; Approval Management
             </CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">
-              Review registered candidates. Students cannot log in until approved by an administrator.
+              Review registered candidates. Students cannot log in until
+              approved by an administrator.
             </p>
           </div>
 
@@ -524,17 +586,41 @@ export default function EnrollmentManagement() {
         <CardContent className="p-6">
           <Tabs defaultValue="pending" className="w-full">
             <TabsList className="grid w-full grid-cols-4 mb-6">
-              <TabsTrigger value="pending" className="font-semibold text-xs sm:text-sm">
-                Pending Approval <Badge className="ml-1.5 bg-amber-500">{pendingForms.length}</Badge>
+              <TabsTrigger
+                value="pending"
+                className="font-semibold text-xs sm:text-sm"
+              >
+                Pending Approval{" "}
+                <Badge className="ml-1.5 bg-amber-500">
+                  {pendingForms.length}
+                </Badge>
               </TabsTrigger>
-              <TabsTrigger value="approved" className="font-semibold text-xs sm:text-sm">
-                Approved <Badge className="ml-1.5 bg-emerald-600">{approvedForms.length}</Badge>
+              <TabsTrigger
+                value="approved"
+                className="font-semibold text-xs sm:text-sm"
+              >
+                Approved{" "}
+                <Badge className="ml-1.5 bg-emerald-600">
+                  {approvedForms.length}
+                </Badge>
               </TabsTrigger>
-              <TabsTrigger value="rejected" className="font-semibold text-xs sm:text-sm">
-                Rejected <Badge className="ml-1.5 bg-rose-500">{rejectedForms.length}</Badge>
+              <TabsTrigger
+                value="rejected"
+                className="font-semibold text-xs sm:text-sm"
+              >
+                Rejected{" "}
+                <Badge className="ml-1.5 bg-rose-500">
+                  {rejectedForms.length}
+                </Badge>
               </TabsTrigger>
-              <TabsTrigger value="all" className="font-semibold text-xs sm:text-sm">
-                All <Badge className="ml-1.5 bg-slate-500">{filteredForms.length}</Badge>
+              <TabsTrigger
+                value="all"
+                className="font-semibold text-xs sm:text-sm"
+              >
+                All{" "}
+                <Badge className="ml-1.5 bg-slate-500">
+                  {filteredForms.length}
+                </Badge>
               </TabsTrigger>
             </TabsList>
 
@@ -560,24 +646,45 @@ export default function EnrollmentManagement() {
                       <Table>
                         <TableHeader className="bg-slate-50">
                           <TableRow>
-                            <TableHead className="text-xs font-bold uppercase">Candidate Name</TableHead>
-                            <TableHead className="text-xs font-bold uppercase">Contact Info</TableHead>
-                            <TableHead className="text-xs font-bold uppercase">Qualifications</TableHead>
-                            <TableHead className="text-xs font-bold uppercase">Work &amp; Experience</TableHead>
-                            <TableHead className="text-xs font-bold uppercase">Generated Credentials</TableHead>
-                            <TableHead className="text-xs font-bold uppercase">Status</TableHead>
-                            <TableHead className="text-xs font-bold uppercase text-right">Actions</TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
+                              Candidate Name
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
+                              Contact Info
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
+                              Qualifications
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
+                              Work &amp; Experience
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
+                              Generated Credentials
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase">
+                              Status
+                            </TableHead>
+                            <TableHead className="text-xs font-bold uppercase text-right">
+                              Actions
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {currentList.map((form) => {
                             const p = form.personalDetails;
-                            const d = form.demographicDetails || form.otherDetails;
+                            const d =
+                              form.demographicDetails || form.otherDetails;
                             const ed = form.educationalDetails;
-                            const isPending = form.approvalStatus === "pending" || (!form.approvalStatus && form.status === "submitted");
+                            const isPending =
+                              form.approvalStatus === "pending" ||
+                              (!form.approvalStatus &&
+                                form.status === "submitted");
 
                             return (
-                              <TableRow key={form.id} className="hover:bg-slate-50/70">
+                              <TableRow
+                                key={form.id}
+                                className="hover:bg-slate-50/70"
+                              >
                                 <TableCell>
                                   <div className="font-bold text-slate-900">
                                     {p?.studentName || p?.candidateName}
@@ -591,21 +698,40 @@ export default function EnrollmentManagement() {
                                 </TableCell>
 
                                 <TableCell>
-                                  <div className="text-xs font-medium text-slate-800">{p?.email}</div>
-                                  <div className="text-xs text-slate-600 mt-0.5">📞 {p?.mobileNo}</div>
+                                  <div className="text-xs font-medium text-slate-800">
+                                    {p?.email}
+                                  </div>
+                                  <div className="text-xs text-slate-600 mt-0.5">
+                                    📞 {p?.mobileNo}
+                                  </div>
                                   {p?.whatsappNo && (
-                                    <div className="text-[11px] text-emerald-700">💬 {p.whatsappNo}</div>
+                                    <div className="text-[11px] text-emerald-700">
+                                      💬 {p.whatsappNo}
+                                    </div>
                                   )}
                                 </TableCell>
 
                                 <TableCell>
                                   <div className="text-xs space-y-1">
                                     {ed?.records?.map((r, i) => (
-                                      <div key={i} className="text-slate-700 font-medium">
-                                        <span className="font-bold text-indigo-700">{r.degree || r.tier}</span>{" "}
-                                        ({r.major === "Other" ? r.otherMajor : (r.major || r.majorStream)}: {r.percentage || r.percentageOfMarks}%)
+                                      <div
+                                        key={i}
+                                        className="text-slate-700 font-medium"
+                                      >
+                                        <span className="font-bold text-indigo-700">
+                                          {r.degree || r.tier}
+                                        </span>{" "}
+                                        (
+                                        {r.major === "Other"
+                                          ? r.otherMajor
+                                          : r.major || r.majorStream}
+                                        : {r.percentage || r.percentageOfMarks}
+                                        %)
                                         {r.pstm === "Yes" && (
-                                          <Badge variant="outline" className="ml-1 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                          <Badge
+                                            variant="outline"
+                                            className="ml-1 text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200"
+                                          >
                                             PSTM
                                           </Badge>
                                         )}
@@ -631,12 +757,20 @@ export default function EnrollmentManagement() {
                                 <TableCell>
                                   <div className="space-y-1 text-xs font-mono">
                                     <div>
-                                      <span className="text-slate-400 text-[10px]">User:</span>{" "}
-                                      <span className="font-semibold text-slate-900">{form.portalUsername}</span>
+                                      <span className="text-slate-400 text-[10px]">
+                                        User:
+                                      </span>{" "}
+                                      <span className="font-semibold text-slate-900">
+                                        {form.portalUsername}
+                                      </span>
                                     </div>
                                     <div>
-                                      <span className="text-slate-400 text-[10px]">Pass:</span>{" "}
-                                      <span className="font-semibold text-slate-900">{form.portalPassword}</span>
+                                      <span className="text-slate-400 text-[10px]">
+                                        Pass:
+                                      </span>{" "}
+                                      <span className="font-semibold text-slate-900">
+                                        {form.portalPassword}
+                                      </span>
                                     </div>
                                   </div>
                                 </TableCell>
@@ -693,14 +827,19 @@ export default function EnrollmentManagement() {
                                     {/* View Details Dialog */}
                                     <Dialog>
                                       <DialogTrigger asChild>
-                                        <Button variant="ghost" size="sm" className="h-8 px-2 text-indigo-600 hover:bg-indigo-50">
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-8 px-2 text-indigo-600 hover:bg-indigo-50"
+                                        >
                                           View
                                         </Button>
                                       </DialogTrigger>
                                       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
                                         <DialogHeader>
                                           <DialogTitle>
-                                            Candidate Application: {p?.studentName || p?.candidateName}
+                                            Candidate Application:{" "}
+                                            {p?.studentName || p?.candidateName}
                                           </DialogTitle>
                                         </DialogHeader>
                                         <EnrollmentFormPreview form={form} />
@@ -709,18 +848,24 @@ export default function EnrollmentManagement() {
                                             size="sm"
                                             variant="outline"
                                             className="gap-1.5"
-                                            onClick={() => downloadEnrollmentPDF(form)}
+                                            onClick={() =>
+                                              downloadEnrollmentPDF(form)
+                                            }
                                           >
-                                            <FileDown className="w-4 h-4" /> Download PDF
+                                            <FileDown className="w-4 h-4" />{" "}
+                                            Download PDF
                                           </Button>
 
                                           {isPending && (
                                             <Button
                                               size="sm"
                                               className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
-                                              onClick={() => handleApprove(form.id)}
+                                              onClick={() =>
+                                                handleApprove(form.id)
+                                              }
                                             >
-                                              <CheckCircle2 className="w-4 h-4" /> Approve &amp; Activate Account
+                                              <CheckCircle2 className="w-4 h-4" />{" "}
+                                              Approve &amp; Activate Account
                                             </Button>
                                           )}
                                         </div>
@@ -733,7 +878,9 @@ export default function EnrollmentManagement() {
                                       size="sm"
                                       title="Download PDF"
                                       className="h-8 px-2 text-slate-500 hover:text-indigo-600"
-                                      onClick={() => downloadEnrollmentPDF(form)}
+                                      onClick={() =>
+                                        downloadEnrollmentPDF(form)
+                                      }
                                     >
                                       <FileDown className="w-3.5 h-3.5" />
                                     </Button>
@@ -765,12 +912,18 @@ export default function EnrollmentManagement() {
           {/* Export Actions */}
           <div className="mt-6 pt-4 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-slate-500">
-              Export all {batchForms.length} submitted applications for this batch to an Excel spreadsheet.
+              Export all {batchForms.length} submitted applications for this
+              batch to an Excel spreadsheet.
             </span>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => exportBatchEnrollmentForms(batchForms, currentBatch?.name || "Batch")}
+              onClick={() =>
+                exportBatchEnrollmentForms(
+                  batchForms,
+                  currentBatch?.name || "Batch",
+                )
+              }
               disabled={batchForms.length === 0}
               className="gap-2 text-xs"
             >

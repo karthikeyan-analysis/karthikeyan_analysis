@@ -74,7 +74,7 @@ export function generatePortalCredentials(
   const year = new Date().getFullYear();
   const random4 = Math.floor(1000 + Math.random() * 9000);
   const randomAlpha = Math.random().toString(36).substring(2, 6).toUpperCase();
-  
+
   // Clean first letters of name
   const cleanName = candidateName
     .replace(/[^a-zA-Z]/g, "")
@@ -84,7 +84,7 @@ export function generatePortalCredentials(
 
   // Username: KA-2026-XXXX or prefix-year-XXXX
   const username = `KA-${year}-${random4}`.toLowerCase();
-  
+
   // Password: Clean, readable, secure passcode e.g. Pass@9281
   const password = `Pass@${random4}`;
 
@@ -102,9 +102,7 @@ export function generatePortalCredentials(
  * Submit a new batch enrollment (student side)
  * Automatically generates login credentials and sets approvalStatus to "pending".
  */
-export async function submitBatchEnrollment(
-  data: EnrollmentFormDTO,
-): Promise<{
+export async function submitBatchEnrollment(data: EnrollmentFormDTO): Promise<{
   formId: string;
   username: string;
   password: string;
@@ -116,8 +114,12 @@ export async function submitBatchEnrollment(
     data.personalDetails.initials || "",
   );
 
-  const candidateEmail = (data.personalDetails.email || "").trim().toLowerCase();
-  const fullName = `${(data.personalDetails.candidateName || "").trim()} ${(data.personalDetails.initials || "").trim()}`.trim() || data.personalDetails.studentName;
+  const candidateEmail = (data.personalDetails.email || "")
+    .trim()
+    .toLowerCase();
+  const fullName =
+    `${(data.personalDetails.candidateName || "").trim()} ${(data.personalDetails.initials || "").trim()}`.trim() ||
+    data.personalDetails.studentName;
 
   const formPayload: Omit<EnrollmentForm, "id"> = {
     batchId: data.batchId,
@@ -136,7 +138,8 @@ export async function submitBatchEnrollment(
     },
     addressDetails: {
       ...data.addressDetails,
-      streetNagar: data.addressDetails.streetName || data.addressDetails.streetNagar || "",
+      streetNagar:
+        data.addressDetails.streetName || data.addressDetails.streetNagar || "",
     },
     educationalDetails: data.educationalDetails,
     demographicDetails: data.demographicDetails,
@@ -483,9 +486,12 @@ export async function revokeShareableLink(linkId: string): Promise<void> {
   });
 }
 
-export async function getBatchById(
-  batchId: string,
-): Promise<{ id: string; name: string; description?: string; schedule?: string } | null> {
+export async function getBatchById(batchId: string): Promise<{
+  id: string;
+  name: string;
+  description?: string;
+  schedule?: string;
+} | null> {
   const docRef = doc(db, "batches", batchId);
   const snapshot = await getDoc(docRef);
   if (!snapshot.exists()) return null;
