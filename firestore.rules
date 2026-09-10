@@ -128,8 +128,29 @@ service cloud.firestore {
 
     // Student portal data.
     match /batches/{id} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow write: if isAdmin();
+    }
+
+    // Public batch enrollment forms & student applications
+    match /scheduledEnrollmentForms/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() || isAdmin();
+    }
+
+    match /enrollmentForms/{id} {
+      allow create: if true;
+      allow read, update, delete: if isSignedIn() || isAdmin();
+    }
+
+    match /batchEnrollmentConfigs/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() || isAdmin();
+    }
+
+    match /shareableFormLinks/{id} {
+      allow read: if true;
+      allow write: if isSignedIn() || isAdmin();
     }
 
     match /students/{id} {

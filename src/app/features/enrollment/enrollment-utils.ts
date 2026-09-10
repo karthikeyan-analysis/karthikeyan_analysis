@@ -10,6 +10,7 @@ import {
   where,
   Timestamp,
   getDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "../../../config/firebase";
 import type {
@@ -33,17 +34,30 @@ export async function createScheduledEnrollmentForm(
   data: Omit<ScheduledEnrollmentForm, "id" | "createdAt" | "updatedAt">,
 ): Promise<ScheduledEnrollmentForm> {
   const now = Timestamp.now();
-  const docRef = await addDoc(collection(db, SCHEDULED_FORMS_COLLECTION), {
-    ...data,
-    createdAt: now,
-    updatedAt: now,
-  });
-  return {
-    id: docRef.id,
-    ...data,
+  const cleanPayload: Record<string, any> = {
+    batchId: data.batchId || "",
+    batchName: data.batchName || "",
+    formTitle: data.formTitle || "Untitled Form",
+    courseName: data.courseName || "",
+    startingDate: data.startingDate || "",
+    duration: data.duration || "",
+    note: data.note || "",
+    scheduleStart: data.scheduleStart || "",
+    scheduleEnd: data.scheduleEnd || "",
+    status: data.status || "active",
+    isOpen: data.isOpen ?? true,
     createdAt: now,
     updatedAt: now,
   };
+
+  const docRef = await addDoc(
+    collection(db, SCHEDULED_FORMS_COLLECTION),
+    cleanPayload,
+  );
+  return {
+    id: docRef.id,
+    ...cleanPayload,
+  } as ScheduledEnrollmentForm;
 }
 
 export async function updateScheduledEnrollmentForm(
@@ -51,10 +65,13 @@ export async function updateScheduledEnrollmentForm(
   updates: Partial<ScheduledEnrollmentForm>,
 ): Promise<void> {
   const docRef = doc(db, SCHEDULED_FORMS_COLLECTION, id);
-  await updateDoc(docRef, {
-    ...updates,
+  const cleanUpdates: Record<string, any> = {
     updatedAt: Timestamp.now(),
-  });
+  };
+  for (const [k, v] of Object.entries(updates)) {
+    cleanUpdates[k] = v !== undefined ? v : "";
+  }
+  await updateDoc(docRef, cleanUpdates);
 }
 
 export async function deleteScheduledEnrollmentForm(id: string): Promise<void> {
@@ -65,19 +82,61 @@ export async function getScheduledEnrollmentForms(
   batchId?: string,
 ): Promise<ScheduledEnrollmentForm[]> {
   try {
-    let q = collection(db, SCHEDULED_FORMS_COLLECTION) as any;
-    if (batchId) {
-      q = query(q, where("batchId", "==", batchId));
-    }
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({
+    const colRef = collection(db, SCHEDULED_FORMS_COLLECTION);
+    const snap = await getDocs(colRef);
+    let items = snap.docs.map((d) => ({
       id: d.id,
       ...d.data(),
     })) as ScheduledEnrollmentForm[];
+    items.sort((a, b) => {
+      const timeA =
+        (a.createdAt as any)?.toMillis?.() ||
+        (a.createdAt ? new Date(a.createdAt as any).getTime() : 0);
+      const timeB =
+        (b.createdAt as any)?.toMillis?.() ||
+        (b.createdAt ? new Date(b.createdAt as any).getTime() : 0);
+      return timeB - timeA;
+    });
+    if (batchId && batchId !== "all") {
+      items = items.filter((f) => f.batchId === batchId);
+    }
+    return items;
   } catch (err) {
     console.error("Failed to get scheduled forms:", err);
     return [];
   }
+}
+
+export function subscribeToScheduledEnrollmentForms(
+  callback: (forms: ScheduledEnrollmentForm[]) => void,
+  batchId?: string,
+): () => void {
+  const colRef = collection(db, SCHEDULED_FORMS_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      let items = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as ScheduledEnrollmentForm[];
+      items.sort((a, b) => {
+        const timeA =
+          (a.createdAt as any)?.toMillis?.() ||
+          (a.createdAt ? new Date(a.createdAt as any).getTime() : 0);
+        const timeB =
+          (b.createdAt as any)?.toMillis?.() ||
+          (b.createdAt ? new Date(b.createdAt as any).getTime() : 0);
+        return timeB - timeA;
+      });
+      if (batchId && batchId !== "all") {
+        items = items.filter((f) => f.batchId === batchId);
+      }
+      callback(items);
+    },
+    (err) => {
+      console.error("Error subscribing to scheduled forms:", err);
+    },
+  );
 }
 
 export async function getScheduledEnrollmentFormById(
@@ -476,12 +535,50 @@ export async function deleteEnrollmentForm(formId: string): Promise<void> {
  */
 export async function getAllEnrollmentForms(): Promise<EnrollmentForm[]> {
   const snapshot = await getDocs(collection(db, ENROLLMENT_FORMS_COLLECTION));
-  return snapshot.docs.map(
+  const items = snapshot.docs.map(
     (doc) =>
       ({
         id: doc.id,
         ...doc.data(),
       }) as EnrollmentForm,
+  );
+  items.sort((a, b) => {
+    const timeA =
+      (a.submittedAt as any)?.toMillis?.() ||
+      (a.submittedAt ? new Date(a.submittedAt as any).getTime() : 0);
+    const timeB =
+      (b.submittedAt as any)?.toMillis?.() ||
+      (b.submittedAt ? new Date(b.submittedAt as any).getTime() : 0);
+    return timeB - timeA;
+  });
+  return items;
+}
+
+export function subscribeToAllEnrollmentForms(
+  callback: (forms: EnrollmentForm[]) => void,
+): () => void {
+  const colRef = collection(db, ENROLLMENT_FORMS_COLLECTION);
+  return onSnapshot(
+    colRef,
+    (snap) => {
+      const items = snap.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      })) as EnrollmentForm[];
+      items.sort((a, b) => {
+        const timeA =
+          (a.submittedAt as any)?.toMillis?.() ||
+          (a.submittedAt ? new Date(a.submittedAt as any).getTime() : 0);
+        const timeB =
+          (b.submittedAt as any)?.toMillis?.() ||
+          (b.submittedAt ? new Date(b.submittedAt as any).getTime() : 0);
+        return timeB - timeA;
+      });
+      callback(items);
+    },
+    (err) => {
+      console.error("Error subscribing to enrollment forms:", err);
+    },
   );
 }
 

@@ -64,8 +64,6 @@ import type {
 } from "../../features/enrollment/enrollment-types";
 import {
   getAllEnrollmentForms,
-  getBatchEnrollmentConfig,
-  saveBatchEnrollmentConfig,
   approveStudentEnrollment,
   rejectStudentEnrollment,
   deleteEnrollmentForm,
@@ -74,6 +72,8 @@ import {
   updateScheduledEnrollmentForm,
   deleteScheduledEnrollmentForm,
   getScheduledEnrollmentForms,
+  subscribeToScheduledEnrollmentForms,
+  subscribeToAllEnrollmentForms,
   computeScheduledFormStatus,
 } from "../../features/enrollment/enrollment-utils";
 import {
@@ -108,10 +108,16 @@ export default function EnrollmentManagement() {
   const paramBatchId = queryParams.get("batchId");
 
   const [selectedBatch, setSelectedBatch] = useState<string>(
-    paramBatchId && batches.some((b) => b.id === paramBatchId)
+    paramBatchId &&
+      (paramBatchId === "all" || batches.some((b) => b.id === paramBatchId))
       ? paramBatchId
-      : batches[0]?.id || "",
+      : batches[0]?.id || "all",
   );
+
+  // Scope for scheduled forms: "all" displays forms across all batches, "selected" displays only active batch
+  const [scheduledFormsScope, setScheduledFormsScope] = useState<
+    "all" | "selected"
+  >("all");
 
   const [forms, setForms] = useState<EnrollmentForm[]>([]);
   const [scheduledForms, setScheduledForms] = useState<
@@ -132,7 +138,7 @@ export default function EnrollmentManagement() {
   // Create / Edit Scheduled Form Dialog
   const [showFormModal, setShowFormModal] = useState(false);
   const [modalData, setModalData] = useState<ScheduledFormModalState>({
-    batchId: selectedBatch,
+    batchId: selectedBatch !== "all" ? selectedBatch : batches[0]?.id || "",
     formTitle: "",
     courseName: "",
     startingDate: "",
@@ -148,8 +154,15 @@ export default function EnrollmentManagement() {
 
   // Sync selectedBatch if batches load late or param updates
   useEffect(() => {
-    if (!selectedBatch && batches.length > 0) {
-      setSelectedBatch(paramBatchId || batches[0].id);
+    if (
+      (!selectedBatch || selectedBatch === "all") &&
+      batches.length > 0 &&
+      paramBatchId &&
+      paramBatchId !== "all"
+    ) {
+      setSelectedBatch(paramBatchId);
+    } else if (!selectedBatch && batches.length > 0) {
+      setSelectedBatch(batches[0].id);
     }
   }, [batches, paramBatchId, selectedBatch]);
 
@@ -174,6 +187,22 @@ export default function EnrollmentManagement() {
 
   useEffect(() => {
     loadData();
+
+    const unsubScheduled = subscribeToScheduledEnrollmentForms(
+      (newScheduled) => {
+        setScheduledForms(newScheduled);
+        setLoading(false);
+      },
+    );
+
+    const unsubForms = subscribeToAllEnrollmentForms((newForms) => {
+      setForms(newForms);
+    });
+
+    return () => {
+      unsubScheduled();
+      unsubForms();
+    };
   }, []);
 
   const handleBatchChange = (newBatchId: string) => {
@@ -184,11 +213,17 @@ export default function EnrollmentManagement() {
 
   // Open Create Form Dialog
   const handleOpenCreateForm = () => {
+    const defaultBatchId =
+      selectedBatch && selectedBatch !== "all"
+        ? selectedBatch
+        : batches[0]?.id || "";
+    const activeBatchObj = batches.find((b) => b.id === defaultBatchId);
+
     setModalData({
-      batchId: selectedBatch || batches[0]?.id || "",
-      formTitle: `${currentBatch?.name || "Batch"} Enrollment Form`,
-      courseName: currentBatch?.name || "ONLINE LIVE CRASH COURSE",
-      startingDate: currentBatch?.schedule || "Immediate / To be announced",
+      batchId: defaultBatchId,
+      formTitle: `${activeBatchObj?.name || "Batch"} Enrollment Form`,
+      courseName: activeBatchObj?.name || "ONLINE LIVE CRASH COURSE",
+      startingDate: activeBatchObj?.schedule || "Immediate / To be announced",
       duration: "60 Days / 120 Hours",
       note: "Admissions strictly based on qualification verification. Keep video ON during live CBT tests.",
       scheduleStart: "",
@@ -238,14 +273,34 @@ export default function EnrollmentManagement() {
           startingDate: modalData.startingDate.trim(),
           duration: modalData.duration.trim(),
           note: modalData.note.trim(),
-          scheduleStart: modalData.scheduleStart || undefined,
-          scheduleEnd: modalData.scheduleEnd || undefined,
+          scheduleStart: modalData.scheduleStart || "",
+          scheduleEnd: modalData.scheduleEnd || "",
           isOpen: modalData.isOpen,
           status: modalData.isOpen ? "active" : "closed",
         });
+        setScheduledForms((prev) =>
+          prev.map((f) =>
+            f.id === modalData.id
+              ? {
+                  ...f,
+                  batchId: modalData.batchId,
+                  batchName,
+                  formTitle: modalData.formTitle.trim(),
+                  courseName: modalData.courseName.trim(),
+                  startingDate: modalData.startingDate.trim(),
+                  duration: modalData.duration.trim(),
+                  note: modalData.note.trim(),
+                  scheduleStart: modalData.scheduleStart || "",
+                  scheduleEnd: modalData.scheduleEnd || "",
+                  isOpen: modalData.isOpen,
+                  status: modalData.isOpen ? "active" : "closed",
+                }
+              : f,
+          ),
+        );
       } else {
         // Create
-        await createScheduledEnrollmentForm({
+        const created = await createScheduledEnrollmentForm({
           batchId: modalData.batchId,
           batchName,
           formTitle: modalData.formTitle.trim(),
@@ -253,15 +308,23 @@ export default function EnrollmentManagement() {
           startingDate: modalData.startingDate.trim(),
           duration: modalData.duration.trim(),
           note: modalData.note.trim(),
-          scheduleStart: modalData.scheduleStart || undefined,
-          scheduleEnd: modalData.scheduleEnd || undefined,
+          scheduleStart: modalData.scheduleStart || "",
+          scheduleEnd: modalData.scheduleEnd || "",
           isOpen: modalData.isOpen,
           status: modalData.isOpen ? "active" : "closed",
         });
+        setScheduledForms((prev) => [
+          created,
+          ...prev.filter((f) => f.id !== created.id),
+        ]);
+        // If viewing a specific batch that is different from target batch, switch to the new batch so it's directly visible
+        if (selectedBatch !== "all" && selectedBatch !== modalData.batchId) {
+          setSelectedBatch(modalData.batchId);
+        }
       }
 
       setShowFormModal(false);
-      await loadData();
+      loadData();
     } catch (err: any) {
       console.error("Save scheduled form failed:", err);
       alert(err?.message || "Failed to save scheduled form.");
@@ -406,14 +469,22 @@ export default function EnrollmentManagement() {
   };
 
   // Scheduled forms under currently selected batch (or all)
-  const batchScheduledForms = scheduledForms.filter((f) =>
-    selectedBatch ? f.batchId === selectedBatch : true,
-  );
+  const batchScheduledForms =
+    !selectedBatch || selectedBatch === "all"
+      ? scheduledForms
+      : scheduledForms.filter((f) => f.batchId === selectedBatch);
+
+  // Forms to display based on scheduledFormsScope
+  const displayedScheduledForms =
+    scheduledFormsScope === "all" || !selectedBatch || selectedBatch === "all"
+      ? scheduledForms
+      : scheduledForms.filter((f) => f.batchId === selectedBatch);
 
   // Filter applications by selected batch & form filter & search
-  const batchForms = forms.filter((f) =>
-    selectedBatch ? f.batchId === selectedBatch : true,
-  );
+  const batchForms =
+    !selectedBatch || selectedBatch === "all"
+      ? forms
+      : forms.filter((f) => f.batchId === selectedBatch);
 
   const filteredForms = batchForms.filter((f) => {
     // Form filter
@@ -516,6 +587,7 @@ export default function EnrollmentManagement() {
               value={selectedBatch}
               onChange={(e) => handleBatchChange(e.target.value)}
             >
+              <option value="all">🌟 All Batches (Overview)</option>
               {batches.map((batch) => (
                 <option key={batch.id} value={batch.id}>
                   {batch.name} ({batch.studentCount || 0} students)
@@ -526,7 +598,7 @@ export default function EnrollmentManagement() {
 
           <div className="flex items-center gap-2 flex-wrap text-xs">
             <span className="px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 font-medium">
-              Forms: {batchScheduledForms.length}
+              Forms: {displayedScheduledForms.length}
             </span>
             <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium">
               Total Applicants: {batchForms.length}
@@ -545,14 +617,48 @@ export default function EnrollmentManagement() {
       <Card className="border-slate-200 shadow-sm overflow-hidden">
         <CardHeader className="bg-gradient-to-r from-indigo-50 via-purple-50 to-white border-b border-indigo-100 py-4 px-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <CardTitle className="text-base md:text-lg font-bold text-indigo-950 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" />
-              Scheduled Enrollment Forms ({batchScheduledForms.length})
-            </CardTitle>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Create and schedule different forms under this batch (e.g. Early
-              Bird, Regular Admission, Test Series). Each gets its own unique
-              public URL.
+            <div className="flex items-center gap-3 flex-wrap">
+              <CardTitle className="text-base md:text-lg font-bold text-indigo-950 flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-indigo-600" />
+                Scheduled Enrollment Forms ({displayedScheduledForms.length})
+              </CardTitle>
+
+              {/* Scope toggle buttons */}
+              <div className="inline-flex rounded-lg bg-slate-200/80 p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setScheduledFormsScope("all")}
+                  className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                    scheduledFormsScope === "all"
+                      ? "bg-white text-indigo-700 shadow-xs"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  All Batches ({scheduledForms.length})
+                </button>
+                {selectedBatch && selectedBatch !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setScheduledFormsScope("selected")}
+                    className={`px-2.5 py-1 rounded-md transition-all cursor-pointer ${
+                      scheduledFormsScope === "selected"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    This Batch (
+                    {
+                      scheduledForms.filter((f) => f.batchId === selectedBatch)
+                        .length
+                    }
+                    )
+                  </button>
+                )}
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              Create and schedule different enrollment forms under any batch.
+              Each gets its own unique public URL for student admissions.
             </p>
           </div>
 
@@ -561,31 +667,48 @@ export default function EnrollmentManagement() {
             onClick={handleOpenCreateForm}
             className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold shrink-0"
           >
-            <Plus className="w-3.5 h-3.5" />+ New Form for this Batch
+            <Plus className="w-3.5 h-3.5" />+ New Scheduled Form
           </Button>
         </CardHeader>
 
         <CardContent className="p-6">
-          {batchScheduledForms.length === 0 ? (
+          {displayedScheduledForms.length === 0 ? (
             <div className="text-center py-10 border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50 space-y-3">
               <Calendar className="w-10 h-10 text-slate-400 mx-auto" />
               <div>
                 <h3 className="text-sm font-bold text-slate-700">
-                  No scheduled forms created for this batch yet
+                  {scheduledFormsScope === "selected" &&
+                  scheduledForms.length > 0
+                    ? `No forms scheduled specifically for this batch yet, but ${scheduledForms.length} form(s) exist in other batches.`
+                    : "No scheduled enrollment forms created yet"}
                 </h3>
                 <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                  Click the button below to create your first scheduled
-                  enrollment form. You can schedule dates, specify course
-                  details, and copy the public student link.
+                  {scheduledFormsScope === "selected" &&
+                  scheduledForms.length > 0
+                    ? "Click 'All Batches' above to view existing forms, or create a new form specifically for this batch."
+                    : "Click the button below to create your first scheduled enrollment form. You can configure course info, schedule dates, and copy the public student registration link."}
                 </p>
               </div>
-              <Button
-                size="sm"
-                onClick={handleOpenCreateForm}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" /> Create First Form
-              </Button>
+              <div className="flex items-center justify-center gap-2 pt-1">
+                {scheduledFormsScope === "selected" &&
+                  scheduledForms.length > 0 && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setScheduledFormsScope("all")}
+                      className="text-xs"
+                    >
+                      View All Batches Forms ({scheduledForms.length})
+                    </Button>
+                  )}
+                <Button
+                  size="sm"
+                  onClick={handleOpenCreateForm}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Create Form
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="overflow-x-auto border border-slate-200 rounded-xl">
@@ -594,6 +717,9 @@ export default function EnrollmentManagement() {
                   <TableRow>
                     <TableHead className="text-xs font-bold uppercase">
                       Form Title &amp; Course
+                    </TableHead>
+                    <TableHead className="text-xs font-bold uppercase">
+                      Target Batch
                     </TableHead>
                     <TableHead className="text-xs font-bold uppercase">
                       Schedule Window
@@ -613,7 +739,7 @@ export default function EnrollmentManagement() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {batchScheduledForms.map((item) => {
+                  {displayedScheduledForms.map((item) => {
                     const statusCheck = computeScheduledFormStatus(item);
                     const formSubmissions = forms.filter(
                       (f) => f.scheduledFormId === item.id,
@@ -623,6 +749,9 @@ export default function EnrollmentManagement() {
                     );
                     const formUrl = `${window.location.origin}/enroll/${item.id}`;
                     const isCopied = copiedFormId === item.id;
+                    const matchedBatch = batches.find(
+                      (b) => b.id === item.batchId,
+                    );
 
                     return (
                       <TableRow key={item.id} className="hover:bg-slate-50/80">
@@ -637,6 +766,18 @@ export default function EnrollmentManagement() {
                             Start: {item.startingDate || "—"} • Duration:{" "}
                             {item.duration || "—"}
                           </div>
+                        </TableCell>
+
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className="bg-indigo-50/70 border-indigo-200 text-indigo-800 text-[11px] font-semibold"
+                          >
+                            {item.batchName ||
+                              matchedBatch?.name ||
+                              item.batchId ||
+                              "Batch"}
+                          </Badge>
                         </TableCell>
 
                         <TableCell>
