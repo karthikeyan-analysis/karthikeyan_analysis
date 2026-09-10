@@ -112,7 +112,7 @@ export default function EnrollmentManagement() {
     paramBatchId &&
       (paramBatchId === "all" || batches.some((b) => b.id === paramBatchId))
       ? paramBatchId
-      : batches[0]?.id || "all",
+      : "all",
   );
 
   // Scope for scheduled forms: "all" displays forms across all batches, "selected" displays only active batch
@@ -153,19 +153,15 @@ export default function EnrollmentManagement() {
 
   const currentBatch = batches.find((b) => b.id === selectedBatch);
 
-  // Sync selectedBatch if batches load late or param updates
+  // Sync selectedBatch if param updates
   useEffect(() => {
     if (
-      (!selectedBatch || selectedBatch === "all") &&
-      batches.length > 0 &&
       paramBatchId &&
-      paramBatchId !== "all"
+      (paramBatchId === "all" || batches.some((b) => b.id === paramBatchId))
     ) {
       setSelectedBatch(paramBatchId);
-    } else if (!selectedBatch && batches.length > 0) {
-      setSelectedBatch(batches[0].id);
     }
-  }, [batches, paramBatchId, selectedBatch]);
+  }, [batches, paramBatchId]);
 
   // Load forms and scheduled forms
   const loadData = async () => {
@@ -485,16 +481,30 @@ export default function EnrollmentManagement() {
   const batchForms =
     !selectedBatch || selectedBatch === "all"
       ? forms
-      : forms.filter((f) => f.batchId === selectedBatch);
+      : forms.filter(
+          (f) =>
+            f.batchId === selectedBatch ||
+            (f.scheduledFormId &&
+              scheduledForms.some(
+                (sf) => sf.id === f.scheduledFormId && sf.batchId === selectedBatch,
+              )),
+        );
 
-  const filteredForms = batchForms.filter((f) => {
-    // Form filter
-    if (
-      selectedFormFilter !== "all" &&
-      f.scheduledFormId !== selectedFormFilter
-    ) {
-      return false;
+  const filteredForms = forms.filter((f) => {
+    // If a specific form is filtered, match directly
+    if (selectedFormFilter !== "all") {
+      if (f.scheduledFormId !== selectedFormFilter) return false;
+    } else if (selectedBatch && selectedBatch !== "all") {
+      // Otherwise check batch match
+      const isBatchMatch =
+        f.batchId === selectedBatch ||
+        (f.scheduledFormId &&
+          scheduledForms.some(
+            (sf) => sf.id === f.scheduledFormId && sf.batchId === selectedBatch,
+          ));
+      if (!isBatchMatch) return false;
     }
+
     // Search filter
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
@@ -506,24 +516,34 @@ export default function EnrollmentManagement() {
     const email = (f.personalDetails?.email || "").toLowerCase();
     const mobile = (f.personalDetails?.mobileNo || "").toLowerCase();
     const username = (f.portalUsername || "").toLowerCase();
+    const bName = (
+      f.batchName ||
+      batches.find((b) => b.id === f.batchId)?.name ||
+      ""
+    ).toLowerCase();
+    const fTitle = (f.scheduledFormTitle || "").toLowerCase();
+
     return (
       name.includes(q) ||
       email.includes(q) ||
       mobile.includes(q) ||
-      username.includes(q)
+      username.includes(q) ||
+      bName.includes(q) ||
+      fTitle.includes(q)
     );
   });
 
   const pendingForms = filteredForms.filter(
     (f) =>
       f.approvalStatus === "pending" ||
-      (!f.approvalStatus && f.status === "submitted"),
+      (!f.approvalStatus &&
+        (f.status === "submitted" || !f.status || f.status === "pending")),
   );
   const approvedForms = filteredForms.filter(
-    (f) => f.approvalStatus === "approved",
+    (f) => f.approvalStatus === "approved" || f.status === "approved",
   );
   const rejectedForms = filteredForms.filter(
-    (f) => f.approvalStatus === "rejected",
+    (f) => f.approvalStatus === "rejected" || f.status === "rejected",
   );
 
   const formatDate = (date: any): string => {
@@ -853,14 +873,38 @@ export default function EnrollmentManagement() {
 
                         <TableCell>
                           <div className="text-xs">
-                            <span className="font-bold text-slate-900">
-                              {formSubmissions.length}
-                            </span>{" "}
-                            Total
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedFormFilter(item.id);
+                                document
+                                  .getElementById("applications-section")
+                                  ?.scrollIntoView({ behavior: "smooth" });
+                              }}
+                              className="text-left font-semibold text-indigo-700 hover:text-indigo-900 cursor-pointer"
+                              title="Click to view applications for this form"
+                            >
+                              <span className="font-bold text-slate-900">
+                                {formSubmissions.length}
+                              </span>{" "}
+                              Total
+                            </button>
                             {formPending.length > 0 && (
-                              <Badge className="ml-1.5 bg-amber-500 text-[10px] px-1.5 py-0">
-                                {formPending.length} Pending
-                              </Badge>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedFormFilter(item.id);
+                                  document
+                                    .getElementById("applications-section")
+                                    ?.scrollIntoView({ behavior: "smooth" });
+                                }}
+                                className="ml-1.5 inline-flex items-center cursor-pointer hover:opacity-80 transition"
+                                title="Click to view pending applications for this form"
+                              >
+                                <Badge className="bg-amber-500 hover:bg-amber-600 text-[10px] px-1.5 py-0 cursor-pointer">
+                                  {formPending.length} Pending
+                                </Badge>
+                              </button>
                             )}
                           </div>
                         </TableCell>
@@ -940,7 +984,7 @@ export default function EnrollmentManagement() {
       </Card>
 
       {/* SECTION 2: CANDIDATE APPLICATIONS & APPROVAL MANAGEMENT */}
-      <Card className="border-slate-200 shadow-sm">
+      <Card id="applications-section" className="border-slate-200 shadow-sm scroll-mt-6">
         <CardHeader className="py-4 px-6 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <CardTitle className="text-lg font-bold text-slate-900">
@@ -954,7 +998,7 @@ export default function EnrollmentManagement() {
 
           {/* Form Filter & Search Bar */}
           <div className="flex items-center gap-2.5 flex-wrap w-full md:w-auto">
-            {batchScheduledForms.length > 0 && (
+            {scheduledForms.length > 0 && (
               <div className="flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
                 <select
@@ -962,10 +1006,12 @@ export default function EnrollmentManagement() {
                   value={selectedFormFilter}
                   onChange={(e) => setSelectedFormFilter(e.target.value)}
                 >
-                  <option value="all">All Forms ({batchForms.length})</option>
-                  {batchScheduledForms.map((sf) => (
+                  <option value="all">
+                    All Forms ({selectedBatch === "all" ? forms.length : batchForms.length})
+                  </option>
+                  {(selectedBatch === "all" ? scheduledForms : batchScheduledForms).map((sf) => (
                     <option key={sf.id} value={sf.id}>
-                      {sf.formTitle}
+                      {sf.formTitle} ({forms.filter((f) => f.scheduledFormId === sf.id).length})
                     </option>
                   ))}
                 </select>
