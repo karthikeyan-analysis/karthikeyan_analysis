@@ -538,7 +538,9 @@ export default function EnrollmentManagement() {
     (f) =>
       f.approvalStatus === "pending" ||
       (!f.approvalStatus &&
-        (f.status === "submitted" || !f.status || (f.status as string) === "pending")),
+        (f.status === "submitted" ||
+          !f.status ||
+          (f.status as string) === "pending")),
   );
   const approvedForms = filteredForms.filter(
     (f) => f.approvalStatus === "approved" || f.status === "approved",
