@@ -56,6 +56,7 @@ import {
   FileSpreadsheet,
   AlertCircle,
   Filter,
+  User,
 } from "lucide-react";
 import type {
   BatchEnrollmentConfig,
@@ -1088,14 +1089,29 @@ export default function EnrollmentManagement() {
                                 className="hover:bg-slate-50/70"
                               >
                                 <TableCell>
-                                  <div className="font-bold text-slate-900">
-                                    {p?.studentName || p?.candidateName}
-                                  </div>
-                                  <div className="text-xs text-slate-500">
-                                    Father: {p?.fatherName || "—"}
-                                  </div>
-                                  <div className="text-[11px] text-slate-400 capitalize">
-                                    {p?.gender} • {d?.maritalStatus}
+                                  <div className="flex items-center gap-3">
+                                    {p?.photoURL ? (
+                                      <img
+                                        src={p.photoURL}
+                                        alt={p.studentName || "Candidate"}
+                                        className="w-10 h-12 object-cover rounded border border-slate-200 shrink-0 shadow-xs"
+                                      />
+                                    ) : (
+                                      <div className="w-10 h-12 rounded border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
+                                        <User className="w-5 h-5 text-slate-300" />
+                                      </div>
+                                    )}
+                                    <div>
+                                      <div className="font-bold text-slate-900">
+                                        {p?.studentName || p?.candidateName}
+                                      </div>
+                                      <div className="text-xs text-slate-500">
+                                        Father: {p?.fatherName || "—"}
+                                      </div>
+                                      <div className="text-[11px] text-slate-400 capitalize">
+                                        {p?.gender} • {d?.maritalStatus}
+                                      </div>
+                                    </div>
                                   </div>
                                 </TableCell>
 

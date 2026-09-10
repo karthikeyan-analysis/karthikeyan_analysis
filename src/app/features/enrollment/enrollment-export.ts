@@ -33,6 +33,7 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
     "WhatsApp No": form.personalDetails.whatsappNo,
     "Telegram No": form.personalDetails.telegramNo || "",
     Email: form.personalDetails.email,
+    "Photo URL": form.personalDetails.photoURL || "",
 
     // Address Details
     "Door No": form.addressDetails.doorNo,

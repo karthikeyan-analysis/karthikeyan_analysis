@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import bannerImage from "../../../banner.jpeg";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "../../../config/firebase";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import {
@@ -63,8 +65,23 @@ export default function PublicEnrollmentForm() {
     password: string;
     studentId: string;
     candidateName: string;
+    photoURL?: string;
   } | null>(null);
   const [copiedCreds, setCopiedCreds] = useState(false);
+
+  // Photo State
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+
+  const handlePhotoChange = (file: File | null) => {
+    setPhotoFile(file);
+    if (file) {
+      const preview = URL.createObjectURL(file);
+      setPhotoPreview(preview);
+    } else {
+      setPhotoPreview(null);
+    }
+  };
 
   // Form State
   const [personalDetails, setPersonalDetails] = useState<PersonalDetails>({
@@ -229,6 +246,9 @@ export default function PublicEnrollmentForm() {
 
     // Validation
     const missing: string[] = [];
+    if (!photoFile && !personalDetails.photoURL) {
+      missing.push("Passport Size Photo");
+    }
     if (!personalDetails.candidateName.trim()) missing.push("Candidate Name");
     if (!personalDetails.initials.trim()) missing.push("Initials");
     if (!personalDetails.fatherName.trim()) missing.push("Father's Name");
@@ -275,6 +295,18 @@ export default function PublicEnrollmentForm() {
 
     setSubmitting(true);
     try {
+      let uploadedPhotoUrl = personalDetails.photoURL || "";
+      if (photoFile) {
+        const fileExt = photoFile.name.split(".").pop() || "jpg";
+        const safeName = `passport_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+        const fileRef = ref(storage, `enrollmentPhotos/${safeName}`);
+        await uploadBytes(fileRef, photoFile, {
+          contentType: photoFile.type || "image/jpeg",
+          cacheControl: "public,max-age=31536000",
+        });
+        uploadedPhotoUrl = await getDownloadURL(fileRef);
+      }
+
       const payload: EnrollmentFormDTO = {
         batchId,
         batchName,
@@ -283,6 +315,7 @@ export default function PublicEnrollmentForm() {
         scheduledFormTitle: scheduledFormTitle || undefined,
         personalDetails: {
           ...personalDetails,
+          photoURL: uploadedPhotoUrl,
           studentName:
             `${personalDetails.candidateName.trim()} ${personalDetails.initials.trim()}`.trim(),
         },
@@ -297,6 +330,7 @@ export default function PublicEnrollmentForm() {
       setSubmittedResult({
         ...result,
         candidateName: payload.personalDetails.studentName,
+        photoURL: uploadedPhotoUrl,
       });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: any) {
@@ -395,57 +429,71 @@ export default function PublicEnrollmentForm() {
                 <div className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
                   Application Summary
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div>
-                    <span className="text-slate-500 block">
-                      Candidate Name:
-                    </span>
-                    <span className="font-bold text-slate-900 text-sm">
-                      {submittedResult.candidateName}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">
-                      Student ID / Reg No:
-                    </span>
-                    <span className="font-bold text-indigo-700 font-mono text-sm">
-                      {submittedResult.studentId}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">
-                      Enrolled Batch:
-                    </span>
-                    <span className="font-semibold text-slate-800">
-                      {batchName || config?.courseName || "Crash Course"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">Course Name:</span>
-                    <span className="font-semibold text-slate-800">
-                      {config?.courseName ||
-                        batchName ||
-                        "Online Live Crash Course"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">
-                      Registered Email:
-                    </span>
-                    <span className="font-semibold text-slate-800 font-mono">
-                      {personalDetails.email}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-slate-500 block">
-                      Contact Number:
-                    </span>
-                    <span className="font-semibold text-slate-800">
-                      {personalDetails.mobileNo}
-                      {personalDetails.whatsappNo
-                        ? ` (WA: ${personalDetails.whatsappNo})`
-                        : ""}
-                    </span>
+                <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                  {(submittedResult.photoURL || photoPreview) && (
+                    <div className="shrink-0 text-center">
+                      <img
+                        src={submittedResult.photoURL || photoPreview || ""}
+                        alt="Candidate Photo"
+                        className="w-24 h-32 sm:w-28 sm:h-36 object-cover rounded-lg border-2 border-slate-300 shadow-sm bg-white"
+                      />
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mt-1">
+                        Candidate Photo
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs w-full">
+                    <div>
+                      <span className="text-slate-500 block">
+                        Candidate Name:
+                      </span>
+                      <span className="font-bold text-slate-900 text-sm">
+                        {submittedResult.candidateName}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">
+                        Student ID / Reg No:
+                      </span>
+                      <span className="font-bold text-indigo-700 font-mono text-sm">
+                        {submittedResult.studentId}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">
+                        Enrolled Batch:
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        {batchName || config?.courseName || "Crash Course"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">Course Name:</span>
+                      <span className="font-semibold text-slate-800">
+                        {config?.courseName ||
+                          batchName ||
+                          "Online Live Crash Course"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">
+                        Registered Email:
+                      </span>
+                      <span className="font-semibold text-slate-800 font-mono">
+                        {personalDetails.email}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500 block">
+                        Contact Number:
+                      </span>
+                      <span className="font-semibold text-slate-800">
+                        {personalDetails.mobileNo}
+                        {personalDetails.whatsappNo
+                          ? ` (WA: ${personalDetails.whatsappNo})`
+                          : ""}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -569,6 +617,9 @@ export default function PublicEnrollmentForm() {
           <PersonalContactForm
             data={personalDetails}
             onChange={setPersonalDetails}
+            photoFile={photoFile}
+            photoPreview={photoPreview}
+            onPhotoFileChange={handlePhotoChange}
           />
 
           {/* Section 2: Address Breakdown Details */}

@@ -16,6 +16,8 @@ import {
   AlertCircle,
   GraduationCap,
   FileCheck,
+  Upload,
+  User,
 } from "lucide-react";
 import type {
   PersonalDetails,
@@ -167,12 +169,20 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
 interface PersonalContactFormProps {
   data: PersonalDetails;
   onChange: (data: PersonalDetails) => void;
+  photoFile?: File | null;
+  photoPreview?: string | null;
+  onPhotoFileChange?: (file: File | null) => void;
 }
 
 export function PersonalContactForm({
   data,
   onChange,
+  photoFile,
+  photoPreview,
+  onPhotoFileChange,
 }: PersonalContactFormProps) {
+  const [photoError, setPhotoError] = useState<string | null>(null);
+
   const set = (key: keyof PersonalDetails, value: any) => {
     onChange({ ...data, [key]: value });
   };
@@ -216,6 +226,40 @@ export function PersonalContactForm({
     });
   };
 
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPhotoError(null);
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setPhotoError(
+        "Please select a valid image file (JPG, JPEG, PNG, or WEBP).",
+      );
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError(
+        "Image file size exceeds 5MB limit. Please choose a smaller photo.",
+      );
+      return;
+    }
+
+    if (onPhotoFileChange) {
+      onPhotoFileChange(file);
+    }
+  };
+
+  const handleRemovePhoto = () => {
+    setPhotoError(null);
+    if (onPhotoFileChange) {
+      onPhotoFileChange(null);
+    }
+    set("photoURL", "");
+  };
+
+  const currentPhoto = photoPreview || data.photoURL;
+
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
       <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200">
@@ -228,6 +272,99 @@ export function PersonalContactForm({
       </div>
 
       <CardContent className="p-6 space-y-5">
+        {/* Passport Size Photo Upload Section */}
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5">
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">
+            {/* Photo Preview Frame */}
+            <div className="shrink-0 text-center">
+              <div className="w-28 h-36 sm:w-32 sm:h-40 rounded-lg border-2 border-dashed border-slate-300 bg-white overflow-hidden flex flex-col items-center justify-center shadow-xs relative">
+                {currentPhoto ? (
+                  <img
+                    src={currentPhoto}
+                    alt="Passport Photo Preview"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="text-center p-3 space-y-1">
+                    <Camera className="w-8 h-8 text-slate-400 mx-auto" />
+                    <span className="text-[11px] font-semibold text-slate-600 block">
+                      Passport Photo
+                    </span>
+                    <span className="text-[9px] text-slate-400 block">
+                      35mm x 45mm
+                    </span>
+                  </div>
+                )}
+              </div>
+              {currentPhoto && (
+                <div className="mt-1.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />{" "}
+                    Selected
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Upload Controls & Guidelines */}
+            <div className="flex-1 space-y-3 text-center sm:text-left">
+              <div>
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                  Student Passport Size Photo *
+                </label>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Please upload a recent, formal front-facing passport
+                  photograph with a light or white background. This will be
+                  stored securely and displayed on your official admission
+                  receipt, application PDF, and student portal identity.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2.5">
+                <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg cursor-pointer transition shadow-xs">
+                  <Upload className="w-4 h-4" />
+                  <span>
+                    {currentPhoto ? "Change Photo" : "Upload Passport Photo"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/jpg"
+                    className="hidden"
+                    onChange={handlePhotoSelect}
+                  />
+                </label>
+
+                {currentPhoto && (
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-rose-50 text-rose-600 border border-slate-200 hover:border-rose-200 text-xs font-medium rounded-lg transition"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Remove</span>
+                  </button>
+                )}
+              </div>
+
+              {photoError && (
+                <div className="text-xs text-rose-600 font-semibold bg-rose-50 border border-rose-200 px-3 py-1.5 rounded-md">
+                  {photoError}
+                </div>
+              )}
+
+              <div className="text-[11px] text-slate-400 space-y-0.5">
+                <div>
+                  • Accepted formats: JPG, JPEG, PNG, WEBP (Max size: 5MB)
+                </div>
+                <div>
+                  • Face should be clearly visible, upright and without
+                  hats/sunglasses
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Gender Dropdown placed near the top */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
@@ -922,43 +1059,67 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
         </span>
       </div>
 
-      {/* Personal Info */}
+      {/* Personal Info with Passport Photo */}
       <div className="space-y-2">
         <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider border-b border-slate-200 pb-1">
           Personal &amp; Contact Details
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
-          <div>
-            <span className="text-slate-500">Candidate Name:</span>{" "}
-            <span className="font-semibold text-slate-800">
-              {p?.studentName || p?.candidateName}
+        <div className="flex flex-col sm:flex-row gap-4 items-start pt-1">
+          {/* Passport Photo */}
+          <div className="shrink-0 text-center">
+            {p?.photoURL ? (
+              <img
+                src={p.photoURL}
+                alt="Candidate Passport Photo"
+                className="w-24 h-32 object-cover rounded-lg border-2 border-slate-300 shadow-sm"
+              />
+            ) : (
+              <div className="w-24 h-32 rounded-lg border-2 border-dashed border-slate-300 bg-slate-50 flex flex-col items-center justify-center text-slate-400 p-2">
+                <Camera className="w-6 h-6 mb-1 text-slate-300" />
+                <span className="text-[10px] text-slate-400">No Photo</span>
+              </div>
+            )}
+            <span className="text-[10px] font-semibold text-slate-500 block mt-1">
+              Passport Photo
             </span>
           </div>
-          <div>
-            <span className="text-slate-500">Gender:</span>{" "}
-            <span className="font-semibold text-slate-800 capitalize">
-              {p?.gender}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-500">Father's Name:</span>{" "}
-            <span className="font-semibold text-slate-800">
-              {p?.fatherName}
-            </span>
-          </div>
-          <div>
-            <span className="text-slate-500">Email:</span>{" "}
-            <span className="font-semibold text-slate-800">{p?.email}</span>
-          </div>
-          <div>
-            <span className="text-slate-500">Mobile:</span>{" "}
-            <span className="font-semibold text-slate-800">{p?.mobileNo}</span>
-          </div>
-          <div>
-            <span className="text-slate-500">WhatsApp:</span>{" "}
-            <span className="font-semibold text-slate-800">
-              {p?.whatsappNo}
-            </span>
+
+          {/* Details Grid */}
+          <div className="flex-1 grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs w-full">
+            <div>
+              <span className="text-slate-500">Candidate Name:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {p?.studentName || p?.candidateName}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">Gender:</span>{" "}
+              <span className="font-semibold text-slate-800 capitalize">
+                {p?.gender}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">Father's Name:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {p?.fatherName}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">Email:</span>{" "}
+              <span className="font-semibold text-slate-800">{p?.email}</span>
+            </div>
+            <div>
+              <span className="text-slate-500">Mobile:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {p?.mobileNo}
+              </span>
+            </div>
+            <div>
+              <span className="text-slate-500">WhatsApp:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {p?.whatsappNo}
+              </span>
+            </div>
           </div>
         </div>
       </div>
