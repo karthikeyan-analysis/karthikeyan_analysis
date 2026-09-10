@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import bannerImage from "../../../banner.jpeg";
 import { Card, CardContent } from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import {
@@ -51,32 +52,42 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
 
   return (
     <div className="space-y-4">
-      {/* Colorful Institute Header Banner */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 p-6 md:p-8 text-white shadow-lg">
-        <div className="absolute -right-10 -bottom-10 w-48 h-48 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute left-1/2 -top-10 w-64 h-64 bg-indigo-400/20 rounded-full blur-3xl pointer-events-none" />
+      {/* Official Institute Header Banner */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Official Banner Image */}
+        <div className="w-full bg-white px-3 py-4 sm:px-6 sm:py-6 flex items-center justify-center">
+          <img
+            src={bannerImage}
+            alt="Karthikeyan Analysis Study Circle & Learning Resources"
+            className="w-full max-w-3xl max-h-24 sm:max-h-32 md:max-h-40 object-contain"
+          />
+        </div>
 
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-xs font-semibold uppercase tracking-widest text-indigo-100 border border-white/20">
-              <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
-              Official Batch Enrollment Portal
-            </div>
-            <h1 className="text-2xl md:text-3xl lg:text-4xl font-extrabold tracking-tight drop-shadow-sm">
-              KARTHIKEYAN TNPSC STUDY CIRCLE
-            </h1>
-            <p className="text-sm md:text-base text-indigo-100 max-w-2xl font-medium">
-              Premier Coaching Institute for Tamil Nadu Statistical Services
-              &amp; Competitive Examinations
-            </p>
+        {/* Clean Sub-header Bar */}
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5 text-xs text-slate-700">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Official Batch Enrollment Portal</span>
           </div>
 
-          <div className="shrink-0 bg-white/10 backdrop-blur-md border border-white/25 px-5 py-4 rounded-xl text-center shadow-inner">
-            <span className="text-[11px] font-bold text-amber-300 uppercase tracking-widest block">
-              Enrollment Status
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Enrollment Status:
             </span>
-            <span className="text-base md:text-lg font-bold text-white flex items-center justify-center gap-1.5 mt-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
+                config?.isOpen === false
+                  ? "bg-rose-100 text-rose-800"
+                  : "bg-emerald-100 text-emerald-800"
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  config?.isOpen === false
+                    ? "bg-rose-500"
+                    : "bg-emerald-500 animate-pulse"
+                }`}
+              />
               {config?.isOpen === false
                 ? "Admissions Closed"
                 : "Admissions Open"}
@@ -85,24 +96,24 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
         </div>
       </div>
 
-      {/* Editable Course Information Box (Displayed to Student) */}
-      <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-indigo-50/90 via-purple-50/50 to-white p-5 md:p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-indigo-900 font-bold text-base md:text-lg border-b border-indigo-100 pb-3 mb-4">
+      {/* Course Information Box (Clean, Professional, No Gradient) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-slate-900 font-bold text-base md:text-lg border-b border-slate-200 pb-3 mb-4">
           <Building2 className="w-5 h-5 text-indigo-600" />
           <span>Course Information</span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-3 bg-white/80 border border-indigo-100 p-3.5 rounded-lg">
+          <div className="md:col-span-3 bg-slate-50 border border-slate-200 p-4 rounded-lg">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
               Online Live Crash Course Name
             </span>
-            <span className="text-base md:text-lg font-bold text-indigo-950 mt-1 block">
+            <span className="text-base md:text-lg font-bold text-slate-900 mt-1 block">
               {courseTitle}
             </span>
           </div>
 
-          <div className="bg-white/80 border border-indigo-100 p-3.5 rounded-lg flex items-start gap-3">
+          <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg flex items-start gap-3">
             <Calendar className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
@@ -114,8 +125,8 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
             </div>
           </div>
 
-          <div className="bg-white/80 border border-indigo-100 p-3.5 rounded-lg flex items-start gap-3">
-            <Clock className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
+          <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg flex items-start gap-3">
+            <Clock className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                 Course Duration
@@ -126,8 +137,8 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
             </div>
           </div>
 
-          <div className="bg-white/80 border border-indigo-100 p-3.5 rounded-lg flex items-start gap-3">
-            <Info className="w-5 h-5 text-pink-600 shrink-0 mt-0.5" />
+          <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg flex items-start gap-3">
+            <Info className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
                 Mode of Instruction
@@ -140,7 +151,7 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
         </div>
 
         {config?.note?.trim() && (
-          <div className="mt-4 p-3 bg-amber-50/90 border border-amber-200 rounded-lg flex items-start gap-2.5 text-xs text-amber-900">
+          <div className="mt-4 p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5 text-xs text-amber-900">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <span>{config.note}</span>
           </div>

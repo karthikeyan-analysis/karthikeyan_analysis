@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router";
+import bannerImage from "../../../banner.jpeg";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import {
@@ -11,6 +12,7 @@ import {
   Loader2,
   ShieldAlert,
   ArrowRight,
+  Printer,
 } from "lucide-react";
 import {
   CourseHeaderBox,
@@ -321,91 +323,164 @@ export default function PublicEnrollmentForm() {
     );
   }
 
-  // Success & Credentials Screen
+  // Success & Credentials Screen (Official Receipt & Acknowledgement)
   if (submittedResult) {
+    const registrationDate = new Date().toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50/40 to-slate-100 py-10 px-4">
-        <div className="max-w-2xl mx-auto space-y-6">
-          <Card className="border-emerald-200 shadow-xl overflow-hidden bg-white">
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-6 text-white text-center">
-              <CheckCircle2 className="w-16 h-16 mx-auto mb-3 text-emerald-100" />
-              <h1 className="text-2xl md:text-3xl font-extrabold">
-                Application Registered!
-              </h1>
-              <p className="text-emerald-100 text-sm mt-1">
-                Your batch enrollment application has been recorded
-                successfully.
-              </p>
+      <div className="min-h-screen bg-slate-100/70 py-6 sm:py-10 px-3 sm:px-6 print:bg-white print:p-0 print:min-h-0">
+        <div className="max-w-2xl mx-auto space-y-4 print:max-w-full print:space-y-0">
+          <Card className="border border-slate-200 shadow-lg overflow-hidden bg-white print:border-none print:shadow-none print:rounded-none">
+            {/* Top Official Banner Image */}
+            <div className="w-full bg-white px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-center border-b border-slate-100">
+              <img
+                src={bannerImage}
+                alt="Karthikeyan Analysis Study Circle Banner"
+                className="w-full max-w-xl max-h-20 sm:max-h-28 object-contain"
+              />
             </div>
 
-            <CardContent className="p-6 md:p-8 space-y-6">
-              {/* Approval Notice Banner */}
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 flex items-start gap-3 text-amber-900">
-                <ShieldAlert className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+            {/* Receipt Document Header Strip */}
+            <div className="bg-slate-900 text-white px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-center sm:text-left print:bg-slate-900 print:text-white">
+              <div>
+                <span className="text-[11px] font-bold text-indigo-300 uppercase tracking-widest block">
+                  Official Registration Acknowledgement
+                </span>
+                <h1 className="text-lg sm:text-xl font-bold tracking-tight">
+                  Enrollment Receipt &amp; Credentials Slip
+                </h1>
+              </div>
+              <div className="text-center sm:text-right">
+                <span className="text-[11px] text-slate-400 block">
+                  Date &amp; Time
+                </span>
+                <span className="text-xs font-semibold text-slate-200">
+                  {registrationDate}
+                </span>
+              </div>
+            </div>
+
+            <CardContent className="p-5 sm:p-7 space-y-5">
+              {/* Verification Status Alert */}
+              <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-4 flex items-start gap-3 text-amber-900">
+                <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <span className="text-xs font-bold uppercase tracking-wider text-amber-800 block">
-                    Verification Status: Pending Admin Approval
-                  </span>
-                  <p className="text-xs md:text-sm text-amber-800 leading-relaxed">
-                    The institute administrator must verify and approve your
-                    registration before your student account is activated. Once
-                    approved, you will be authorized to log in via{" "}
-                    <strong>Continue with Google</strong> using your registered
-                    email (<code>{personalDetails.email}</code>) or with the
-                    portal credentials below.
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-800">
+                      Verification Status:
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-200/80 text-amber-900">
+                      Pending Admin Approval
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    Your batch enrollment application has been recorded
+                    successfully. The institute administrator will verify your
+                    qualifications. Once approved, you will be authorized to log
+                    in via <strong>Continue with Google</strong> using your
+                    registered email (<code>{personalDetails.email}</code>) or
+                    with the student portal credentials below.
                   </p>
                 </div>
               </div>
 
+              {/* Student & Course Details Grid */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-3">
+                <div className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-2">
+                  Application Summary
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <span className="text-slate-500 block">
+                      Candidate Name:
+                    </span>
+                    <span className="font-bold text-slate-900 text-sm">
+                      {submittedResult.candidateName}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">
+                      Student ID / Reg No:
+                    </span>
+                    <span className="font-bold text-indigo-700 font-mono text-sm">
+                      {submittedResult.studentId}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">
+                      Enrolled Batch:
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      {batchName || config?.courseName || "Crash Course"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">Course Name:</span>
+                    <span className="font-semibold text-slate-800">
+                      {config?.courseName ||
+                        batchName ||
+                        "Online Live Crash Course"}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">
+                      Registered Email:
+                    </span>
+                    <span className="font-semibold text-slate-800 font-mono">
+                      {personalDetails.email}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 block">
+                      Contact Number:
+                    </span>
+                    <span className="font-semibold text-slate-800">
+                      {personalDetails.mobileNo}
+                      {personalDetails.whatsappNo
+                        ? ` (WA: ${personalDetails.whatsappNo})`
+                        : ""}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Generated Credentials Box */}
-              <div className="rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50/70 via-purple-50/40 to-white p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-indigo-100 pb-3">
-                  <div className="flex items-center gap-2 text-indigo-900 font-bold">
-                    <KeyRound className="w-5 h-5 text-indigo-600" />
-                    <span>Your Student Portal Login Credentials</span>
+              <div className="rounded-xl border-2 border-indigo-100 bg-white p-5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                    <KeyRound className="w-4 h-4 text-indigo-600" />
+                    <span>Student Portal Login Credentials</span>
                   </div>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={handleCopyCredentials}
-                    className="text-xs gap-1.5 border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                    className="text-xs gap-1.5 h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50 print:hidden"
                   >
                     {copiedCreds ? (
                       <>
-                        <CheckCheck className="w-4 h-4 text-emerald-600" />
+                        <CheckCheck className="w-3.5 h-3.5 text-emerald-600" />
                         Copied!
                       </>
                     ) : (
                       <>
-                        <Copy className="w-4 h-4" />
+                        <Copy className="w-3.5 h-3.5" />
                         Copy Details
                       </>
                     )}
                   </Button>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">
-                      Candidate Name
-                    </span>
-                    <span className="text-sm font-bold text-slate-900 mt-0.5 block">
-                      {submittedResult.candidateName}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">
-                      Student ID / Reg No
-                    </span>
-                    <span className="text-sm font-bold text-indigo-700 font-mono mt-0.5 block">
-                      {submittedResult.studentId}
-                    </span>
-                  </div>
-
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <span className="text-[11px] text-slate-500 font-medium block">
                       Portal Username
                     </span>
                     <span className="text-base font-bold text-indigo-900 font-mono mt-0.5 block">
@@ -413,8 +488,8 @@ export default function PublicEnrollmentForm() {
                     </span>
                   </div>
 
-                  <div className="bg-white p-3.5 rounded-xl border border-slate-200">
-                    <span className="text-xs text-slate-500 font-medium block">
+                  <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <span className="text-[11px] text-slate-500 font-medium block">
                       Portal Password
                     </span>
                     <span className="text-base font-bold text-indigo-900 font-mono mt-0.5 block">
@@ -424,25 +499,41 @@ export default function PublicEnrollmentForm() {
                 </div>
 
                 <p className="text-[11px] text-slate-500 italic">
-                  * Please save or screenshot these credentials. You will need
-                  them to access CBT tests, study material, and live classes
-                  once the admin approves your account.
+                  * Please save or print this receipt. You will need these
+                  credentials to access live CBT tests, classes, and study
+                  materials once your registration is approved.
                 </p>
               </div>
 
-              {/* Navigation Action */}
-              <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              {/* Print-only Official Footer */}
+              <div className="hidden print:block pt-4 border-t border-slate-200 text-center text-[10px] text-slate-500 space-y-1">
+                <p className="font-semibold text-slate-700">
+                  Karthikeyan Analysis Study Circle &amp; Learning Resources
+                </p>
+                <p>
+                  Premier Coaching Institute for Tamil Nadu Statistical Services
+                  (TNPSC) &amp; TRB Exams
+                </p>
+                <p className="text-slate-400">
+                  This is a computer-generated enrollment acknowledgement slip.
+                  No physical signature is required.
+                </p>
+              </div>
+
+              {/* Navigation & Print Actions (Hidden on print) */}
+              <div className="pt-2 flex flex-col sm:flex-row gap-3 print:hidden">
                 <Button
                   onClick={() => navigate("/login")}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-2 font-semibold"
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white gap-2 font-semibold h-10 text-sm"
                 >
                   Go to Student Login <ArrowRight className="w-4 h-4" />
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => window.print()}
-                  className="sm:w-auto text-slate-700 border-slate-300"
+                  className="sm:w-auto text-slate-700 border-slate-300 gap-2 h-10 text-sm font-semibold"
                 >
+                  <Printer className="w-4 h-4 text-slate-600" />
                   Print / Save Receipt
                 </Button>
               </div>
