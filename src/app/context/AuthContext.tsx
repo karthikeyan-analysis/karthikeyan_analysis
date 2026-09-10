@@ -599,6 +599,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (studentSnap.empty) {
+      // Check if candidate registered via batch enrollment form and is pending admin approval
+      try {
+        const enrollQuery = query(
+          collection(db, "enrollmentForms"),
+          where("submittedBy", "==", signedInEmail),
+        );
+        const enrollSnap = await getDocs(enrollQuery);
+        if (!enrollSnap.empty) {
+          const enrollData = enrollSnap.docs[0].data();
+          if (enrollData.approvalStatus === "pending" || (!enrollData.approvalStatus && enrollData.status === "submitted")) {
+            await signOut(auth);
+            return {
+              success: false,
+              error: "Your enrollment is pending admin approval. Once approved by the administrator, your student account will be activated.",
+            };
+          }
+        }
+      } catch (enrollErr) {
+        console.warn("[STUDENT_AUTH] Error checking pending enrollment forms:", enrollErr);
+      }
+
       console.error("[STUDENT_AUTH] Google sign-in REJECTED: No student record found in Firestore for email:", signedInEmail);
       await signOut(auth);
       return {
@@ -616,8 +637,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       batchIds?: string[];
       photoURL?: string;
       status?: string;
+      approvalStatus?: string;
     };
     const studentRecordId = studentDocRef.id;
+
+    if (studentRecord.approvalStatus === "pending" || studentRecord.status === "pending_approval") {
+      await signOut(auth);
+      return {
+        success: false,
+        error: "Your enrollment is pending admin approval. Once approved by the administrator, your student account will be activated.",
+      };
+    }
 
     if (studentRecord.status === "inactive") {
       await signOut(auth);
@@ -856,6 +886,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (studentSnap.empty) {
+        // Check if candidate registered via batch enrollment form and is pending approval
+        try {
+          const enrollQuery = query(
+            collection(db, "enrollmentForms"),
+            where("portalUsername", "==", cleanInput),
+          );
+          const enrollSnap = await getDocs(enrollQuery);
+          if (!enrollSnap.empty) {
+            const enrollData = enrollSnap.docs[0].data();
+            const storedPw = String(enrollData.portalPassword || "").trim();
+            if (storedPw === password) {
+              if (enrollData.approvalStatus === "pending" || (!enrollData.approvalStatus && enrollData.status === "submitted")) {
+                return {
+                  success: false,
+                  error: "Your enrollment is pending admin approval. Once approved by the administrator, your student account will be activated.",
+                };
+              }
+              if (enrollData.approvalStatus === "rejected") {
+                return {
+                  success: false,
+                  error: "Your enrollment application was not approved. Please contact the administrator.",
+                };
+              }
+            }
+          }
+        } catch (e) {
+          console.warn("[STUDENT_AUTH] Error checking enrollment forms for username login:", e);
+        }
+
         console.error("[STUDENT_AUTH] Student record not found for input:", cleanInput);
         return { success: false, error: "Invalid username or password." };
       }
@@ -869,12 +928,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         portalUsername?: string;
         portalPassword?: string;
         status?: string;
+        approvalStatus?: string;
         batchId?: string;
         batchIds?: string[];
         photoURL?: string;
       };
 
       console.log("[STUDENT_AUTH] Matched student doc ID:", studentRecordId, "Name:", studentData.name);
+
+      if (studentData.approvalStatus === "pending" || studentData.status === "pending_approval") {
+        return {
+          success: false,
+          error: "Your enrollment is pending admin approval. Once approved by the administrator, your student account will be activated.",
+        };
+      }
 
       if (studentData.status === "inactive") {
         return { success: false, error: "Your account is inactive. Contact your admin." };

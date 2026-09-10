@@ -198,8 +198,8 @@ export default function Sidebar({ isOpen = true, onClose }: SidebarProps) {
         },
         {
           to: "/admin/enrollments",
-          icon: FileText,
-          label: "Enrollment Requests",
+          icon: UserPlus,
+          label: "Batch Enrollment",
           end: true,
         },
         {

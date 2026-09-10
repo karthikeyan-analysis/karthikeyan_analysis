@@ -7,10 +7,20 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent } from "../../components/ui/card";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
-import { getAttempt, getExamTest, listPrivateQuestions, listPublicQuestions } from "../../features/exams/examApi";
+import {
+  getAttempt,
+  getExamTest,
+  listPrivateQuestions,
+  listPublicQuestions,
+} from "../../features/exams/examApi";
 import StudentPhotoImage from "../../components/StudentPhotoImage";
 import { useStudentPhoto } from "../../features/students/useStudentPhoto";
-import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
+import type {
+  ExamAttempt,
+  ExamQuestionPrivate,
+  ExamQuestionPublic,
+  ExamTest,
+} from "../../features/exams/types";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 
 function initialsFromName(name: string) {
@@ -64,10 +74,6 @@ export default function ExamResult() {
     if (!test || !attempt) return false;
     if (attempt.status !== "submitted") return false;
     if (test.showAnswersAfter === "never") return false;
-    if (test.showAnswersAfter === "immediate") return true;
-    // Prefer per-attempt hard end, not schedule end.
-    const hardEndAtMs = attempt.hardEndAt ? new Date(attempt.hardEndAt).getTime() : null;
-    if (hardEndAtMs != null) return Date.now() >= hardEndAtMs;
     return true;
   }, [attempt, test]);
 
@@ -135,15 +141,21 @@ export default function ExamResult() {
             This exam will be submitted automatically when the timer ends.
           </AlertDescription>
         </Alert>
-        <Button onClick={() => navigate("/student/tests")}>Back to schedule</Button>
+        <Button onClick={() => navigate("/student/tests")}>
+          Back to schedule
+        </Button>
       </div>
     );
   }
 
-  const answeredCount = Object.values(attempt.answers || {}).filter((v) => v != null).length;
+  const answeredCount = Object.values(attempt.answers || {}).filter(
+    (v) => v != null,
+  ).length;
   const scoreValue = attempt.score ?? 0;
   const maxScoreValue = attempt.maxScore ?? test.totalMarks;
-  const percent = maxScoreValue ? Math.round((scoreValue / maxScoreValue) * 1000) / 10 : 0;
+  const percent = maxScoreValue
+    ? Math.round((scoreValue / maxScoreValue) * 1000) / 10
+    : 0;
   const studentName =
     attempt?.participantName?.trim() ||
     user.name?.trim() ||
@@ -153,9 +165,10 @@ export default function ExamResult() {
     ? user.email?.trim() || "Guest"
     : user.studentId?.trim() || user.studentRecordId?.trim() || "-";
 
-
   const { correctCount, wrongCount, unansweredCount } = useMemo(() => {
-    const answered = Object.values(attempt?.answers || {}).filter((v) => v != null).length;
+    const answered = Object.values(attempt?.answers || {}).filter(
+      (v) => v != null,
+    ).length;
     const totalQ = questions.length;
     if (keys && keys.length > 0) {
       let c = 0;
@@ -174,9 +187,12 @@ export default function ExamResult() {
       });
       return { correctCount: c, wrongCount: w, unansweredCount: u };
     }
-    const defaultMark = test?.defaultMarksPerQuestion || (test?.totalMarks && totalQ ? test.totalMarks / totalQ : 1);
+    const defaultMark =
+      test?.defaultMarksPerQuestion ||
+      (test?.totalMarks && totalQ ? test.totalMarks / totalQ : 1);
     const scoreVal = attempt?.score ?? 0;
-    const estC = defaultMark > 0 && scoreVal > 0 ? Math.round(scoreVal / defaultMark) : 0;
+    const estC =
+      defaultMark > 0 && scoreVal > 0 ? Math.round(scoreVal / defaultMark) : 0;
     const estW = Math.max(0, answered - estC);
     const estU = Math.max(0, totalQ - answered);
     return {
@@ -211,11 +227,20 @@ export default function ExamResult() {
                 </Badge>
               </div>
               <div className="text-sm text-slate-600 mt-2">
-                Submitted at: {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-"}
+                Submitted at:{" "}
+                {attempt.submittedAt
+                  ? new Date(attempt.submittedAt).toLocaleString()
+                  : "-"}
               </div>
               <div className="text-sm text-slate-700 mt-1">
-                Student Name: <span className="font-semibold text-slate-900">{studentName}</span>
-                {" • "}Student ID: <span className="font-semibold text-slate-900">{studentIdValue}</span>
+                Student Name:{" "}
+                <span className="font-semibold text-slate-900">
+                  {studentName}
+                </span>
+                {" • "}Student ID:{" "}
+                <span className="font-semibold text-slate-900">
+                  {studentIdValue}
+                </span>
               </div>
             </div>
             <div className="flex justify-end sm:flex-none shrink-0 sm:mt-1">
@@ -241,7 +266,11 @@ export default function ExamResult() {
               </div>
             </div>
           </div>
-          <Button variant="outline" className="self-end sm:self-start shrink-0" onClick={() => navigate("/student/tests")}>
+          <Button
+            variant="outline"
+            className="self-end sm:self-start shrink-0"
+            onClick={() => navigate("/student/tests")}
+          >
             Back to schedule
           </Button>
         </div>
@@ -257,14 +286,18 @@ export default function ExamResult() {
                 <div className="text-xs text-slate-500 mt-1">{percent}%</div>
               </div>
               <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
-                <div className="text-xs text-emerald-700 font-semibold uppercase tracking-wider">Correct</div>
+                <div className="text-xs text-emerald-700 font-semibold uppercase tracking-wider">
+                  Correct
+                </div>
                 <div className="text-2xl sm:text-3xl font-bold text-emerald-700">
                   {correctCount}
                 </div>
                 <div className="text-xs text-emerald-600 mt-1">Questions</div>
               </div>
               <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4">
-                <div className="text-xs text-rose-700 font-semibold uppercase tracking-wider">Wrong</div>
+                <div className="text-xs text-rose-700 font-semibold uppercase tracking-wider">
+                  Wrong
+                </div>
                 <div className="text-2xl sm:text-3xl font-bold text-rose-700">
                   {wrongCount}
                 </div>
@@ -275,11 +308,15 @@ export default function ExamResult() {
                 <div className="text-2xl sm:text-3xl font-bold text-slate-900">
                   {answeredCount} / {questions.length}
                 </div>
-                <div className="text-xs text-slate-500 mt-1">{unansweredCount} Unanswered</div>
+                <div className="text-xs text-slate-500 mt-1">
+                  {unansweredCount} Unanswered
+                </div>
               </div>
               <div className="col-span-2 md:col-span-1 rounded-xl border border-indigo-200 bg-indigo-50/50 p-4 flex flex-col justify-between">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">Response sheet</div>
+                  <div className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                    Response sheet
+                  </div>
                   <p className="text-[11px] text-indigo-800/80 mt-1">
                     Official response sheet
                   </p>
@@ -287,7 +324,9 @@ export default function ExamResult() {
                 <div className="mt-2">
                   <Button
                     className="w-full bg-indigo-600 hover:bg-indigo-700 text-xs sm:text-sm"
-                    onClick={() => navigate(`/student/tests/${testId}/response-sheet`)}
+                    onClick={() =>
+                      navigate(`/student/tests/${testId}/response-sheet`)
+                    }
                   >
                     <Download className="w-4 h-4 mr-1.5" /> View Sheet
                   </Button>
@@ -297,13 +336,14 @@ export default function ExamResult() {
           </CardContent>
         </Card>
 
-
         <Card className="border-slate-200">
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-center justify-between">
               <div className="text-lg font-semibold text-slate-900">Review</div>
               {keys ? (
-                <Badge className="bg-emerald-100 text-emerald-800">Correct answers shown</Badge>
+                <Badge className="bg-emerald-100 text-emerald-800">
+                  Correct answers shown
+                </Badge>
               ) : canShowAnswers ? (
                 <Badge variant="outline">Loading correct answers…</Badge>
               ) : (
@@ -324,10 +364,16 @@ export default function ExamResult() {
                         ? "correct"
                         : "wrong";
                 return (
-                  <div key={q.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                  <div
+                    key={q.id}
+                    className="rounded-xl border border-slate-200 bg-white p-4"
+                  >
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-semibold text-slate-900">
-                        Q{idx + 1}. <span className="font-normal whitespace-pre-wrap">{q.text}</span>
+                        Q{idx + 1}.{" "}
+                        <span className="font-normal whitespace-pre-wrap">
+                          {q.text}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Badge variant="outline" className="text-xs">
@@ -370,14 +416,28 @@ export default function ExamResult() {
                             key={oi}
                             className={[
                               "rounded-lg border px-3 py-2 text-sm",
-                              isCorrect ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white",
-                              isSelected && !isCorrect ? "border-rose-300 bg-rose-50" : "",
+                              isCorrect
+                                ? "border-emerald-300 bg-emerald-50"
+                                : "border-slate-200 bg-white",
+                              isSelected && !isCorrect
+                                ? "border-rose-300 bg-rose-50"
+                                : "",
                             ].join(" ")}
                           >
-                            <span className="font-semibold mr-2">{String.fromCharCode(65 + oi)}.</span>
+                            <span className="font-semibold mr-2">
+                              {String.fromCharCode(65 + oi)}.
+                            </span>
                             {o}
-                            {isSelected ? <span className="ml-2 text-xs text-slate-500">(Your answer)</span> : null}
-                            {isCorrect ? <span className="ml-2 text-xs font-semibold text-emerald-700">(Correct)</span> : null}
+                            {isSelected ? (
+                              <span className="ml-2 text-xs text-slate-500">
+                                (Your answer)
+                              </span>
+                            ) : null}
+                            {isCorrect ? (
+                              <span className="ml-2 text-xs font-semibold text-emerald-700">
+                                (Correct)
+                              </span>
+                            ) : null}
                           </div>
                         );
                       })}
@@ -392,4 +452,3 @@ export default function ExamResult() {
     </div>
   );
 }
-

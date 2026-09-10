@@ -21,7 +21,10 @@ import {
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import { db } from "../../../config/firebase";
 import { storage } from "../../../config/firebase";
-import { allowsPasscodeGuestAccess, enrolledStudentsCanAccessTest } from "./settings";
+import {
+  allowsPasscodeGuestAccess,
+  enrolledStudentsCanAccessTest,
+} from "./settings";
 import { examIncludesBatch } from "./examBatchUtils";
 import { sha256Base64 } from "./password";
 import type {
@@ -63,8 +66,13 @@ export function examGuestProfilesCol(testId: string) {
 }
 
 export async function listExamTestsForAdmin(): Promise<ExamTest[]> {
-  const snap = await getDocs(query(collection(db, TESTS), orderBy("createdAt", "desc")));
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
+  const snap = await getDocs(
+    query(collection(db, TESTS), orderBy("createdAt", "desc")),
+  );
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  })) as ExamTest[];
 }
 
 export async function listExamTestsForStudent(params: {
@@ -73,8 +81,15 @@ export async function listExamTestsForStudent(params: {
 }): Promise<ExamTest[]> {
   // Legacy single-batch field + multi-batch array (dedupe).
   const [legacySnap, multiSnap] = await Promise.all([
-    getDocs(query(collection(db, TESTS), where("batchId", "==", params.batchId))),
-    getDocs(query(collection(db, TESTS), where("batchIds", "array-contains", params.batchId))),
+    getDocs(
+      query(collection(db, TESTS), where("batchId", "==", params.batchId)),
+    ),
+    getDocs(
+      query(
+        collection(db, TESTS),
+        where("batchIds", "array-contains", params.batchId),
+      ),
+    ),
   ]);
   const byId = new Map<string, ExamTest>();
   for (const d of [...legacySnap.docs, ...multiSnap.docs]) {
@@ -85,27 +100,44 @@ export async function listExamTestsForStudent(params: {
     if (!examIncludesBatch(t, params.batchId)) return false;
     if (!enrolledStudentsCanAccessTest(t)) return false;
     if (t.visibility === "SELECTIVE" && params.studentRecordId) {
-      return (t.selectedStudentRecordIds || []).includes(params.studentRecordId);
+      return (t.selectedStudentRecordIds || []).includes(
+        params.studentRecordId,
+      );
     }
     return true;
   });
-  return visible.sort((a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime());
+  return visible.sort(
+    (a, b) => new Date(b.startAt).getTime() - new Date(a.startAt).getTime(),
+  );
 }
 
 /** Published passcode tests open to unenrolled guests. */
 export async function listPasscodeGuestExamTests(): Promise<ExamTest[]> {
-  const snap = await getDocs(query(collection(db, TESTS), orderBy("createdAt", "desc")));
-  const tests = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamTest[];
-  return tests.filter((t) => allowsPasscodeGuestAccess(t) && !t.manuallyClosedAt);
+  const snap = await getDocs(
+    query(collection(db, TESTS), orderBy("createdAt", "desc")),
+  );
+  const tests = snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  })) as ExamTest[];
+  return tests.filter(
+    (t) => allowsPasscodeGuestAccess(t) && !t.manuallyClosedAt,
+  );
 }
 
-export async function verifyExamPasscode(test: ExamTest, passcode: string): Promise<boolean> {
+export async function verifyExamPasscode(
+  test: ExamTest,
+  passcode: string,
+): Promise<boolean> {
   if (!test.accessPasswordHash) return false;
   const h = await sha256Base64(passcode.trim());
   return h === test.accessPasswordHash;
 }
 
-export async function getGuestProfile(testId: string, uid: string): Promise<ExamGuestProfile | null> {
+export async function getGuestProfile(
+  testId: string,
+  uid: string,
+): Promise<ExamGuestProfile | null> {
   const snap = await getDoc(examGuestProfileRef(testId, uid));
   if (!snap.exists()) return null;
   return { id: snap.id, ...(snap.data() as any) } as ExamGuestProfile;
@@ -137,7 +169,11 @@ export async function saveGuestProfile(params: {
 export async function createExamTest(
   test: Omit<ExamTest, "id" | "createdAt" | "updatedAt">,
 ): Promise<string> {
-  const batchIds = test.batchIds?.length ? test.batchIds : test.batchId ? [test.batchId] : [];
+  const batchIds = test.batchIds?.length
+    ? test.batchIds
+    : test.batchId
+      ? [test.batchId]
+      : [];
   const docRef = await addDoc(collection(db, TESTS), {
     ...test,
     ...(batchIds.length
@@ -151,7 +187,10 @@ export async function createExamTest(
   return docRef.id;
 }
 
-export async function updateExamTest(testId: string, updates: Partial<ExamTest>) {
+export async function updateExamTest(
+  testId: string,
+  updates: Partial<ExamTest>,
+) {
   const u = updates as Partial<ExamTest> & {
     accessPasswordHash?: string | null;
     manuallyClosedAt?: string | null;
@@ -171,9 +210,14 @@ export async function updateExamTest(testId: string, updates: Partial<ExamTest>)
   await updateDoc(examTestRef(testId), payload as any);
 }
 
-export async function setExamManuallyClosed(testId: string, closed: boolean): Promise<void> {
+export async function setExamManuallyClosed(
+  testId: string,
+  closed: boolean,
+): Promise<void> {
   await updateExamTest(testId, {
-    manuallyClosedAt: closed ? new Date().toISOString() : (null as unknown as string),
+    manuallyClosedAt: closed
+      ? new Date().toISOString()
+      : (null as unknown as string),
   } as Partial<ExamTest> & { manuallyClosedAt: string | null });
 }
 
@@ -181,7 +225,10 @@ export async function pauseStudent(testId: string, uid: string): Promise<void> {
   await updateDoc(examTestRef(testId), { pausedUids: arrayUnion(uid) } as any);
 }
 
-export async function unpauseStudent(testId: string, uid: string): Promise<void> {
+export async function unpauseStudent(
+  testId: string,
+  uid: string,
+): Promise<void> {
   await updateDoc(examTestRef(testId), { pausedUids: arrayRemove(uid) } as any);
 }
 
@@ -201,7 +248,15 @@ export function subscribeToInProgressAttempts(
   return onSnapshot(
     query(examAttemptsCol(testId), where("status", "==", "in_progress")),
     (snap) => {
-      onChange(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }) as import("./types").ExamAttempt));
+      onChange(
+        snap.docs.map(
+          (d) =>
+            ({
+              id: d.id,
+              ...(d.data() as any),
+            }) as import("./types").ExamAttempt,
+        ),
+      );
     },
   );
 }
@@ -217,17 +272,33 @@ export async function getExamTest(testId: string): Promise<ExamTest | null> {
   return { id: snap.id, ...(snap.data() as any) } as ExamTest;
 }
 
-export async function listPublicQuestions(testId: string): Promise<ExamQuestionPublic[]> {
+export async function listPublicQuestions(
+  testId: string,
+): Promise<ExamQuestionPublic[]> {
   const snap = await getDocs(
-    query(examQuestionsPublicCol(testId), orderBy("questionNo", "asc"), limit(500)),
+    query(
+      examQuestionsPublicCol(testId),
+      orderBy("questionNo", "asc"),
+      limit(500),
+    ),
   );
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamQuestionPublic[];
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  })) as ExamQuestionPublic[];
 }
 
-export async function listPrivateQuestions(testId: string): Promise<ExamQuestionPrivate[]> {
+export async function listPrivateQuestions(
+  testId: string,
+): Promise<ExamQuestionPrivate[]> {
   // Private docs only store the answer key; no questionNo field to order by.
-  const snap = await getDocs(query(examQuestionsPrivateCol(testId), limit(500)));
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamQuestionPrivate[];
+  const snap = await getDocs(
+    query(examQuestionsPrivateCol(testId), limit(500)),
+  );
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  })) as ExamQuestionPrivate[];
 }
 
 export async function upsertQuestion(params: {
@@ -238,8 +309,14 @@ export async function upsertQuestion(params: {
 }): Promise<string> {
   const id = params.questionId || doc(examQuestionsPublicCol(params.testId)).id;
   await Promise.all([
-    setDoc(doc(examQuestionsPublicCol(params.testId), id), params.publicData, { merge: true }),
-    setDoc(doc(examQuestionsPrivateCol(params.testId), id), params.privateData, { merge: true }),
+    setDoc(doc(examQuestionsPublicCol(params.testId), id), params.publicData, {
+      merge: true,
+    }),
+    setDoc(
+      doc(examQuestionsPrivateCol(params.testId), id),
+      params.privateData,
+      { merge: true },
+    ),
   ]);
   return id;
 }
@@ -266,7 +343,10 @@ export async function deleteQuestion(testId: string, questionId: string) {
   ]);
 }
 
-export async function getAttempt(testId: string, uid: string): Promise<ExamAttempt | null> {
+export async function getAttempt(
+  testId: string,
+  uid: string,
+): Promise<ExamAttempt | null> {
   const snap = await getDoc(examAttemptRef(testId, uid));
   if (!snap.exists()) return null;
   return { id: snap.id, ...(snap.data() as any) } as ExamAttempt;
@@ -295,7 +375,9 @@ export async function startAttempt(params: {
         limit(1),
       ),
     );
-    const duplicate = existingForStudent.docs.find((attemptDoc) => attemptDoc.id !== params.uid);
+    const duplicate = existingForStudent.docs.find(
+      (attemptDoc) => attemptDoc.id !== params.uid,
+    );
     if (duplicate) {
       throw new Error("This student ID already has an attempt for this test.");
     }
@@ -327,21 +409,30 @@ export async function startAttempt(params: {
   );
 }
 
-export async function requestRejoinApproval(testId: string, uid: string): Promise<void> {
+export async function requestRejoinApproval(
+  testId: string,
+  uid: string,
+): Promise<void> {
   await updateDoc(examAttemptRef(testId, uid), {
     rejoinRequestedAt: new Date().toISOString(),
     rejoinRequestedAtServer: serverTimestamp(),
   } as any);
 }
 
-export async function approveRejoinForAdmin(testId: string, uid: string): Promise<void> {
+export async function approveRejoinForAdmin(
+  testId: string,
+  uid: string,
+): Promise<void> {
   await updateDoc(examAttemptRef(testId, uid), {
     rejoinApprovedAt: new Date().toISOString(),
     rejoinApprovedAtServer: serverTimestamp(),
   } as any);
 }
 
-export async function markRejoinApprovalUsed(testId: string, uid: string): Promise<void> {
+export async function markRejoinApprovalUsed(
+  testId: string,
+  uid: string,
+): Promise<void> {
   await updateDoc(examAttemptRef(testId, uid), {
     rejoinApprovalUsedAt: new Date().toISOString(),
     rejoinApprovalUsedAtServer: serverTimestamp(),
@@ -382,16 +473,25 @@ export async function submitAttempt(params: {
     score: params.score,
     maxScore: params.maxScore,
   };
-  if (params.correctCount != null) updateData.correctCount = params.correctCount;
+  if (params.correctCount != null)
+    updateData.correctCount = params.correctCount;
   if (params.wrongCount != null) updateData.wrongCount = params.wrongCount;
-  if (params.unansweredCount != null) updateData.unansweredCount = params.unansweredCount;
+  if (params.unansweredCount != null)
+    updateData.unansweredCount = params.unansweredCount;
 
   await updateDoc(examAttemptRef(params.testId, params.uid), updateData as any);
 }
 
-export async function listAttemptsForAdmin(testId: string): Promise<ExamAttempt[]> {
-  const snap = await getDocs(query(examAttemptsCol(testId), orderBy("startedAt", "desc"), limit(2000)));
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as ExamAttempt[];
+export async function listAttemptsForAdmin(
+  testId: string,
+): Promise<ExamAttempt[]> {
+  const snap = await getDocs(
+    query(examAttemptsCol(testId), orderBy("startedAt", "desc"), limit(2000)),
+  );
+  return snap.docs.map((d) => ({
+    id: d.id,
+    ...(d.data() as any),
+  })) as ExamAttempt[];
 }
 
 export async function deleteAttemptsForAdmin(testId: string): Promise<number> {
@@ -418,14 +518,21 @@ export async function forceSubmitAttemptForAdmin(params: {
   testId: string;
   uid: string;
   negativeMarkPerWrong?: number;
-}): Promise<{ score: number; maxScore: number; correctCount: number; wrongCount: number; unansweredCount: number }> {
+}): Promise<{
+  score: number;
+  maxScore: number;
+  correctCount: number;
+  wrongCount: number;
+  unansweredCount: number;
+}> {
   const [attempt, questions, keys] = await Promise.all([
     getAttempt(params.testId, params.uid),
     listPublicQuestions(params.testId),
     listPrivateQuestions(params.testId),
   ]);
   if (!attempt) throw new Error("No attempt found for this student");
-  if (attempt.status === "submitted") throw new Error("Attempt is already submitted");
+  if (attempt.status === "submitted")
+    throw new Error("Attempt is already submitted");
 
   const keyById = new Map(keys.map((k) => [k.id, k.correctIndex]));
   const neg = params.negativeMarkPerWrong ?? 0;
@@ -479,4 +586,3 @@ export async function listAllTestsWithAttemptsForAdmin(): Promise<
   );
   return pairs;
 }
-

@@ -51,11 +51,17 @@ export default function ResponseSheetPage() {
         // For submitted attempts on the response sheet, fetch private answer keys to calculate
         // correct vs wrong question breakdowns and review markings accurately.
         let keys: ExamQuestionPrivate[] | null = null;
-        if (attempt.status === "submitted" && test.showAnswersAfter !== "never") {
+        if (
+          attempt.status === "submitted" &&
+          test.showAnswersAfter !== "never"
+        ) {
           try {
             keys = await listPrivateQuestions(testId);
           } catch (e) {
-            console.error("Could not load question keys for response sheet:", e);
+            console.error(
+              "Could not load question keys for response sheet:",
+              e,
+            );
           }
         }
 
@@ -88,7 +94,8 @@ export default function ResponseSheetPage() {
             name: studentName,
             email: user.email || attempt.participantEmail || "",
             studentId,
-            studentRecordId: user.studentRecordId || attempt.studentRecordId || "",
+            studentRecordId:
+              user.studentRecordId || attempt.studentRecordId || "",
             isGuest:
               user.isGuestExamParticipant === true || attempt.isGuest === true,
             photoURL: studentPhotoSrc || photoURL,
@@ -99,7 +106,8 @@ export default function ResponseSheetPage() {
         setHtml(sheetHtml);
       } catch (e) {
         console.error(e);
-        if (!cancelled) setError("Failed to load response sheet. Please try again.");
+        if (!cancelled)
+          setError("Failed to load response sheet. Please try again.");
       } finally {
         if (!cancelled) setLoading(false);
       }

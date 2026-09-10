@@ -42,24 +42,31 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
     Pincode: form.addressDetails.pincode,
 
     // Educational Details (comma-separated)
-    Education: form.educationalDetails.records
+    Education: (form.educationalDetails?.records || [])
       .map(
         (r) =>
-          `${r.tier} (${r.majorStream}: ${r.percentageOfMarks}% - ${r.yearOfPassing})`,
+          `${r.degree || r.tier || "Degree"} (${r.major === "Other" ? r.otherMajor : (r.major || r.majorStream || "Major")}: ${r.percentage || r.percentageOfMarks}% PSTM:${r.pstm || "No"})`,
       )
       .join("; "),
 
-    // Other Details
-    "Marital Status": form.otherDetails.maritalStatus,
-    "Work Status": form.otherDetails.workStatus,
-    "Nature of Work": form.otherDetails.natureOfWork || "",
+    // Other / Demographic Details
+    "Marital Status": form.demographicDetails?.maritalStatus || form.otherDetails?.maritalStatus || "—",
+    "Work Status": form.demographicDetails?.workStatus || form.otherDetails?.workStatus || "—",
+    "Department Name": form.demographicDetails?.departmentName || form.otherDetails?.natureOfWork || "",
+    "TNPSC Experience": form.demographicDetails?.previousTnpscExperience || "—",
+
+    // Portal Credentials & Status
+    "Portal Username": form.portalUsername || "",
+    "Portal Password": form.portalPassword || "",
+    "Approval Status": form.approvalStatus || (form.status === "approved" ? "approved" : "pending"),
 
     // Batch Details
-    "Batch Name": form.batchDetails.batchName,
-    "Batch Duration Start": form.batchDetails.batchDurationStart,
-    "Batch Duration End": form.batchDetails.batchDurationEnd,
-    "Date of Payment": form.batchDetails.dateOfPayment,
-    "Mode of Transaction": form.batchDetails.modeOfTransaction,
+    "Batch Name": form.batchDetails?.batchName || form.batchName || "",
+    "Course Name": form.courseName || form.batchDetails?.courseName || "",
+    "Batch Duration Start": form.batchDetails?.batchDurationStart || "",
+    "Batch Duration End": form.batchDetails?.batchDurationEnd || "",
+    "Date of Payment": form.batchDetails?.dateOfPayment || "",
+    "Mode of Transaction": form.batchDetails?.modeOfTransaction || "",
 
     // Terms & Conditions
     "Term 1 Agreed": form.termsAndConditions.term1,

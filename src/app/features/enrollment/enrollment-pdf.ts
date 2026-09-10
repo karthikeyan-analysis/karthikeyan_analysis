@@ -35,14 +35,14 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
 
   const termsAgreed = Object.values(t).filter(Boolean).length;
 
-  const educationRows = ed.records
+  const educationRows = (ed?.records || [])
     .map(
       (r) => `
       <tr>
-        <td>${r.tier}</td>
-        <td>${r.majorStream}</td>
-        <td>${r.percentageOfMarks}%</td>
-        <td>${r.yearOfPassing}</td>
+        <td>${r.degree || r.tier || "—"}</td>
+        <td>${r.major === "Other" ? (r.otherMajor || "Other") : (r.major || r.majorStream || "—")}</td>
+        <td>${r.percentage || r.percentageOfMarks || "—"}%</td>
+        <td>${r.pstm || r.yearOfPassing || "—"}</td>
       </tr>`,
     )
     .join("");
@@ -52,6 +52,10 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
     govt_emp: "Government Employee",
     housewife: "Housewife",
     aspirant: "Aspirant / Student",
+    "Government Employee": "Government Employee",
+    "Private Employee": "Private Employee",
+    "Full-time Aspirant": "Full-time Aspirant",
+    "Home Maker": "Home Maker",
   };
 
   const modeLabel: Record<string, string> = {

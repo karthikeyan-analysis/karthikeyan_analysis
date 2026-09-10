@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import { useData } from "../../context/DataContext";
 import {
   Card,
@@ -26,7 +27,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../components/ui/alert-dialog";
-import { Pencil, Plus, Trash2, Users } from "lucide-react";
+import { Pencil, Plus, Trash2, Users, UserPlus } from "lucide-react";
 import type { Batch } from "../../context/DataContext";
 
 type BatchFormData = {
@@ -55,6 +56,7 @@ function parseSubjects(value: string) {
 }
 
 export default function BatchManagement() {
+  const navigate = useNavigate();
   const { batches, addBatch, updateBatch, deleteBatch, getStudentsByBatch } =
     useData();
   const [isOpen, setIsOpen] = useState(false);
@@ -324,6 +326,18 @@ export default function BatchManagement() {
                     </div>
                   </div>
                 )}
+
+                <div className="mt-5 pt-3 border-t border-slate-100">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full text-indigo-700 bg-indigo-50/70 hover:bg-indigo-100 border-indigo-200 gap-1.5 font-semibold text-xs"
+                    onClick={() => navigate(`/admin/enrollments?batchId=${batch.id}`)}
+                  >
+                    <UserPlus className="w-4 h-4 text-indigo-600" />
+                    Batch Enrollment &amp; Form Link
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           );

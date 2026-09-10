@@ -1,41 +1,66 @@
 import { Timestamp } from "firebase/firestore";
 
 // ─────────────────────────────────────────────────────────────
-// SECTION A: PERSONAL DETAILS
+// BATCH ENROLLMENT CONFIGURATION (Admin / Editable Box)
 // ─────────────────────────────────────────────────────────────
-export interface PersonalDetails {
-  studentName: string;
-  fatherName: string;
-  dateOfBirth: string; // ISO format: YYYY-MM-DD
-  gender: "male" | "female" | "other";
-  caste: "general" | "bc" | "mbc" | "sc" | "st";
-  mobileNo: string;
-  whatsappNo: string;
-  telegramNo?: string;
-  email: string;
-  photoURL?: string; // Base64 data URL or external URL
-  signatureURL?: string; // Base64 data URL of student's signature
+export interface BatchEnrollmentConfig {
+  batchId: string;
+  courseName: string; // Online Live Crash Course Name (e.g. "TNPSC COMBINED STATISTICAL SERVICES EXAMINATION - ONLINE LIVE CRASH COURSE")
+  startingDate: string; // Dynamic / Editable starting date
+  duration: string; // Dynamic / Editable duration (e.g. "60 Days / 120 Hours")
+  note?: string; // Optional admin banner notes/instructions for students
+  isOpen: boolean; // Whether enrollment is currently open
+  updatedAt?: Timestamp | Date | string;
 }
 
 // ─────────────────────────────────────────────────────────────
-// SECTION B: ADDRESS DETAILS
+// SECTION A: PERSONAL & CONTACT DETAILS
+// ─────────────────────────────────────────────────────────────
+export interface PersonalDetails {
+  gender: "male" | "female" | "other" | string;
+  candidateName: string; // Auto CAPITAL LETTERS live
+  initials: string; // Auto CAPITAL LETTERS live
+  studentName: string; // Full composite: `${candidateName} ${initials}`.trim()
+  fatherName: string; // Forced CAPITAL LETTERS live
+  email: string; // Standard font (normal case, no forced capitalization)
+  mobileNo: string;
+  whatsappNo: string;
+  isWhatsappSameAsMobile?: boolean; // Checkbox to auto-sync mobile to whatsapp
+  caste?: "general" | "bc" | "mbc" | "sc" | "st" | string;
+  telegramNo?: string;
+  photoURL?: string;
+  signatureURL?: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// SECTION B: ADDRESS BREAKDOWN DETAILS
 // ─────────────────────────────────────────────────────────────
 export interface AddressDetails {
   doorNo: string;
-  streetNagar: string;
+  streetName: string;
+  streetNagar?: string; // backward compat alias
+  taluk: string;
   district: string;
-  state: string;
   pincode: string;
+  state?: string;
 }
 
 // ─────────────────────────────────────────────────────────────
-// SECTION C: EDUCATIONAL DETAILS
+// SECTION C: EDUCATIONAL QUALIFICATIONS (Dynamic Table)
 // ─────────────────────────────────────────────────────────────
+export type AllowedDegree = "BSc" | "MSc" | "MPhil" | "PhD";
+
 export interface EducationRecord {
-  tier: "UG" | "PG" | "Other"; // Under Graduate, Post Graduate, Other
-  majorStream: "Maths" | "Statistics" | "Economics"; // Only valid for UG/PG
-  percentageOfMarks: string; // Number as string
-  yearOfPassing: string; // Year as string
+  degree: AllowedDegree | string; // Hierarchical order: BSc first -> MSc -> MPhil/PhD
+  major: "Mathematics" | "Statistics" | "Economics" | "Other" | string;
+  otherMajor?: string; // Visible when major === "Other"
+  percentage: string; // Normal text/numeric input
+  pstm: "Yes" | "No" | string; // Puzhkal Kudinila Padithavar / Tamil Medium
+  // Legacy / export compatibility aliases:
+  tier?: "UG" | "PG" | "Other" | string;
+  majorStream?: "Maths" | "Statistics" | "Economics" | string;
+  percentageOfMarks?: string;
+  yearOfPassing?: string;
 }
 
 export interface EducationalDetails {
@@ -43,59 +68,107 @@ export interface EducationalDetails {
 }
 
 // ─────────────────────────────────────────────────────────────
-// SECTION D: OTHER DETAILS
+// SECTION D: DEMOGRAPHIC & BACKGROUND DETAILS
 // ─────────────────────────────────────────────────────────────
-export interface OtherDetails {
-  maritalStatus: "married" | "unmarried";
-  workStatus: "private_emp" | "govt_emp" | "housewife" | "aspirant";
-  natureOfWork?: string; // Conditional: shown if workStatus is "private_emp" or "govt_emp"
+export type WorkStatusOption =
+  | "Government Employee"
+  | "Private Employee"
+  | "Full-time Aspirant"
+  | "Home Maker"
+  | string;
+
+export interface DemographicDetails {
+  dateOfBirth: string; // Date picker format: YYYY-MM-DD
+  maritalStatus: "Married" | "Unmarried" | string;
+  workStatus: WorkStatusOption;
+  departmentName?: string; // Conditional sub-field when workStatus === "Government Employee"
+  previousTnpscExperience: "First Attempt" | "Already Appeared" | string;
+  // Legacy compatibility:
+  natureOfWork?: string;
 }
+
+// Legacy alias for OtherDetails:
+export type OtherDetails = DemographicDetails;
 
 // ─────────────────────────────────────────────────────────────
 // SECTION E: BATCH DETAILS
 // ─────────────────────────────────────────────────────────────
 export interface BatchDetails {
-  batchName: string; // e.g., "STAT WIN"
-  batchDurationStart: string; // ISO format: YYYY-MM-DD
-  batchDurationEnd: string; // ISO format: YYYY-MM-DD
-  dateOfPayment: string; // ISO format: YYYY-MM-DD
-  modeOfTransaction: "upi" | "credit_card" | "bank_transfer" | "cash";
+  batchName: string;
+  courseName?: string;
+  batchDurationStart?: string;
+  batchDurationEnd?: string;
+  dateOfPayment?: string;
+  modeOfTransaction?: "upi" | "credit_card" | "bank_transfer" | "cash" | string;
 }
 
 // ─────────────────────────────────────────────────────────────
-// SECTION F: TERMS & CONDITIONS
+// SECTION F: DECLARATION & TERMS
 // ─────────────────────────────────────────────────────────────
 export interface TermsAndConditions {
-  term1: boolean; // Acceptance of terms
-  term2: boolean;
-  term3: boolean;
-  term4: boolean;
-  term5: boolean;
+  agreedAllTerms: boolean; // Final checkbox: "I Agree to the above Declaration & Terms and Conditions."
+  term1?: boolean;
+  term2?: boolean;
+  term3?: boolean;
+  term4?: boolean;
+  term5?: boolean;
+  term6?: boolean;
+  term7?: boolean;
+  term8?: boolean;
+  term9?: boolean;
+  term10?: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
-// COMBINED ENROLLMENT FORM
+// COMBINED ENROLLMENT FORM & APPLICATION
 // ─────────────────────────────────────────────────────────────
 export interface EnrollmentForm {
-  // Metadata
   id: string;
-  createdAt: Timestamp | Date;
-  updatedAt: Timestamp | Date;
-  status: "draft" | "submitted" | "completed";
-  submittedBy: string; // User email or ID
-  batchId: string; // Reference to batch badge
+  createdAt: Timestamp | Date | any;
+  updatedAt: Timestamp | Date | any;
+  status: "submitted" | "approved" | "rejected" | "draft" | "completed";
+  approvalStatus: "pending" | "approved" | "rejected";
+  approvedAt?: string;
+  approvedBy?: string;
+  rejectionReason?: string;
+  submittedBy: string; // Candidate email
+  batchId: string;
+  batchName?: string;
+  courseName?: string;
 
-  // Form sections
+  // Generated Login Credentials
+  portalUsername: string; // e.g. "KA-2026-XXXX"
+  portalPassword: string; // e.g. "Pass@4921"
+  studentId?: string; // Unique student identifier e.g. "STU-XXXX"
+
+  // Form Sections
   personalDetails: PersonalDetails;
   addressDetails: AddressDetails;
   educationalDetails: EducationalDetails;
-  otherDetails: OtherDetails;
+  demographicDetails: DemographicDetails;
+  otherDetails: DemographicDetails; // alias for export/pdf
   batchDetails: BatchDetails;
   termsAndConditions: TermsAndConditions;
 
-  // Shareable link metadata
-  shareableLink?: string; // Generated URL/token
-  shareableTokenExpiry?: Timestamp | Date; // Optional expiry
+  // Shareable link info
+  shareableLink?: string;
+  shareableTokenExpiry?: Timestamp | Date;
+}
+
+// ─────────────────────────────────────────────────────────────
+// FORM SUBMISSION DTO
+// ─────────────────────────────────────────────────────────────
+export interface EnrollmentFormDTO {
+  batchId: string;
+  batchName?: string;
+  courseName?: string;
+  personalDetails: PersonalDetails;
+  addressDetails: AddressDetails;
+  educationalDetails: EducationalDetails;
+  demographicDetails: DemographicDetails;
+  otherDetails?: DemographicDetails;
+  batchDetails?: BatchDetails;
+  termsAndConditions: TermsAndConditions;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -105,7 +178,7 @@ export interface ShareableFormLink {
   id: string;
   formId: string;
   batchId: string;
-  token: string; // Unique random token
+  token: string;
   createdAt: Timestamp | Date;
   expiresAt?: Timestamp | Date;
   clickCount: number;
@@ -114,20 +187,7 @@ export interface ShareableFormLink {
 }
 
 // ─────────────────────────────────────────────────────────────
-// FORM SUBMISSION DTO (for API/Firestore)
-// ─────────────────────────────────────────────────────────────
-export interface EnrollmentFormDTO {
-  personalDetails: PersonalDetails;
-  addressDetails: AddressDetails;
-  educationalDetails: EducationalDetails;
-  otherDetails: OtherDetails;
-  batchDetails: BatchDetails;
-  termsAndConditions: TermsAndConditions;
-  batchId: string;
-}
-
-// ─────────────────────────────────────────────────────────────
-// FILTER & EXPORT OPTIONS
+// EXPORT OPTIONS
 // ─────────────────────────────────────────────────────────────
 export interface ExportOptions {
   batchIds: string[];

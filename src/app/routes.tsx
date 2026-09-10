@@ -184,6 +184,10 @@ export const router = createBrowserRouter([
     ),
   },
   {
+    path: "/enroll/:batchId",
+    element: <EnrollmentFormPage />,
+  },
+  {
     path: "/enrollment-form/:token",
     element: <EnrollmentFormPage />,
   },

@@ -108,6 +108,7 @@ export function buildResponseSheetHtml({
             : "Wrong";
     return { selected, correct, status };
   });
+
   const hasKeys = Boolean(keys && keys.length > 0);
   const calculatedCorrect = questionStatuses.filter(
     (q) => q.status === "Correct",
