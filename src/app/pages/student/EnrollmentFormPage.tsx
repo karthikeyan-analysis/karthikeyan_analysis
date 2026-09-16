@@ -14,6 +14,8 @@ import {
   Loader2,
   ShieldAlert,
   ArrowRight,
+  ArrowLeft,
+  FileText,
   Printer,
 } from "lucide-react";
 import {
@@ -22,6 +24,7 @@ import {
   AddressBreakdownForm,
   EducationalQualificationsForm,
   DemographicDetailsForm,
+  BatchPaymentDetailsForm,
   DeclarationTermsForm,
 } from "../../features/enrollment/enrollment-form-components";
 import type {
@@ -29,6 +32,7 @@ import type {
   AddressDetails,
   EducationalDetails,
   DemographicDetails,
+  BatchDetails,
   TermsAndConditions,
   BatchEnrollmentConfig,
   EnrollmentFormDTO,
@@ -83,6 +87,9 @@ export default function PublicEnrollmentForm() {
     }
   };
 
+  // Step State (Page 1: Application Details, Page 2: Terms & Declaration)
+  const [currentStep, setCurrentStep] = useState<1 | 2>(1);
+
   // Form State
   const [personalDetails, setPersonalDetails] = useState<PersonalDetails>({
     gender: "male",
@@ -113,6 +120,7 @@ export default function PublicEnrollmentForm() {
           otherMajor: "",
           percentage: "",
           pstm: "No",
+          passingYear: "",
         },
       ],
     });
@@ -125,6 +133,14 @@ export default function PublicEnrollmentForm() {
       departmentName: "",
       previousTnpscExperience: "First Attempt",
     });
+
+  const [batchDetails, setBatchDetails] = useState<BatchDetails>({
+    batchName: "",
+    courseName: "",
+    dateOfPayment: "",
+    modeOfTransaction: "UPI",
+    transactionId: "",
+  });
 
   const [terms, setTerms] = useState<TermsAndConditions>({
     agreedAllTerms: false,
@@ -170,10 +186,17 @@ export default function PublicEnrollmentForm() {
             batchId: scheduledForm.batchId,
             courseName: scheduledForm.courseName,
             startingDate: scheduledForm.startingDate,
+            batchStartDate: scheduledForm.batchStartDate,
+            batchEndDate: scheduledForm.batchEndDate,
             duration: scheduledForm.duration,
             note: scheduledForm.note,
             isOpen: scheduledForm.isOpen,
           });
+          setBatchDetails((prev) => ({
+            ...prev,
+            batchName: scheduledForm.batchName || prev.batchName,
+            courseName: scheduledForm.courseName || prev.courseName,
+          }));
           setLoading(false);
           return;
         }
@@ -215,6 +238,11 @@ export default function PublicEnrollmentForm() {
         setBatchId(batch.id);
         setBatchName(batch.name);
         setConfig(enrollmentConfig);
+        setBatchDetails((prev) => ({
+          ...prev,
+          batchName: batch.name || prev.batchName,
+          courseName: enrollmentConfig?.courseName || prev.courseName,
+        }));
       } catch (err: any) {
         console.error("Batch resolution error:", err);
         if (!cancelled) {
@@ -240,11 +268,8 @@ export default function PublicEnrollmentForm() {
     setTimeout(() => setCopiedCreds(false), 2500);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    // Validation
+  // Validate Page 1 (Application Details)
+  const validateStep1 = (): boolean => {
     const missing: string[] = [];
     if (!photoFile && !personalDetails.photoURL) {
       missing.push("Passport Size Photo");
@@ -266,7 +291,10 @@ export default function PublicEnrollmentForm() {
       missing.push("At least one degree qualification (B.Sc.)");
     } else {
       educationalDetails.records.forEach((r, idx) => {
-        if (!r.percentage.trim()) missing.push(`Percentage for Row ${idx + 1}`);
+        if (!r.percentage?.trim())
+          missing.push(`Percentage for Row ${idx + 1}`);
+        if (!r.passingYear?.trim())
+          missing.push(`Passing Year for Row ${idx + 1}`);
         if (r.major === "Other" && !r.otherMajor?.trim()) {
           missing.push(`Specific Major for Row ${idx + 1}`);
         }
@@ -281,13 +309,51 @@ export default function PublicEnrollmentForm() {
       missing.push("Government Department Name");
     }
 
-    if (!terms.agreedAllTerms) {
-      missing.push("You must agree to the Declaration & Terms and Conditions");
+    if (!batchDetails.dateOfPayment?.trim()) {
+      missing.push("Date of Payment");
+    }
+    if (!batchDetails.modeOfTransaction?.trim()) {
+      missing.push("Mode of Transaction");
     }
 
     if (missing.length > 0) {
       setError(
-        `Please complete the following required fields:\n• ${missing.join("\n• ")}`,
+        `Please complete the following required fields before proceeding to Terms & Conditions:\n• ${missing.join("\n• ")}`,
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return false;
+    }
+
+    setError(null);
+    return true;
+  };
+
+  const handleProceedToStep2 = () => {
+    if (validateStep1()) {
+      setCurrentStep(2);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  const handleBackToStep1 = () => {
+    setError(null);
+    setCurrentStep(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    // Ensure Step 1 is valid before final submit
+    if (!validateStep1()) {
+      setCurrentStep(1);
+      return;
+    }
+
+    if (!terms.agreedAllTerms) {
+      setError(
+        "You must read and agree to the Declaration & Terms and Conditions to complete registration.",
       );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -322,6 +388,11 @@ export default function PublicEnrollmentForm() {
         addressDetails,
         educationalDetails,
         demographicDetails,
+        batchDetails: {
+          ...batchDetails,
+          batchName: batchName || config?.courseName || "Batch",
+          courseName: config?.courseName || batchName,
+        },
         termsAndConditions: terms,
       };
 
@@ -611,65 +682,218 @@ export default function PublicEnrollmentForm() {
           </div>
         )}
 
-        {/* Enrollment Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Section 1: Personal & Contact Details */}
-          <PersonalContactForm
-            data={personalDetails}
-            onChange={setPersonalDetails}
-            photoFile={photoFile}
-            photoPreview={photoPreview}
-            onPhotoFileChange={handlePhotoChange}
-          />
-
-          {/* Section 2: Address Breakdown Details */}
-          <AddressBreakdownForm
-            data={addressDetails}
-            onChange={setAddressDetails}
-          />
-
-          {/* Section 3: Educational Qualifications Table */}
-          <EducationalQualificationsForm
-            data={educationalDetails}
-            onChange={setEducationalDetails}
-          />
-
-          {/* Section 4: Demographic & Background Details */}
-          <DemographicDetailsForm
-            data={demographicDetails}
-            onChange={setDemographicDetails}
-          />
-
-          {/* Section 5: Declaration & Terms */}
-          <DeclarationTermsForm terms={terms} onChange={setTerms} />
-
-          {/* Submit Button */}
-          <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="text-xs text-slate-500 text-center sm:text-left">
-              Make sure all details are accurate before submitting. Credentials
-              will be generated upon submission.
-            </div>
-
-            <Button
-              type="submit"
-              disabled={submitting || !terms.agreedAllTerms}
-              className={`w-full sm:w-auto px-8 py-3 text-base font-bold transition-all shadow-md ${
-                terms.agreedAllTerms
-                  ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white cursor-pointer"
-                  : "bg-slate-300 text-slate-500 cursor-not-allowed"
+        {/* Stepper Navigation Indicator */}
+        <div className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm">
+          <div className="flex items-center justify-between gap-2 max-w-xl mx-auto">
+            {/* Step 1 Tab */}
+            <div
+              onClick={() => {
+                if (currentStep === 2) handleBackToStep1();
+              }}
+              className={`flex-1 flex items-center gap-2.5 p-2 rounded-lg cursor-pointer transition select-none ${
+                currentStep === 1
+                  ? "bg-indigo-50 border border-indigo-200 text-indigo-950 shadow-xs"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-700"
               }`}
             >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                  Registering...
-                </>
-              ) : (
-                "Submit Application & Generate Credentials"
-              )}
-            </Button>
+              <span
+                className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shrink-0 ${
+                  currentStep === 1
+                    ? "bg-indigo-600 text-white"
+                    : "bg-emerald-600 text-white"
+                }`}
+              >
+                {currentStep === 2 ? <CheckCheck className="w-4 h-4" /> : "1"}
+              </span>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Page 1 of 2
+                </span>
+                <span className="text-xs sm:text-sm font-bold block">
+                  Application Details
+                </span>
+              </div>
+            </div>
+
+            <ArrowRight className="w-4 h-4 text-slate-400 shrink-0" />
+
+            {/* Step 2 Tab */}
+            <div
+              onClick={() => {
+                if (currentStep === 1) handleProceedToStep2();
+              }}
+              className={`flex-1 flex items-center gap-2.5 p-2 rounded-lg cursor-pointer transition select-none ${
+                currentStep === 2
+                  ? "bg-indigo-50 border border-indigo-200 text-indigo-950 shadow-xs"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-500"
+              }`}
+            >
+              <span
+                className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shrink-0 ${
+                  currentStep === 2
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-300 text-slate-700"
+                }`}
+              >
+                2
+              </span>
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+                  Page 2 of 2
+                </span>
+                <span className="text-xs sm:text-sm font-bold block">
+                  Terms &amp; Declaration
+                </span>
+              </div>
+            </div>
           </div>
-        </form>
+        </div>
+
+        {/* PAGE 1: APPLICATION DETAILS */}
+        {currentStep === 1 && (
+          <div className="space-y-6">
+            {/* Section 1: Personal & Contact Details */}
+            <PersonalContactForm
+              data={personalDetails}
+              onChange={setPersonalDetails}
+              photoFile={photoFile}
+              photoPreview={photoPreview}
+              onPhotoFileChange={handlePhotoChange}
+            />
+
+            {/* Section 2: Address Breakdown Details */}
+            <AddressBreakdownForm
+              data={addressDetails}
+              onChange={setAddressDetails}
+            />
+
+            {/* Section 3: Educational Qualifications Table */}
+            <EducationalQualificationsForm
+              data={educationalDetails}
+              onChange={setEducationalDetails}
+            />
+
+            {/* Section 4: Demographic & Background Details */}
+            <DemographicDetailsForm
+              data={demographicDetails}
+              onChange={setDemographicDetails}
+            />
+
+            {/* Section 5: Batch & Payment Details */}
+            <BatchPaymentDetailsForm
+              data={batchDetails}
+              onChange={setBatchDetails}
+              batchName={batchName}
+              courseName={config?.courseName}
+            />
+
+            {/* Page 1 Action: Proceed to Terms */}
+            <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs text-slate-500 text-center sm:text-left">
+                Ensure all candidate and qualification details are accurate
+                before continuing to the Terms &amp; Conditions page.
+              </div>
+
+              <Button
+                type="button"
+                onClick={handleProceedToStep2}
+                className="w-full sm:w-auto px-8 py-3 text-sm sm:text-base font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all shadow-md gap-2"
+              >
+                <span>Proceed to Terms &amp; Declaration (Step 2 of 2)</span>
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* PAGE 2: TERMS & CONDITIONS / DECLARATION */}
+        {currentStep === 2 && (
+          <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Candidate Overview Card */}
+            <Card className="border-slate-200 shadow-sm overflow-hidden bg-slate-50/80">
+              <div className="p-4 sm:p-5 flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                {(photoPreview || personalDetails.photoURL) && (
+                  <img
+                    src={photoPreview || personalDetails.photoURL}
+                    alt="Candidate Thumbnail"
+                    className="w-16 h-20 sm:w-20 sm:h-24 object-cover rounded-lg border-2 border-slate-300 shadow-xs bg-white shrink-0"
+                  />
+                )}
+                <div className="flex-1 text-center sm:text-left space-y-1 text-xs">
+                  <div className="font-bold text-slate-900 text-sm sm:text-base">
+                    {personalDetails.candidateName} {personalDetails.initials}
+                  </div>
+                  <div className="text-slate-600">
+                    <span className="font-semibold text-slate-700">
+                      Enrolled Batch:
+                    </span>{" "}
+                    {batchName || config?.courseName || "Crash Course"}
+                  </div>
+                  <div className="text-slate-600">
+                    <span className="font-semibold text-slate-700">Email:</span>{" "}
+                    {personalDetails.email} &bull;{" "}
+                    <span className="font-semibold text-slate-700">
+                      Mobile:
+                    </span>{" "}
+                    {personalDetails.mobileNo}
+                  </div>
+                  <div className="text-slate-600">
+                    <span className="font-semibold text-slate-700">
+                      Payment Date:
+                    </span>{" "}
+                    {batchDetails.dateOfPayment || "—"} &bull;{" "}
+                    <span className="font-semibold text-slate-700">Mode:</span>{" "}
+                    {batchDetails.modeOfTransaction || "UPI"}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBackToStep1}
+                  className="text-xs font-semibold text-slate-700 border-slate-300 shrink-0"
+                >
+                  Edit Details
+                </Button>
+              </div>
+            </Card>
+
+            {/* Section 6: Declaration & Terms (10 Points) */}
+            <DeclarationTermsForm terms={terms} onChange={setTerms} isStep2 />
+
+            {/* Navigation & Submit Buttons */}
+            <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleBackToStep1}
+                className="w-full sm:w-auto px-6 py-2.5 text-sm font-semibold border-slate-300 text-slate-700 hover:bg-slate-50 gap-2 order-2 sm:order-1"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back to Application Details</span>
+              </Button>
+
+              <Button
+                type="submit"
+                disabled={submitting || !terms.agreedAllTerms}
+                className={`w-full sm:w-auto px-8 py-3 text-sm sm:text-base font-bold transition-all shadow-md order-1 sm:order-2 ${
+                  terms.agreedAllTerms
+                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white cursor-pointer"
+                    : "bg-slate-300 text-slate-500 cursor-not-allowed"
+                }`}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Registering...
+                  </>
+                ) : (
+                  "Submit Application & Generate Credentials"
+                )}
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );

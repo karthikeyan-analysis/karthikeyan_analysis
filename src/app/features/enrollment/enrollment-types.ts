@@ -7,6 +7,8 @@ export interface BatchEnrollmentConfig {
   batchId: string;
   courseName: string; // Online Live Crash Course Name (e.g. "TNPSC COMBINED STATISTICAL SERVICES EXAMINATION - ONLINE LIVE CRASH COURSE")
   startingDate: string; // Dynamic / Editable starting date
+  batchStartDate?: string; // Explicit Batch Start Date
+  batchEndDate?: string; // Explicit Batch End Date
   duration: string; // Dynamic / Editable duration (e.g. "60 Days / 120 Hours")
   note?: string; // Optional admin banner notes/instructions for students
   isOpen: boolean; // Whether enrollment is currently open
@@ -23,6 +25,8 @@ export interface ScheduledEnrollmentForm {
   batchName?: string;
   courseName: string; // Online Live Crash Course Name
   startingDate: string; // Starting date
+  batchStartDate?: string; // Explicit Batch Start Date
+  batchEndDate?: string; // Explicit Batch End Date
   duration: string; // Duration e.g. "60 Days / 120 Hours"
   note?: string; // Banner note / instructions
   scheduleStart?: string; // Optional ISO string for scheduled start
@@ -46,7 +50,7 @@ export interface PersonalDetails {
   mobileNo: string;
   whatsappNo: string;
   isWhatsappSameAsMobile?: boolean; // Checkbox to auto-sync mobile to whatsapp
-  caste?: "general" | "bc" | "mbc" | "sc" | "st" | string;
+  caste?: string; // Deprecated & removed from UI
   telegramNo?: string;
   photoURL?: string;
   signatureURL?: string;
@@ -75,7 +79,8 @@ export interface EducationRecord {
   major: "Mathematics" | "Statistics" | "Economics" | "Other" | string;
   otherMajor?: string; // Visible when major === "Other"
   percentage: string; // Normal text/numeric input
-  pstm: "Yes" | "No" | string; // Puzhkal Kudinila Padithavar / Tamil Medium
+  pstm: "Yes" | "No" | string; // Whether PSTM is applicable (Tamil Medium)
+  passingYear?: string; // Year of Passing e.g. "2024"
   // Legacy / export compatibility aliases:
   tier?: "UG" | "PG" | "Other" | string;
   majorStream?: "Maths" | "Statistics" | "Economics" | string;
@@ -111,15 +116,21 @@ export interface DemographicDetails {
 export type OtherDetails = DemographicDetails;
 
 // ─────────────────────────────────────────────────────────────
-// SECTION E: BATCH DETAILS
+// SECTION E: BATCH & PAYMENT DETAILS
 // ─────────────────────────────────────────────────────────────
 export interface BatchDetails {
   batchName: string;
   courseName?: string;
   batchDurationStart?: string;
   batchDurationEnd?: string;
-  dateOfPayment?: string;
-  modeOfTransaction?: "upi" | "credit_card" | "bank_transfer" | "cash" | string;
+  dateOfPayment?: string; // Date of payment (type or select date)
+  modeOfTransaction?:
+    | "UPI"
+    | "Online Payment"
+    | "Credit Card"
+    | "Debit Card"
+    | string;
+  transactionId?: string; // Optional UTR / reference id
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -41,7 +41,7 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
       : new URL(bannerImage, window.location.origin).href;
 
   const termsAgreed = t.agreedAllTerms
-    ? 5
+    ? 10
     : Object.values(t).filter(Boolean).length;
 
   const educationRows = (ed?.records || [])
@@ -51,7 +51,8 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
         <td>${r.degree || r.tier || "—"}</td>
         <td>${r.major === "Other" ? r.otherMajor || "Other" : r.major || r.majorStream || "—"}</td>
         <td>${r.percentage || r.percentageOfMarks || "—"}%</td>
-        <td>${r.pstm || r.yearOfPassing || "—"}</td>
+        <td>${r.pstm || "No"}</td>
+        <td>${r.passingYear || r.yearOfPassing || "—"}</td>
       </tr>`,
     )
     .join("");
@@ -69,7 +70,13 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
 
   const modeLabel: Record<string, string> = {
     upi: "UPI",
+    UPI: "UPI",
+    "Online Payment": "Online Payment",
+    online_payment: "Online Payment",
     credit_card: "Credit Card",
+    "Credit Card": "Credit Card",
+    debit_card: "Debit Card",
+    "Debit Card": "Debit Card",
     bank_transfer: "Bank Transfer",
     cash: "Cash",
   };
@@ -366,7 +373,6 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
     ${row("Father's Name", fmt(p.fatherName))}
     ${row("Gender", fmt(p.gender ? p.gender.charAt(0).toUpperCase() + p.gender.slice(1) : undefined))}
     ${row("Date of Birth", fmtDate((p as any).dateOfBirth || o.dateOfBirth))}
-    ${row("Caste / Category", fmt(p.caste?.toUpperCase()))}
     ${row("Mobile No.", fmt(p.mobileNo))}
     ${row("WhatsApp No.", fmt(p.whatsappNo))}
     ${row("Telegram No.", fmt(p.telegramNo))}
@@ -390,15 +396,16 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
   </div>
 </div>
 
-<!-- V. Batch & Payment Details -->
+<!-- III. Batch & Payment Details -->
 <div class="section">
   <div class="section-title">III. Batch & Payment Details</div>
   <div class="fields">
     ${row("Batch Name", fmt(b.batchName || form.batchName))}
     ${row("Date of Payment", fmtDate(b.dateOfPayment))}
-    ${row("Batch Start Date", fmtDate(b.batchDurationStart))}
-    ${row("Batch End Date", fmtDate(b.batchDurationEnd))}
     ${row("Mode of Transaction", fmt(modeLabel[b.modeOfTransaction] || b.modeOfTransaction))}
+    ${b.transactionId ? row("Transaction ID / UTR", fmt(b.transactionId)) : ""}
+    ${row("Batch Start Date", fmt(b.batchStartDate || b.batchDurationStart || form.courseName))}
+    ${row("Batch End Date", fmt(b.batchEndDate || b.batchDurationEnd || "As scheduled"))}
   </div>
 </div>
 
@@ -424,10 +431,11 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
       : `<table class="edu-table">
            <thead>
              <tr>
-               <th>Degree / Tier</th>
-               <th>Major / Stream</th>
+               <th>Degree</th>
+               <th>Major / Subject</th>
                <th>% of Marks</th>
-               <th>PSTM / Passing Year</th>
+               <th>PSTM Applicable</th>
+               <th>Passing Year</th>
              </tr>
            </thead>
            <tbody>${educationRows}</tbody>
@@ -463,18 +471,23 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
 <div class="section">
   <div class="section-title">VI. Declaration & Terms & Conditions</div>
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-    <span style="font-size:8.5pt;font-weight:600;color:${termsAgreed >= 5 || t.agreedAllTerms ? "#16a34a" : "#dc2626"};">
-      ${termsAgreed >= 5 || t.agreedAllTerms ? "5 / 5 terms agreed" : `${termsAgreed} / 5 terms agreed`}
+    <span style="font-size:8.5pt;font-weight:600;color:${termsAgreed >= 10 || t.agreedAllTerms ? "#16a34a" : "#dc2626"};">
+      ${termsAgreed >= 10 || t.agreedAllTerms ? "10 / 10 terms agreed" : `${termsAgreed} / 10 terms agreed`}
     </span>
-    ${termsAgreed >= 5 || t.agreedAllTerms ? '<span style="color:#16a34a;font-size:8pt;">✓ All declarations accepted</span>' : ""}
+    ${termsAgreed >= 10 || t.agreedAllTerms ? '<span style="color:#16a34a;font-size:8pt;">✓ All declarations accepted</span>' : ""}
   </div>
   <ol class="terms-list">
     ${[
-      "I confirm the information provided is true, complete, and accurate to the best of my knowledge.",
-      "I agree to abide by all rules, regulations, and guidelines of Karthikeyan Analysis Study Circle.",
-      "I will not share, record, or distribute proprietary course content or materials without prior written permission.",
-      "I accept the terms of the fee payment and refund policy as stated in the course prospectus.",
-      "I have read and understood the student code of conduct, privacy policy, and admission terms.",
+      "Fees once paid are strictly non-refundable under any circumstances.",
+      "This batch consists entirely of LIVE Online Classes. If I miss any live class, daily recordings will be accessible only until the completion of the respective batch.",
+      "All Class Tests and Mock Tests will be conducted exclusively in LIVE CBT Mode. No second attempt or question paper in PDF format will be provided.",
+      "Since classes and tests are conducted in a LIVE monitored environment, I am required to keep my video ON throughout the test until completion.",
+      "Test-related doubts, discussions, and clarifications will be addressed only during the designated time slots.",
+      "Any misconduct, inappropriate behaviour, or disturbance during LIVE classes or tests may result in immediate removal/termination from the batch.",
+      "I agree not to share, distribute, reproduce, or circulate any study materials provided by the institute with any other person.",
+      "Class schedules and test schedules are subject to change depending on official examination dates or academic requirements.",
+      "I will strictly adhere to the academic schedule, attendance requirements, and test rules prescribed by the institute for this batch.",
+      "I confirm that I have read, understood, and agreed to all the terms and conditions and undertake to follow the rules of the institute throughout the course.",
     ]
       .map(
         (text, i) =>

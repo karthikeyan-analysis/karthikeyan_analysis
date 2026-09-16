@@ -91,6 +91,8 @@ interface ScheduledFormModalState {
   formTitle: string;
   courseName: string;
   startingDate: string;
+  batchStartDate: string;
+  batchEndDate: string;
   duration: string;
   note: string;
   scheduleStart: string;
@@ -143,6 +145,8 @@ export default function EnrollmentManagement() {
     formTitle: "",
     courseName: "",
     startingDate: "",
+    batchStartDate: "",
+    batchEndDate: "",
     duration: "60 Days / 120 Hours",
     note: "Admissions strictly based on qualification verification.",
     scheduleStart: "",
@@ -221,6 +225,8 @@ export default function EnrollmentManagement() {
       formTitle: `${activeBatchObj?.name || "Batch"} Enrollment Form`,
       courseName: activeBatchObj?.name || "ONLINE LIVE CRASH COURSE",
       startingDate: activeBatchObj?.schedule || "Immediate / To be announced",
+      batchStartDate: activeBatchObj?.schedule || "Immediate / To be announced",
+      batchEndDate: "60 Days / Complete Syllabus",
       duration: "60 Days / 120 Hours",
       note: "Admissions strictly based on qualification verification. Keep video ON during live CBT tests.",
       scheduleStart: "",
@@ -237,7 +243,9 @@ export default function EnrollmentManagement() {
       batchId: form.batchId,
       formTitle: form.formTitle,
       courseName: form.courseName,
-      startingDate: form.startingDate,
+      startingDate: form.batchStartDate || form.startingDate,
+      batchStartDate: form.batchStartDate || form.startingDate,
+      batchEndDate: form.batchEndDate || form.duration,
       duration: form.duration,
       note: form.note || "",
       scheduleStart: form.scheduleStart || "",
@@ -259,6 +267,10 @@ export default function EnrollmentManagement() {
     try {
       const targetBatch = batches.find((b) => b.id === modalData.batchId);
       const batchName = targetBatch?.name || "";
+      const effectiveStartDate =
+        modalData.batchStartDate.trim() || modalData.startingDate.trim();
+      const effectiveEndDate =
+        modalData.batchEndDate.trim() || modalData.duration.trim();
 
       if (modalData.id) {
         // Edit
@@ -267,8 +279,10 @@ export default function EnrollmentManagement() {
           batchName,
           formTitle: modalData.formTitle.trim(),
           courseName: modalData.courseName.trim(),
-          startingDate: modalData.startingDate.trim(),
-          duration: modalData.duration.trim(),
+          startingDate: effectiveStartDate,
+          batchStartDate: effectiveStartDate,
+          batchEndDate: effectiveEndDate,
+          duration: effectiveEndDate,
           note: modalData.note.trim(),
           scheduleStart: modalData.scheduleStart || "",
           scheduleEnd: modalData.scheduleEnd || "",
@@ -284,8 +298,10 @@ export default function EnrollmentManagement() {
                   batchName,
                   formTitle: modalData.formTitle.trim(),
                   courseName: modalData.courseName.trim(),
-                  startingDate: modalData.startingDate.trim(),
-                  duration: modalData.duration.trim(),
+                  startingDate: effectiveStartDate,
+                  batchStartDate: effectiveStartDate,
+                  batchEndDate: effectiveEndDate,
+                  duration: effectiveEndDate,
                   note: modalData.note.trim(),
                   scheduleStart: modalData.scheduleStart || "",
                   scheduleEnd: modalData.scheduleEnd || "",
@@ -302,8 +318,10 @@ export default function EnrollmentManagement() {
           batchName,
           formTitle: modalData.formTitle.trim(),
           courseName: modalData.courseName.trim(),
-          startingDate: modalData.startingDate.trim(),
-          duration: modalData.duration.trim(),
+          startingDate: effectiveStartDate,
+          batchStartDate: effectiveStartDate,
+          batchEndDate: effectiveEndDate,
+          duration: effectiveEndDate,
           note: modalData.note.trim(),
           scheduleStart: modalData.scheduleStart || "",
           scheduleEnd: modalData.scheduleEnd || "",
@@ -1475,7 +1493,8 @@ export default function EnrollmentManagement() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                Online Live Crash Course Name (Displayed on Form Banner) *
+                Online Live Crash Course Name (Displayed on Form Banner &amp;
+                Receipt) *
               </label>
               <Input
                 placeholder="e.g. TNPSC COMBINED STATISTICAL SERVICES EXAMINATION - ONLINE LIVE CRASH COURSE"
@@ -1485,18 +1504,28 @@ export default function EnrollmentManagement() {
                 }
                 required
               />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                💡 <strong>How to edit/update:</strong> You can modify this name
+                anytime to reflect the specific exam, notification, or course
+                title. It updates dynamically across the public enrollment link,
+                receipt, and admission PDF.
+              </span>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Starting Date *
+                  Batch Start Date *
                 </label>
                 <Input
                   placeholder="e.g. 15th October 2026 / Immediate"
-                  value={modalData.startingDate}
+                  value={modalData.batchStartDate || modalData.startingDate}
                   onChange={(e) =>
-                    setModalData({ ...modalData, startingDate: e.target.value })
+                    setModalData({
+                      ...modalData,
+                      batchStartDate: e.target.value,
+                      startingDate: e.target.value,
+                    })
                   }
                   required
                 />
@@ -1504,13 +1533,17 @@ export default function EnrollmentManagement() {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
-                  Course Duration *
+                  Batch End Date *
                 </label>
                 <Input
-                  placeholder="e.g. 60 Days / 120 Hours"
-                  value={modalData.duration}
+                  placeholder="e.g. 15th December 2026 / 60 Days"
+                  value={modalData.batchEndDate || modalData.duration}
                   onChange={(e) =>
-                    setModalData({ ...modalData, duration: e.target.value })
+                    setModalData({
+                      ...modalData,
+                      batchEndDate: e.target.value,
+                      duration: e.target.value,
+                    })
                   }
                   required
                 />

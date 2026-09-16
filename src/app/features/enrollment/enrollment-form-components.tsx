@@ -18,6 +18,7 @@ import {
   FileCheck,
   Upload,
   User,
+  CreditCard,
 } from "lucide-react";
 import type {
   PersonalDetails,
@@ -25,6 +26,7 @@ import type {
   EducationalDetails,
   EducationRecord,
   DemographicDetails,
+  BatchDetails,
   BatchEnrollmentConfig,
   TermsAndConditions,
   AllowedDegree,
@@ -44,13 +46,33 @@ const SELECT_CLS =
 interface CourseHeaderBoxProps {
   config?: BatchEnrollmentConfig | null;
   batchName?: string;
+  onEditBatchDetails?: () => void;
+  canEdit?: boolean;
 }
 
-export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
+export function CourseHeaderBox({
+  config,
+  batchName,
+  onEditBatchDetails,
+  canEdit,
+}: CourseHeaderBoxProps) {
   const courseTitle =
     config?.courseName?.trim() ||
     batchName?.trim() ||
     "ONLINE LIVE CRASH COURSE";
+
+  const resolvedBatchName =
+    batchName?.trim() || config?.batchId || "Crash Course Batch";
+
+  const startDate =
+    config?.batchStartDate?.trim() ||
+    config?.startingDate?.trim() ||
+    "To be announced / Immediate";
+
+  const endDate =
+    config?.batchEndDate?.trim() ||
+    config?.duration?.trim() ||
+    "Complete Syllabus Coverage";
 
   return (
     <div className="space-y-4">
@@ -72,81 +94,120 @@ export function CourseHeaderBox({ config, batchName }: CourseHeaderBoxProps) {
             <span>Official Batch Enrollment Portal</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-              Enrollment Status:
-            </span>
-            <span
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
-                config?.isOpen === false
-                  ? "bg-rose-100 text-rose-800"
-                  : "bg-emerald-100 text-emerald-800"
-              }`}
-            >
+          <div className="flex items-center gap-3">
+            {canEdit && onEditBatchDetails && (
+              <button
+                type="button"
+                onClick={onEditBatchDetails}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition"
+              >
+                <span>Edit Batch Details</span>
+              </button>
+            )}
+
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                Enrollment Status:
+              </span>
               <span
-                className={`w-2 h-2 rounded-full ${
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold ${
                   config?.isOpen === false
-                    ? "bg-rose-500"
-                    : "bg-emerald-500 animate-pulse"
+                    ? "bg-rose-100 text-rose-800"
+                    : "bg-emerald-100 text-emerald-800"
                 }`}
-              />
-              {config?.isOpen === false
-                ? "Admissions Closed"
-                : "Admissions Open"}
-            </span>
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    config?.isOpen === false
+                      ? "bg-rose-500"
+                      : "bg-emerald-500 animate-pulse"
+                  }`}
+                />
+                {config?.isOpen === false
+                  ? "Admissions Closed"
+                  : "Admissions Open"}
+              </span>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Course Information Box (Clean, Professional, No Gradient) */}
+      {/* Course & Batch Information Box (Clean, Professional, Explicit Fields) */}
       <div className="rounded-xl border border-slate-200 bg-white p-5 md:p-6 shadow-sm">
-        <div className="flex items-center gap-2 text-slate-900 font-bold text-base md:text-lg border-b border-slate-200 pb-3 mb-4">
-          <Building2 className="w-5 h-5 text-indigo-600" />
-          <span>Course Information</span>
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3 mb-4">
+          <div className="flex items-center gap-2 text-slate-900 font-bold text-base md:text-lg">
+            <Building2 className="w-5 h-5 text-indigo-600" />
+            <span>Batch &amp; Course Information</span>
+          </div>
+          {canEdit && onEditBatchDetails && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onEditBatchDetails}
+              className="text-xs font-semibold gap-1.5 h-8 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            >
+              Modify Details
+            </Button>
+          )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-3 bg-slate-50 border border-slate-200 p-4 rounded-lg">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Batch Name */}
+          <div className="sm:col-span-2 bg-slate-50 border border-slate-200 p-3.5 rounded-lg">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-              Online Live Crash Course Name
+              Batch Name
             </span>
-            <span className="text-base md:text-lg font-bold text-slate-900 mt-1 block">
-              {courseTitle}
+            <span className="text-base font-bold text-indigo-900 mt-1 block">
+              {resolvedBatchName}
             </span>
           </div>
 
+          {/* Batch Start Date */}
           <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg flex items-start gap-3">
             <Calendar className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-                Starting Date
+                Batch Start Date
               </span>
               <span className="text-sm font-bold text-slate-900 mt-0.5 block">
-                {config?.startingDate?.trim() || "To be announced / Immediate"}
+                {startDate}
               </span>
             </div>
           </div>
 
+          {/* Batch End Date */}
           <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg flex items-start gap-3">
             <Clock className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-                Course Duration
+                Batch End Date
               </span>
               <span className="text-sm font-bold text-slate-900 mt-0.5 block">
-                {config?.duration?.trim() || "Complete Syllabus Coverage"}
+                {endDate}
               </span>
             </div>
           </div>
 
+          {/* Course Name Banner */}
+          <div className="sm:col-span-2 md:col-span-3 bg-slate-50 border border-slate-200 p-3.5 rounded-lg">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+              Course Name
+            </span>
+            <span className="text-sm sm:text-base font-bold text-slate-900 mt-1 block">
+              {courseTitle}
+            </span>
+          </div>
+
+          {/* Mode of Instruction */}
           <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-lg flex items-start gap-3">
             <Info className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
             <div>
               <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-                Mode of Instruction
+                Instruction Mode
               </span>
               <span className="text-sm font-bold text-slate-900 mt-0.5 block">
-                100% Live Online CBT &amp; Classes
+                100% Live CBT
               </span>
             </div>
           </div>
@@ -618,6 +679,7 @@ export function EducationalQualificationsForm({
       otherMajor: "",
       percentage: "",
       pstm: "No",
+      passingYear: "",
     };
 
     onChange({ records: [...records, newRecord] });
@@ -697,7 +759,8 @@ export function EducationalQualificationsForm({
                   <th className="p-3">Degree *</th>
                   <th className="p-3">Subject / Major *</th>
                   <th className="p-3">Percentage (%) *</th>
-                  <th className="p-3">PSTM (Tamil Medium) *</th>
+                  <th className="p-3">PSTM Applicable? *</th>
+                  <th className="p-3">Passing Year *</th>
                   <th className="p-3 text-center">Action</th>
                 </tr>
               </thead>
@@ -773,8 +836,8 @@ export function EducationalQualificationsForm({
                         />
                       </td>
 
-                      {/* PSTM Dropdown */}
-                      <td className="p-3 min-w-[130px]">
+                      {/* PSTM Applicable? Dropdown */}
+                      <td className="p-3 min-w-[120px]">
                         <select
                           className={SELECT_CLS}
                           value={rec.pstm || "No"}
@@ -785,6 +848,24 @@ export function EducationalQualificationsForm({
                           <option value="No">No</option>
                           <option value="Yes">Yes</option>
                         </select>
+                      </td>
+
+                      {/* Passing Year */}
+                      <td className="p-3 min-w-[120px]">
+                        <input
+                          type="text"
+                          className={INPUT_CLS}
+                          placeholder="e.g. 2024"
+                          maxLength={6}
+                          value={rec.passingYear || rec.yearOfPassing || ""}
+                          onChange={(e) =>
+                            handleUpdateRow(index, {
+                              passingYear: e.target.value,
+                              yearOfPassing: e.target.value,
+                            })
+                          }
+                          required
+                        />
                       </td>
 
                       {/* Remove Row */}
@@ -920,7 +1001,111 @@ export function DemographicDetailsForm({
 }
 
 // ─────────────────────────────────────────────────────────────
-// 5. DECLARATION, TERMS & SUBMISSION
+// 5. BATCH & PAYMENT DETAILS
+// ─────────────────────────────────────────────────────────────
+interface BatchPaymentDetailsFormProps {
+  data: BatchDetails;
+  onChange: (data: BatchDetails) => void;
+  batchName?: string;
+  courseName?: string;
+}
+
+export function BatchPaymentDetailsForm({
+  data,
+  onChange,
+  batchName,
+  courseName,
+}: BatchPaymentDetailsFormProps) {
+  const set = (key: keyof BatchDetails, value: any) => {
+    onChange({ ...data, [key]: value });
+  };
+
+  const resolvedBatchName =
+    batchName?.trim() ||
+    data.batchName?.trim() ||
+    courseName?.trim() ||
+    "Batch";
+
+  return (
+    <Card className="border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200">
+        <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold">
+            5
+          </span>
+          Batch &amp; Payment Details
+        </h2>
+      </div>
+
+      <CardContent className="p-6 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {/* Target Batch Name */}
+          <div className="md:col-span-3 bg-slate-50 border border-slate-200 p-3.5 rounded-lg">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
+              Enrolled Batch
+            </span>
+            <span className="text-base font-bold text-indigo-900 mt-1 block">
+              {resolvedBatchName}
+            </span>
+          </div>
+
+          {/* Date of Payment */}
+          <div>
+            <label className={LABEL_CLS}>Date of Payment *</label>
+            <input
+              type="date"
+              className={INPUT_CLS}
+              value={data.dateOfPayment || ""}
+              onChange={(e) => set("dateOfPayment", e.target.value)}
+              required
+            />
+            <span className="text-[10px] text-slate-400 mt-0.5 block">
+              Type or select payment date
+            </span>
+          </div>
+
+          {/* Mode of Transaction */}
+          <div>
+            <label className={LABEL_CLS}>Mode of Transaction *</label>
+            <select
+              className={SELECT_CLS}
+              value={data.modeOfTransaction || "UPI"}
+              onChange={(e) => set("modeOfTransaction", e.target.value)}
+              required
+            >
+              <option value="UPI">UPI (GPay / PhonePe / Paytm / BHIM)</option>
+              <option value="Online Payment">
+                Online Payment (Net Banking / Gateway)
+              </option>
+              <option value="Credit Card">Credit Card</option>
+              <option value="Debit Card">Debit Card</option>
+            </select>
+          </div>
+
+          {/* Transaction Reference / UTR Number (Optional) */}
+          <div>
+            <label className={LABEL_CLS}>
+              Transaction ID / UTR No. (Optional)
+            </label>
+            <input
+              type="text"
+              className={INPUT_CLS}
+              placeholder="e.g. 423901928312"
+              value={data.transactionId || ""}
+              onChange={(e) => set("transactionId", e.target.value)}
+            />
+            <span className="text-[10px] text-slate-400 mt-0.5 block">
+              Reference number from payment receipt
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// 6. DECLARATION, TERMS & SUBMISSION
 // ─────────────────────────────────────────────────────────────
 export const DECLARATION_TERMS_LIST = [
   "Fees once paid are strictly non-refundable under any circumstances.",
@@ -931,17 +1116,20 @@ export const DECLARATION_TERMS_LIST = [
   "Any misconduct, inappropriate behaviour, or disturbance during LIVE classes or tests may result in my immediate removal from the session and/or termination from the batch.",
   "I agree not to share, distribute, reproduce, or circulate any study materials provided by the institute, including notes, books, test questions, PDFs, recordings, or other course materials, with any other person. If such unauthorized sharing is found, the institute reserves the right to terminate my enrollment from the batch without refund.",
   "Class schedules and test schedules are subject to change depending on the official examination dates, notifications, or other academic requirements. Any such changes will be communicated by the institute.",
+  "I will strictly adhere to the academic schedule, attendance requirements, and test rules prescribed by the institute for this batch.",
   "I confirm that I have read, understood, and agreed to all the above terms and conditions and undertake to follow the rules and guidelines of the institute throughout the course.",
 ];
 
 interface DeclarationTermsFormProps {
   terms: TermsAndConditions;
   onChange: (terms: TermsAndConditions) => void;
+  isStep2?: boolean;
 }
 
 export function DeclarationTermsForm({
   terms,
   onChange,
+  isStep2 = false,
 }: DeclarationTermsFormProps) {
   const toggleFinalAgree = (checked: boolean) => {
     onChange({
@@ -965,7 +1153,7 @@ export function DeclarationTermsForm({
       <div className="bg-slate-50/80 px-6 py-4 border-b border-slate-200">
         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
           <span className="flex items-center justify-center w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-bold">
-            5
+            {isStep2 ? "2" : "6"}
           </span>
           Declaration &amp; Terms and Conditions
         </h2>
@@ -1167,7 +1355,8 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
                 <th className="p-2">Degree</th>
                 <th className="p-2">Major / Subject</th>
                 <th className="p-2">Percentage</th>
-                <th className="p-2">PSTM (Tamil Medium)</th>
+                <th className="p-2">PSTM Applicable</th>
+                <th className="p-2">Passing Year</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -1183,6 +1372,9 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
                     {r.percentage || r.percentageOfMarks}%
                   </td>
                   <td className="p-2">{r.pstm || "No"}</td>
+                  <td className="p-2">
+                    {r.passingYear || r.yearOfPassing || "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -1228,6 +1420,41 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
               {d?.previousTnpscExperience}
             </span>
           </div>
+        </div>
+      </div>
+
+      {/* Batch & Payment Details */}
+      <div className="space-y-2">
+        <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider border-b border-slate-200 pb-1">
+          Batch &amp; Payment Details
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+          <div>
+            <span className="text-slate-500">Batch Name:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {form.batchDetails?.batchName || form.batchName || "—"}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Date of Payment:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {form.batchDetails?.dateOfPayment || "—"}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500">Mode of Transaction:</span>{" "}
+            <span className="font-semibold text-slate-800">
+              {form.batchDetails?.modeOfTransaction || "—"}
+            </span>
+          </div>
+          {form.batchDetails?.transactionId && (
+            <div>
+              <span className="text-slate-500">Transaction ID / UTR:</span>{" "}
+              <span className="font-semibold text-slate-800">
+                {form.batchDetails.transactionId}
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -26,9 +26,11 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
     // Personal Details
     "Student Name": form.personalDetails.studentName,
     "Father's Name": form.personalDetails.fatherName,
-    "Date of Birth": form.personalDetails.dateOfBirth,
+    "Date of Birth":
+      form.demographicDetails?.dateOfBirth ||
+      (form.personalDetails as any).dateOfBirth ||
+      "",
     Gender: form.personalDetails.gender,
-    Caste: form.personalDetails.caste,
     "Mobile No": form.personalDetails.mobileNo,
     "WhatsApp No": form.personalDetails.whatsappNo,
     "Telegram No": form.personalDetails.telegramNo || "",
@@ -37,16 +39,18 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
 
     // Address Details
     "Door No": form.addressDetails.doorNo,
-    "Street/Nagar": form.addressDetails.streetNagar,
+    "Street/Nagar":
+      form.addressDetails.streetName || form.addressDetails.streetNagar,
+    Taluk: form.addressDetails.taluk || "",
     District: form.addressDetails.district,
-    State: form.addressDetails.state,
+    State: form.addressDetails.state || "Tamil Nadu",
     Pincode: form.addressDetails.pincode,
 
-    // Educational Details (comma-separated)
+    // Educational Details (comma-separated with PSTM and Passing Year)
     Education: (form.educationalDetails?.records || [])
       .map(
         (r) =>
-          `${r.degree || r.tier || "Degree"} (${r.major === "Other" ? r.otherMajor : r.major || r.majorStream || "Major"}: ${r.percentage || r.percentageOfMarks}% PSTM:${r.pstm || "No"})`,
+          `${r.degree || r.tier || "Degree"} (${r.major === "Other" ? r.otherMajor : r.major || r.majorStream || "Major"}: ${r.percentage || r.percentageOfMarks}% | PSTM: ${r.pstm || "No"} | Passing Year: ${r.passingYear || r.yearOfPassing || "—"})`,
       )
       .join("; "),
 
@@ -72,20 +76,17 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
       form.approvalStatus ||
       (form.status === "approved" ? "approved" : "pending"),
 
-    // Batch Details
+    // Batch & Payment Details
     "Batch Name": form.batchDetails?.batchName || form.batchName || "",
     "Course Name": form.courseName || form.batchDetails?.courseName || "",
-    "Batch Duration Start": form.batchDetails?.batchDurationStart || "",
-    "Batch Duration End": form.batchDetails?.batchDurationEnd || "",
     "Date of Payment": form.batchDetails?.dateOfPayment || "",
     "Mode of Transaction": form.batchDetails?.modeOfTransaction || "",
+    "Transaction ID": form.batchDetails?.transactionId || "",
+    "Batch Start Date": form.batchDetails?.batchDurationStart || "",
+    "Batch End Date": form.batchDetails?.batchDurationEnd || "",
 
     // Terms & Conditions
-    "Term 1 Agreed": form.termsAndConditions.term1,
-    "Term 2 Agreed": form.termsAndConditions.term2,
-    "Term 3 Agreed": form.termsAndConditions.term3,
-    "Term 4 Agreed": form.termsAndConditions.term4,
-    "Term 5 Agreed": form.termsAndConditions.term5,
+    "All Terms Agreed": form.termsAndConditions.agreedAllTerms ? "Yes" : "No",
   };
 }
 
