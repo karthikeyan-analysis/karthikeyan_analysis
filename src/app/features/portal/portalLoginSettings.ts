@@ -6,6 +6,8 @@ export const PORTAL_LOGIN_SETTINGS_DOC = "portalLogin";
 export type PortalLoginSettings = {
   /** When false, the "Join test with passcode" button is hidden on student login. */
   showGuestLoginButton: boolean;
+  /** When false, the "Sign in with Username & Password" button is hidden on student login. */
+  showUsernameLoginButton?: boolean;
   /** When false, the "Attend CBT Test" button on the main website is hidden. */
   showWebsiteCbtButton?: boolean;
   /** When false, the "Register Test" button on the main website is hidden. */
@@ -19,6 +21,7 @@ export type PortalLoginSettings = {
 
 export const DEFAULT_PORTAL_LOGIN_SETTINGS: PortalLoginSettings = {
   showGuestLoginButton: true,
+  showUsernameLoginButton: true,
   showWebsiteCbtButton: true,
   showWebsiteRegisterButton: true,
   showWebsiteStudentLoginButton: true,
@@ -39,6 +42,10 @@ export async function getPortalLoginSettings(): Promise<PortalLoginSettings> {
         typeof data.showGuestLoginButton === "boolean"
           ? data.showGuestLoginButton
           : DEFAULT_PORTAL_LOGIN_SETTINGS.showGuestLoginButton,
+      showUsernameLoginButton:
+        typeof data.showUsernameLoginButton === "boolean"
+          ? data.showUsernameLoginButton
+          : DEFAULT_PORTAL_LOGIN_SETTINGS.showUsernameLoginButton,
       showWebsiteCbtButton:
         typeof data.showWebsiteCbtButton === "boolean"
           ? data.showWebsiteCbtButton

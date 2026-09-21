@@ -56,3 +56,5 @@ coverage/
 
 # Local secrets / one-shot credential scripts (never commit)
 .secrets/
+*firebase-adminsdk*.json
+karthikeyan-analysis-firebase-adminsdk.json

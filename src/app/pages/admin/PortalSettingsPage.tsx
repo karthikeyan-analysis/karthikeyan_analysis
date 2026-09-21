@@ -69,6 +69,7 @@ export default function PortalSettingsPage() {
     try {
       const saved = await savePortalLoginSettings({
         showGuestLoginButton: settings.showGuestLoginButton,
+        showUsernameLoginButton: settings.showUsernameLoginButton,
         showWebsiteCbtButton: settings.showWebsiteCbtButton,
         showWebsiteRegisterButton: settings.showWebsiteRegisterButton,
         showWebsiteStudentLoginButton: settings.showWebsiteStudentLoginButton,
@@ -250,6 +251,34 @@ export default function PortalSettingsPage() {
                   Enrolled students can always sign in using their Google
                   account or assigned Portal Username & Passcode.
                 </p>
+              </div>
+
+              {/* Username & Password Login Toggle */}
+              <div className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4">
+                <div className="space-y-1 min-w-0">
+                  <Label
+                    htmlFor="username-login-toggle"
+                    className="text-sm font-semibold text-slate-900 flex items-center gap-2"
+                  >
+                    <KeyRound className="w-4 h-4 text-indigo-600" />
+                    Show "Sign in with Username & Password" Button
+                  </Label>
+                  <p className="text-xs text-slate-600">
+                    When enabled, students see a "Sign in with Username &
+                    Password" button alongside "Continue with Google" on the
+                    student login page.
+                  </p>
+                </div>
+                <Switch
+                  id="username-login-toggle"
+                  checked={settings.showUsernameLoginButton !== false}
+                  onCheckedChange={(checked) =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      showUsernameLoginButton: checked,
+                    }))
+                  }
+                />
               </div>
 
               {/* Guest Login Toggle */}

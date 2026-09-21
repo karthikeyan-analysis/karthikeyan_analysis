@@ -11,7 +11,7 @@ import {
   CardDescription,
   CardHeader,
 } from "../components/ui/card";
-import { AlertCircle, KeyRound, Smartphone, User, Lock, ChevronDown } from "lucide-react";
+import { AlertCircle, KeyRound, Smartphone, User, Lock } from "lucide-react";
 import type { UserRole } from "../context/AuthContext";
 import {
   DEFAULT_PORTAL_LOGIN_SETTINGS,
@@ -54,6 +54,9 @@ export default function Login({ role = "student" }: LoginProps) {
   const [showGuestLoginButton, setShowGuestLoginButton] = useState(
     DEFAULT_PORTAL_LOGIN_SETTINGS.showGuestLoginButton,
   );
+  const [showUsernameLoginButton, setShowUsernameLoginButton] = useState(
+    DEFAULT_PORTAL_LOGIN_SETTINGS.showUsernameLoginButton ?? true,
+  );
   // Student login mode: "google" (default) or "username"
   const [studentLoginMode, setStudentLoginMode] = useState<"google" | "username">("google");
   const [portalUsername, setPortalUsername] = useState("");
@@ -76,12 +79,18 @@ export default function Login({ role = "student" }: LoginProps) {
     let cancelled = false;
     getPortalLoginSettings()
       .then((settings) => {
-        if (!cancelled) setShowGuestLoginButton(settings.showGuestLoginButton);
+        if (!cancelled) {
+          setShowGuestLoginButton(settings.showGuestLoginButton);
+          setShowUsernameLoginButton(settings.showUsernameLoginButton ?? true);
+        }
       })
       .catch(() => {
         if (!cancelled) {
           setShowGuestLoginButton(
             DEFAULT_PORTAL_LOGIN_SETTINGS.showGuestLoginButton,
+          );
+          setShowUsernameLoginButton(
+            DEFAULT_PORTAL_LOGIN_SETTINGS.showUsernameLoginButton ?? true,
           );
         }
       });
@@ -282,16 +291,20 @@ export default function Login({ role = "student" }: LoginProps) {
                       Use the Google account registered by your admin. Works on all browsers and devices.
                     </p>
 
-                    {/* Toggle to username/password */}
-                    <button
-                      id="student-username-toggle-btn"
-                      type="button"
-                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors pt-1"
-                      onClick={() => { setStudentLoginMode("username"); setError(""); }}
-                    >
-                      <ChevronDown className="w-3.5 h-3.5" />
-                      Can't use Google? Sign in with username &amp; password
-                    </button>
+                    {/* Username/password login as its own button, matching the Google button */}
+                    {showUsernameLoginButton && (
+                      <Button
+                        id="student-username-toggle-btn"
+                        type="button"
+                        variant="outline"
+                        className="w-full h-12 text-base font-semibold bg-white text-indigo-700 border-2 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300 shadow-sm"
+                        onClick={() => { setStudentLoginMode("username"); setError(""); }}
+                        aria-label="Sign in with username and password"
+                      >
+                        <KeyRound className="w-5 h-5 mr-3 shrink-0" />
+                        Sign in with Username &amp; Password
+                      </Button>
+                    )}
                   </>
                 )}
 
