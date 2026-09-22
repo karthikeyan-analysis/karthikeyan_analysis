@@ -121,6 +121,7 @@ function LiveClassRoomInner({
   const isMicOn = useObservableAsValue(mic.isBroadcasting$, false);
   const isCameraOn = useObservableAsValue(camera.isBroadcasting$, false);
   const isScreenOn = useObservableAsValue(screenshare.isBroadcasting$, false);
+  const isHost = role === "host";
 
   useEffect(() => subscribeToDoubts(classId, setDoubts), [classId]);
 
