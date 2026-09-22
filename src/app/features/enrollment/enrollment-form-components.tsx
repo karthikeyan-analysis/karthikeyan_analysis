@@ -1124,12 +1124,25 @@ interface DeclarationTermsFormProps {
   terms: TermsAndConditions;
   onChange: (terms: TermsAndConditions) => void;
   isStep2?: boolean;
+  /**
+   * Batch-specific instructions shown above the terms list (e.g. a Test
+   * Batch's custom instructions). Omit to show nothing extra.
+   */
+  customInstructions?: string;
+  /**
+   * Batch-specific terms & conditions text that REPLACES the default
+   * DECLARATION_TERMS_LIST for this rendering only. Omit/empty to keep the
+   * default shared terms — every other batch is unaffected either way.
+   */
+  customTerms?: string;
 }
 
 export function DeclarationTermsForm({
   terms,
   onChange,
   isStep2 = false,
+  customInstructions,
+  customTerms,
 }: DeclarationTermsFormProps) {
   const toggleFinalAgree = (checked: boolean) => {
     onChange({
@@ -1164,17 +1177,30 @@ export function DeclarationTermsForm({
           <p className="font-bold text-slate-900 uppercase tracking-wide">
             DECLARATION &amp; TERMS AND CONDITIONS
           </p>
-          <p>
-            By submitting this application, I acknowledge and agree to the
-            following terms and conditions:
-          </p>
-          <ol className="list-decimal list-inside space-y-2 text-slate-800 font-normal">
-            {DECLARATION_TERMS_LIST.map((text, i) => (
-              <li key={i} className="pl-1">
-                <span className="font-medium text-slate-900">{text}</span>
-              </li>
-            ))}
-          </ol>
+          {customInstructions?.trim() ? (
+            <p className="whitespace-pre-wrap font-medium text-slate-900">
+              {customInstructions.trim()}
+            </p>
+          ) : null}
+          {customTerms?.trim() ? (
+            <p className="whitespace-pre-wrap font-medium text-slate-900">
+              {customTerms.trim()}
+            </p>
+          ) : (
+            <>
+              <p>
+                By submitting this application, I acknowledge and agree to the
+                following terms and conditions:
+              </p>
+              <ol className="list-decimal list-inside space-y-2 text-slate-800 font-normal">
+                {DECLARATION_TERMS_LIST.map((text, i) => (
+                  <li key={i} className="pl-1">
+                    <span className="font-medium text-slate-900">{text}</span>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
         </div>
 
         {/* Final Mandatory Checkbox */}

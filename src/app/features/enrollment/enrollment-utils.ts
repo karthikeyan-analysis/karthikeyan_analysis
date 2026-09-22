@@ -700,6 +700,7 @@ export async function getBatchById(batchId: string): Promise<{
   name: string;
   description?: string;
   schedule?: string;
+  kind?: "course" | "test";
 } | null> {
   const docRef = doc(db, "batches", batchId);
   const snapshot = await getDoc(docRef);
@@ -710,6 +711,7 @@ export async function getBatchById(batchId: string): Promise<{
     name: data.name || "",
     description: data.description || "",
     schedule: data.schedule || "",
+    kind: data.kind === "test" ? "test" : "course",
   };
 }
 

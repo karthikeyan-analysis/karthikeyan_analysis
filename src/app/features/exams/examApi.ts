@@ -27,8 +27,10 @@ import {
 } from "./settings";
 import { examIncludesBatch } from "./examBatchUtils";
 import { sha256Base64 } from "./password";
+import { computeAttemptScore } from "./examScoring";
 import type {
   ExamAttempt,
+  ExamAttemptPartResult,
   ExamGuestProfile,
   ExamQuestionPrivate,
   ExamQuestionPublic,
@@ -465,6 +467,7 @@ export async function submitAttempt(params: {
   correctCount?: number;
   wrongCount?: number;
   unansweredCount?: number;
+  partResults?: Record<string, ExamAttemptPartResult>;
 }) {
   const updateData: Record<string, any> = {
     status: "submitted",
@@ -478,6 +481,7 @@ export async function submitAttempt(params: {
   if (params.wrongCount != null) updateData.wrongCount = params.wrongCount;
   if (params.unansweredCount != null)
     updateData.unansweredCount = params.unansweredCount;
+  if (params.partResults) updateData.partResults = params.partResults;
 
   await updateDoc(examAttemptRef(params.testId, params.uid), updateData as any);
 }
@@ -524,9 +528,11 @@ export async function forceSubmitAttemptForAdmin(params: {
   correctCount: number;
   wrongCount: number;
   unansweredCount: number;
+  partResults?: Record<string, ExamAttemptPartResult>;
 }> {
-  const [attempt, questions, keys] = await Promise.all([
+  const [attempt, test, questions, keys] = await Promise.all([
     getAttempt(params.testId, params.uid),
+    getExamTest(params.testId),
     listPublicQuestions(params.testId),
     listPrivateQuestions(params.testId),
   ]);
@@ -535,42 +541,20 @@ export async function forceSubmitAttemptForAdmin(params: {
     throw new Error("Attempt is already submitted");
 
   const keyById = new Map(keys.map((k) => [k.id, k.correctIndex]));
-  const neg = params.negativeMarkPerWrong ?? 0;
-  let s = 0;
-  let max = 0;
-  let correctCount = 0;
-  let wrongCount = 0;
-  let unansweredCount = 0;
-
-  questions.forEach((q) => {
-    max += q.marks;
-    const selected = (attempt.answers ?? {})[q.id];
-    if (selected == null) {
-      unansweredCount++;
-      return;
-    }
-    const correct = keyById.get(q.id);
-    if (correct == null) return;
-    if (selected === correct) {
-      s += q.marks;
-      correctCount++;
-    } else {
-      s -= neg;
-      wrongCount++;
-    }
+  const result = computeAttemptScore({
+    questions,
+    correctIndexById: keyById,
+    answers: attempt.answers ?? {},
+    negativeMarkPerWrong: params.negativeMarkPerWrong,
+    parts: test?.partsMode === "multi" ? test.parts : undefined,
   });
-  s = Math.max(0, s);
 
   await submitAttempt({
     testId: params.testId,
     uid: params.uid,
-    score: s,
-    maxScore: max,
-    correctCount,
-    wrongCount,
-    unansweredCount,
+    ...result,
   });
-  return { score: s, maxScore: max, correctCount, wrongCount, unansweredCount };
+  return result;
 }
 
 /** Loads every test and its attempts (one Firestore read per test for attempts). */

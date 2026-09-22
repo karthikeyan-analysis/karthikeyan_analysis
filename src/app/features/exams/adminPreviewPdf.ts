@@ -1,4 +1,5 @@
 import type { ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "./types";
+import { formatPartLabel } from "./examScoring";
 
 function escapeHtml(input: string) {
   return (input || "")
@@ -29,44 +30,85 @@ function buildAdminPreviewHtml({ test, questions, keys }: AdminPreviewPdfParams)
   const missingKeys = questions.filter((question) => !keyById.has(question.id)).length;
   const totalMarks = questions.reduce((sum, question) => sum + Number(question.marks || 0), 0);
 
-  const questionHtml = questions
-    .map((question, index) => {
-      const correctIndex = keyById.get(question.id);
-      const correctLetter = optionLetter(correctIndex);
-      const correctText =
-        correctIndex == null ? "" : String(question.options?.[correctIndex] || "").trim();
-      const imageHtml = question.imageUrl
-        ? `<div class="image-wrap"><img src="${escapeHtml(question.imageUrl)}" alt="Question ${index + 1}" /></div>`
-        : "";
-      const optionsHtml = (question.options || [])
-        .map((option, optionIndex) => {
-          const isCorrect = optionIndex === correctIndex;
-          return `<div class="option ${isCorrect ? "correct" : ""}">
-            <span class="option-letter">${optionLetter(optionIndex)}.</span>
-            <span class="option-text">${escapeHtml(option)}</span>
-            ${isCorrect ? `<span class="correct-pill">Correct Answer</span>` : ""}
-          </div>`;
-        })
-        .join("");
+  const questionCards = questions.map((question, index) => {
+    const correctIndex = keyById.get(question.id);
+    const correctLetter = optionLetter(correctIndex);
+    const correctText =
+      correctIndex == null ? "" : String(question.options?.[correctIndex] || "").trim();
+    const imageHtml = question.imageUrl
+      ? `<div class="image-wrap"><img src="${escapeHtml(question.imageUrl)}" alt="Question ${index + 1}" /></div>`
+      : "";
+    const optionsHtml = (question.options || [])
+      .map((option, optionIndex) => {
+        const isCorrect = optionIndex === correctIndex;
+        return `<div class="option ${isCorrect ? "correct" : ""}">
+          <span class="option-letter">${optionLetter(optionIndex)}.</span>
+          <span class="option-text">${escapeHtml(option)}</span>
+          ${isCorrect ? `<span class="correct-pill">Correct Answer</span>` : ""}
+        </div>`;
+      })
+      .join("");
 
-      return `<section class="question">
-        <div class="question-header">
-          <div>
-            <div class="question-no">Question ${index + 1}</div>
-            <div class="question-text">${escapeHtml(question.text || "").replaceAll("\n", "<br />")}</div>
-          </div>
-          <div class="marks">${escapeHtml(String(question.marks || 0))} mark${Number(question.marks || 0) === 1 ? "" : "s"}</div>
+    return `<section class="question">
+      <div class="question-header">
+        <div>
+          <div class="question-no">Question ${index + 1}</div>
+          <div class="question-text">${escapeHtml(question.text || "").replaceAll("\n", "<br />")}</div>
         </div>
-        ${imageHtml}
-        <div class="options">${optionsHtml}</div>
-        <div class="answer-key">
-          Answer: <strong>${escapeHtml(correctLetter)}</strong>
-          ${correctText ? ` - ${escapeHtml(correctText)}` : ""}
-          ${correctIndex == null ? `<span class="missing">Missing answer key</span>` : ""}
-        </div>
-      </section>`;
-    })
-    .join("");
+        <div class="marks">${escapeHtml(String(question.marks || 0))} mark${Number(question.marks || 0) === 1 ? "" : "s"}</div>
+      </div>
+      ${imageHtml}
+      <div class="options">${optionsHtml}</div>
+      <div class="answer-key">
+        Answer: <strong>${escapeHtml(correctLetter)}</strong>
+        ${correctText ? ` - ${escapeHtml(correctText)}` : ""}
+        ${correctIndex == null ? `<span class="missing">Missing answer key</span>` : ""}
+      </div>
+    </section>`;
+  });
+
+  // Group by part/section when the test is a multi-part test, mirroring the
+  // student-facing response sheet's structure.
+  const partsList =
+    test.partsMode === "multi"
+      ? [...(test.parts || [])].sort((a, b) => a.order - b.order)
+      : [];
+  let questionHtml: string;
+  if (partsList.length) {
+    const partById = new Map(partsList.map((p) => [p.id, p]));
+    const idxsByPart = new Map<string, number[]>();
+    const unassignedIdxs: number[] = [];
+    questions.forEach((q, idx) => {
+      if (q.partId && partById.has(q.partId)) {
+        const arr = idxsByPart.get(q.partId) || [];
+        arr.push(idx);
+        idxsByPart.set(q.partId, arr);
+      } else {
+        unassignedIdxs.push(idx);
+      }
+    });
+    const sections: string[] = [];
+    const partHeader = (label: string, idxs: number[]) => {
+      const marks = idxs.reduce((sum, i) => sum + Number(questions[i]!.marks || 0), 0);
+      return `<div class="part-header">
+        <span class="part-header-title">${escapeHtml(label)}</span>
+        <span class="part-header-stats">${idxs.length} question${idxs.length === 1 ? "" : "s"} • ${marks} marks</span>
+      </div>`;
+    };
+    for (const part of partsList) {
+      const idxs = idxsByPart.get(part.id) || [];
+      if (!idxs.length) continue;
+      sections.push(partHeader(formatPartLabel(part), idxs));
+      idxs.forEach((i) => sections.push(questionCards[i]!));
+    }
+    if (unassignedIdxs.length) {
+      sections.push(partHeader("Other Questions", unassignedIdxs));
+      unassignedIdxs.forEach((i) => sections.push(questionCards[i]!));
+    }
+    questionHtml = sections.join("");
+  } else {
+    questionHtml = questionCards.join("");
+  }
 
   return `<!doctype html>
 <html>
@@ -83,6 +125,9 @@ function buildAdminPreviewHtml({ test, questions, keys }: AdminPreviewPdfParams)
     .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
     .chip{border:1px solid #cbd5e1;border-radius:999px;padding:5px 10px;font-size:11px;background:#fff}
     .warning{border:1px solid #f59e0b;background:#fffbeb;color:#92400e;border-radius:12px;padding:10px 12px;margin-bottom:14px;font-size:12px}
+    .part-header{break-inside:avoid;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:12px;padding:9px 14px;margin-top:16px}
+    .part-header-title{font-size:12px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#3730a3}
+    .part-header-stats{font-size:11px;color:#4338ca}
     .question{break-inside:avoid;border:1px solid #e2e8f0;border-radius:16px;padding:14px;margin-top:12px;background:#fff}
     .question-header{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
     .question-no{font-size:11px;font-weight:900;text-transform:uppercase;color:#4f46e5;letter-spacing:.08em}

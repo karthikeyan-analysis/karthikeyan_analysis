@@ -45,6 +45,21 @@ export interface ExamAdvancedSettings {
   notificationEmails?: string[];
 }
 
+/** A labeled section of a multi-part test (e.g. "Part A" tagged with subject "Mathematics"). */
+export interface ExamPart {
+  id: string;
+  /** 1-based display order. */
+  order: number;
+  /** Raw label, e.g. "Part A" or "Part 1". */
+  label: string;
+  /** Optional subject/topic tag, rendered as "Part A (Mathematics)". */
+  subject?: string;
+  /** Synced from question count assigned to this part. */
+  totalQuestions?: number;
+  /** Synced from the sum of marks of questions assigned to this part. */
+  totalMarks?: number;
+}
+
 export interface ExamTest {
   id: string;
   title: string;
@@ -57,6 +72,10 @@ export interface ExamTest {
   subjectMode?: "common" | "per_batch";
   /** Optional per-batch subject labels for shared tests across different batches. */
   subjectByBatchId?: Record<string, string>;
+  /** Single continuous block (legacy/default) vs. multiple labeled parts/sections. */
+  partsMode?: "single" | "multi";
+  /** Ordered list of parts. Present only when partsMode === "multi". */
+  parts?: ExamPart[];
   instructions?: string;
   /**
    * Optional access password hash (SHA-256, base64).
@@ -94,6 +113,10 @@ export interface ExamQuestionPublic {
   imageUrl?: string;
   options: string[];
   marks: number;
+  /** FK to ExamPart.id. Undefined for legacy/single-part tests. */
+  partId?: string;
+  /** 1-based position within its part (display only; questionNo remains the global order). */
+  partQuestionNo?: number;
 }
 
 export interface ExamQuestionPrivate {
@@ -146,4 +169,15 @@ export interface ExamAttempt {
   correctCount?: number;
   wrongCount?: number;
   unansweredCount?: number;
+  /** Per-part breakdown, keyed by ExamPart.id. Present only for multi-part tests. */
+  partResults?: Record<string, ExamAttemptPartResult>;
+}
+
+export interface ExamAttemptPartResult {
+  attempted: number;
+  correct: number;
+  wrong: number;
+  unanswered: number;
+  marksObtained: number;
+  maxMarks: number;
 }

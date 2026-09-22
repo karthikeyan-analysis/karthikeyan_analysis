@@ -56,14 +56,19 @@ import {
   LayoutList,
   LayoutGrid,
   GraduationCap,
+  ClipboardEdit,
 } from "lucide-react";
 import type { Batch } from "../../context/DataContext";
+import TestBatchFormEditorDialog from "../../components/testBatches/TestBatchFormEditorDialog";
+
+type BatchKind = "course" | "test";
 
 type BatchFormData = {
   name: string;
   description: string;
   schedule: string;
   subjects: string;
+  kind: BatchKind;
 };
 
 const emptyFormData: BatchFormData = {
@@ -71,6 +76,7 @@ const emptyFormData: BatchFormData = {
   description: "",
   schedule: "",
   subjects: "",
+  kind: "course",
 };
 
 function parseSubjects(value: string) {
@@ -184,9 +190,12 @@ export default function BatchManagement() {
       description: batch.description || "",
       schedule: batch.schedule || "",
       subjects: (batch.subjects || []).join(", "),
+      kind: batch.kind === "test" ? "test" : "course",
     });
     setIsOpen(true);
   };
+
+  const [formEditorBatch, setFormEditorBatch] = useState<Batch | null>(null);
 
   const removeSubjectFromForm = (subjectToRemove: string) => {
     const nextSubjects = currentSubjects.filter(
@@ -214,6 +223,7 @@ export default function BatchManagement() {
         description: formData.description.trim(),
         schedule: formData.schedule.trim(),
         subjects,
+        kind: formData.kind,
       };
 
       if (editingBatchId) {
@@ -387,6 +397,47 @@ export default function BatchManagement() {
                       setFormData({ ...formData, name: e.target.value })
                     }
                   />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-slate-700">
+                    Batch Type
+                  </label>
+                  <div className="mt-1.5 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({ ...formData, kind: "course" })
+                      }
+                      className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                        formData.kind === "course"
+                          ? "border-indigo-600 bg-indigo-50 text-indigo-800"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block font-semibold">
+                        Course Batch
+                      </span>
+                      <span className="text-[11px] text-slate-500">
+                        Default. Regular course enrollment.
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFormData({ ...formData, kind: "test" })
+                      }
+                      className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${
+                        formData.kind === "test"
+                          ? "border-indigo-600 bg-indigo-50 text-indigo-800"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block font-semibold">Test Batch</span>
+                      <span className="text-[11px] text-slate-500">
+                        Application form header/footer are customizable.
+                      </span>
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-slate-700">
@@ -580,17 +631,30 @@ export default function BatchManagement() {
 
                         {/* Enrollment & Forms */}
                         <TableCell className="align-middle py-3.5">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 text-xs font-medium text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 border-indigo-200/80 gap-1.5 shadow-2xs"
-                            onClick={() =>
-                              navigate(`/admin/enrollments?batchId=${batch.id}`)
-                            }
-                          >
-                            <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>Forms & Links</span>
-                          </Button>
+                          <div className="flex flex-col items-start gap-1.5">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs font-medium text-indigo-700 bg-indigo-50/60 hover:bg-indigo-100 border-indigo-200/80 gap-1.5 shadow-2xs"
+                              onClick={() =>
+                                navigate(`/admin/enrollments?batchId=${batch.id}`)
+                              }
+                            >
+                              <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
+                              <span>Forms & Links</span>
+                            </Button>
+                            {batch.kind === "test" ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 text-xs font-medium text-amber-800 bg-amber-50/60 hover:bg-amber-100 border-amber-200/80 gap-1.5 shadow-2xs"
+                                onClick={() => setFormEditorBatch(batch)}
+                              >
+                                <ClipboardEdit className="w-3.5 h-3.5 text-amber-700" />
+                                <span>Customize Form</span>
+                              </Button>
+                            ) : null}
+                          </div>
                         </TableCell>
 
                         {/* Actions */}
@@ -743,7 +807,7 @@ export default function BatchManagement() {
                     </div>
                   )}
 
-                  <div className="pt-2 border-t border-slate-100">
+                  <div className="pt-2 border-t border-slate-100 space-y-1.5">
                     <Button
                       variant="outline"
                       size="sm"
@@ -755,6 +819,17 @@ export default function BatchManagement() {
                       <UserPlus className="w-3.5 h-3.5 text-indigo-600" />
                       Batch Enrollment &amp; Form Link
                     </Button>
+                    {batch.kind === "test" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-amber-800 bg-amber-50/70 hover:bg-amber-100 border-amber-200 gap-1.5 font-semibold text-xs h-8"
+                        onClick={() => setFormEditorBatch(batch)}
+                      >
+                        <ClipboardEdit className="w-3.5 h-3.5 text-amber-700" />
+                        Customize Application Form
+                      </Button>
+                    ) : null}
                   </div>
                 </CardContent>
               </Card>
@@ -793,6 +868,16 @@ export default function BatchManagement() {
           </div>
         </AlertDialogContent>
       </AlertDialog>
+
+      {formEditorBatch ? (
+        <TestBatchFormEditorDialog
+          batch={formEditorBatch}
+          open={!!formEditorBatch}
+          onOpenChange={(open) => {
+            if (!open) setFormEditorBatch(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

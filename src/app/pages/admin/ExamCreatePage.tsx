@@ -20,15 +20,28 @@ import ExamBatchAssignmentFields, {
 import { QuestionMarksSelect } from "../../components/exams/QuestionMarksSelect";
 import { normalizeExamBatchFields } from "../../features/exams/examBatchUtils";
 import { createExamTest } from "../../features/exams/examApi";
+import { formatPartLabel } from "../../features/exams/examScoring";
 import { sha256Base64 } from "../../features/exams/password";
 import {
   DEFAULT_MARKS_PER_QUESTION,
   type QuestionMarkOption,
 } from "../../features/exams/examMarks";
 import { DEFAULT_EXAM_SETTINGS } from "../../features/exams/settings";
+import { Trash2 } from "lucide-react";
 
 type AudienceMode = "selected_batches" | "all_batches";
 type SubjectMode = "common" | "per_batch";
+type TestStructureMode = "single" | "multi";
+
+interface PartDraft {
+  id: string;
+  label: string;
+  subject: string;
+}
+
+function makePartId() {
+  return `part_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
 
 export default function ExamCreatePage() {
   const navigate = useNavigate();
@@ -46,6 +59,26 @@ export default function ExamCreatePage() {
   const [passcode, setPasscode] = useState("");
   const [defaultMarksPerQuestion, setDefaultMarksPerQuestion] =
     useState<QuestionMarkOption>(DEFAULT_MARKS_PER_QUESTION);
+  const [testStructureMode, setTestStructureMode] =
+    useState<TestStructureMode>("single");
+  const [parts, setParts] = useState<PartDraft[]>([
+    { id: makePartId(), label: "Part A", subject: "" },
+    { id: makePartId(), label: "Part B", subject: "" },
+  ]);
+
+  const addPart = () => {
+    const nextLetter = String.fromCharCode(65 + parts.length); // A, B, C...
+    setParts((prev) => [
+      ...prev,
+      { id: makePartId(), label: `Part ${nextLetter}`, subject: "" },
+    ]);
+  };
+  const removePart = (id: string) => {
+    setParts((prev) => (prev.length > 2 ? prev.filter((p) => p.id !== id) : prev));
+  };
+  const updatePart = (id: string, patch: Partial<Omit<PartDraft, "id">>) => {
+    setParts((prev) => prev.map((p) => (p.id === id ? { ...p, ...patch } : p)));
+  };
 
   const effectiveBatchIds = useMemo(() => {
     if (audienceMode === "all_batches") return batches.map((b) => b.id);
@@ -100,6 +133,12 @@ export default function ExamCreatePage() {
       alert("Passcode is mandatory for every test.");
       return;
     }
+    if (testStructureMode === "multi") {
+      if (parts.some((p) => !p.label.trim())) {
+        alert("Please enter a label for every part.");
+        return;
+      }
+    }
     setCreating(true);
     try {
       const now = Date.now();
@@ -118,6 +157,19 @@ export default function ExamCreatePage() {
         subject: resolvedSubject,
         subjectMode,
         subjectByBatchId: subjectMode === "per_batch" ? cleanSubjectByBatch : {},
+        partsMode: testStructureMode,
+        ...(testStructureMode === "multi"
+          ? {
+              parts: parts.map((p, idx) => ({
+                id: p.id,
+                order: idx + 1,
+                label: p.label.trim(),
+                ...(p.subject.trim() ? { subject: p.subject.trim() } : {}),
+                totalQuestions: 0,
+                totalMarks: 0,
+              })),
+            }
+          : {}),
         instructions: "",
         accessPasswordHash,
         startAt: start,
@@ -289,6 +341,101 @@ export default function ExamCreatePage() {
                 })}
               </div>
             )}
+          </div>
+          <div className="space-y-3 rounded-xl border border-slate-200 p-4">
+            <div>
+              <Label>Test structure</Label>
+              <p className="mt-1 text-xs text-slate-500">
+                Keep this test as one continuous question block, or split it into
+                labeled parts/sections (e.g. Part A / Part B), each optionally tagged
+                with its own subject.
+              </p>
+            </div>
+            <RadioGroup
+              value={testStructureMode}
+              onValueChange={(v) => setTestStructureMode(v as TestStructureMode)}
+              className="grid gap-2 md:grid-cols-2"
+            >
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <RadioGroupItem value="single" className="mt-0.5" />
+                <span>
+                  <span className="block font-semibold text-slate-900">
+                    Single continuous block
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Default. All questions in one flat sequence.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <RadioGroupItem value="multi" className="mt-0.5" />
+                <span>
+                  <span className="block font-semibold text-slate-900">
+                    Multiple parts
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    Divide into labeled sections, each with its own subject tag.
+                  </span>
+                </span>
+              </label>
+            </RadioGroup>
+            {testStructureMode === "multi" ? (
+              <div className="space-y-2">
+                {parts.map((part, idx) => (
+                  <div
+                    key={part.id}
+                    className="grid gap-2 rounded-lg border border-slate-200 p-3 md:grid-cols-[1fr_1fr_auto] md:items-center"
+                  >
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">Label</Label>
+                      <Input
+                        value={part.label}
+                        onChange={(e) =>
+                          updatePart(part.id, { label: e.target.value })
+                        }
+                        placeholder="Part A"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-slate-500">
+                        Subject (optional)
+                      </Label>
+                      <Input
+                        value={part.subject}
+                        onChange={(e) =>
+                          updatePart(part.id, { subject: e.target.value })
+                        }
+                        placeholder="Mathematics"
+                      />
+                    </div>
+                    <div className="flex items-end justify-between gap-2 md:flex-col md:items-end">
+                      <span className="text-xs font-medium text-indigo-700">
+                        {formatPartLabel(part)}
+                      </span>
+                      {parts.length > 2 ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => removePart(part.id)}
+                          aria-label={`Remove ${part.label || `part ${idx + 1}`}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+                <Button type="button" variant="outline" size="sm" onClick={addPart}>
+                  + Add Part
+                </Button>
+                <p className="text-xs text-slate-500">
+                  Questions are assigned to a part in the Questions step. You can
+                  rename parts or add more later from test settings.
+                </p>
+              </div>
+            ) : null}
           </div>
           <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/70 p-4">
             <Label>Mandatory Passcode</Label>

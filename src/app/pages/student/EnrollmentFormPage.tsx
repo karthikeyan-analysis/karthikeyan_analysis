@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router";
 import bannerImage from "../../../banner.jpeg";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
@@ -46,6 +46,8 @@ import {
   recordShareableLinkClick,
   submitBatchEnrollment,
 } from "../../features/enrollment/enrollment-utils";
+import { getTestBatchFormConfig } from "../../features/testBatches/testBatchFormApi";
+import type { TestBatchFormConfig } from "../../features/testBatches/types";
 
 export default function PublicEnrollmentForm() {
   const params = useParams<{ token?: string; batchId?: string }>();
@@ -59,6 +61,9 @@ export default function PublicEnrollmentForm() {
   const [batchId, setBatchId] = useState<string>("");
   const [batchName, setBatchName] = useState<string>("");
   const [config, setConfig] = useState<BatchEnrollmentConfig | null>(null);
+  const [isTestBatch, setIsTestBatch] = useState(false);
+  const [testBatchFormConfig, setTestBatchFormConfig] =
+    useState<TestBatchFormConfig | null>(null);
   const [scheduledFormId, setScheduledFormId] = useState<string>("");
   const [scheduledFormTitle, setScheduledFormTitle] = useState<string>("");
 
@@ -243,6 +248,15 @@ export default function PublicEnrollmentForm() {
           batchName: batch.name || prev.batchName,
           courseName: enrollmentConfig?.courseName || prev.courseName,
         }));
+
+        if (batch.kind === "test") {
+          setIsTestBatch(true);
+          const tbConfig = await getTestBatchFormConfig(batch.id);
+          if (!cancelled) setTestBatchFormConfig(tbConfig);
+        } else {
+          setIsTestBatch(false);
+          setTestBatchFormConfig(null);
+        }
       } catch (err: any) {
         console.error("Batch resolution error:", err);
         if (!cancelled) {
@@ -259,6 +273,35 @@ export default function PublicEnrollmentForm() {
       cancelled = true;
     };
   }, [params.batchId, params.token]);
+
+  // Test Batch header/footer overrides — only applied when this batch is
+  // kind:"test" AND has a saved, customized form config. Every other batch
+  // (course batches, or test batches that never customized their form)
+  // renders exactly as before.
+  const testBatchOverridesActive =
+    isTestBatch && !!testBatchFormConfig?.isCustomized;
+
+  const effectiveConfig: BatchEnrollmentConfig | null = useMemo(() => {
+    if (!testBatchOverridesActive || !testBatchFormConfig) return config;
+    return {
+      batchId: config?.batchId || batchId,
+      courseName:
+        testBatchFormConfig.header.courseSubjectName ||
+        config?.courseName ||
+        "",
+      startingDate: config?.startingDate || "",
+      batchStartDate: config?.batchStartDate,
+      batchEndDate: config?.batchEndDate,
+      duration: testBatchFormConfig.header.duration || config?.duration || "",
+      note: config?.note,
+      isOpen: config?.isOpen ?? true,
+    };
+  }, [testBatchOverridesActive, testBatchFormConfig, config, batchId]);
+
+  const effectiveBatchName =
+    testBatchOverridesActive && testBatchFormConfig?.header.batchName
+      ? testBatchFormConfig.header.batchName
+      : batchName;
 
   const handleCopyCredentials = () => {
     if (!submittedResult) return;
@@ -667,7 +710,7 @@ export default function PublicEnrollmentForm() {
     <div className="min-h-screen bg-slate-100/70 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Course Header & Information Box */}
-        <CourseHeaderBox config={config} batchName={batchName} />
+        <CourseHeaderBox config={effectiveConfig} batchName={effectiveBatchName} />
 
         {/* Error Notice */}
         {error && (
@@ -859,7 +902,21 @@ export default function PublicEnrollmentForm() {
             </Card>
 
             {/* Section 6: Declaration & Terms (10 Points) */}
-            <DeclarationTermsForm terms={terms} onChange={setTerms} isStep2 />
+            <DeclarationTermsForm
+              terms={terms}
+              onChange={setTerms}
+              isStep2
+              customInstructions={
+                testBatchOverridesActive
+                  ? testBatchFormConfig?.footer.instructions
+                  : undefined
+              }
+              customTerms={
+                testBatchOverridesActive
+                  ? testBatchFormConfig?.footer.termsAndConditions
+                  : undefined
+              }
+            />
 
             {/* Navigation & Submit Buttons */}
             <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">

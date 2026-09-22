@@ -39,6 +39,7 @@ import {
   resolveAttemptParticipant,
 } from "../../features/exams/adminTestReportUtils";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
+import { formatPartLabel } from "../../features/exams/examScoring";
 
 function safeFileName(name: string) {
   return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
@@ -190,6 +191,13 @@ export default function ExamResults() {
           ? test.totalMarks
           : questions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
+      const partsList =
+        test.partsMode === "multi"
+          ? [...(test.parts || [])].sort((a, b) => a.order - b.order)
+          : [];
+      const partById = new Map(partsList.map((p) => [p.id, p]));
+      const neg = test.negativeMarkPerWrong || 0;
+
       const avgMarksPerQuestion =
         totalQuestions > 0
           ? Math.round((totalMarks / totalQuestions) * 1000) / 1000
@@ -297,6 +305,7 @@ export default function ExamResults() {
             correct != null ? (q.options?.[correct] ?? "") : "";
           const isCorrect =
             correct != null && selected != null ? selected === correct : "";
+          const part = q.partId ? partById.get(q.partId) : undefined;
           return {
             examId: test.id,
             examTitle: test.title,
@@ -311,6 +320,8 @@ export default function ExamResults() {
             attemptStatus: a.status,
             startedAt: toIsoOrEmpty(a.startedAt),
             submittedAt: toIsoOrEmpty(a.submittedAt),
+            partLabel: part?.label || "",
+            partSubject: part?.subject || "",
             questionNo: questionIndexById.get(q.id) ?? "",
             questionId: q.id,
             questionText: q.text || "",
@@ -374,6 +385,49 @@ export default function ExamResults() {
         return base;
       });
 
+      const partWiseRows = partsList.length
+        ? exportAttemptOrder.map((a) => {
+            const participant = resolveAttemptParticipant(a, students);
+            const answers = a.answers || {};
+            const row: Record<string, any> = {
+              studentName: participant.name,
+              studentId: participant.studentId,
+            };
+            let totalAttempted = 0;
+            let totalCorrect = 0;
+            for (const part of partsList) {
+              const label = formatPartLabel(part);
+              let attempted = 0;
+              let correctInPart = 0;
+              let marksInPart = 0;
+              for (const q of questions) {
+                if (q.partId !== part.id) continue;
+                const selected = answers[q.id] ?? null;
+                if (selected == null) continue;
+                attempted++;
+                const correct = keys ? correctIndexById.get(q.id) : undefined;
+                if (correct == null) continue;
+                if (selected === correct) {
+                  correctInPart++;
+                  marksInPart += q.marks || 0;
+                } else {
+                  marksInPart -= neg;
+                }
+              }
+              marksInPart = Math.max(0, marksInPart);
+              totalAttempted += attempted;
+              totalCorrect += correctInPart;
+              row[`${label} - Attempted`] = attempted;
+              row[`${label} - Correct`] = correctInPart;
+              row[`${label} - Marks`] = marksInPart;
+            }
+            row["Total Attempted"] = totalAttempted;
+            row["Total Correct"] = totalCorrect;
+            row["Total Marks Scored"] = a.score ?? "";
+            return row;
+          })
+        : [];
+
       const rankedResultRows = summaryRows.map((row) => ({
         rank: row.rank,
         studentName: row.studentName,
@@ -420,6 +474,11 @@ export default function ExamResults() {
 
       const ws4 = XLSX.utils.json_to_sheet(submissionOrderRows);
       XLSX.utils.book_append_sheet(wb, ws4, "Submission order");
+
+      if (partWiseRows.length) {
+        const ws5 = XLSX.utils.json_to_sheet(partWiseRows);
+        XLSX.utils.book_append_sheet(wb, ws5, "Part-wise summary");
+      }
 
       const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const blob = new Blob([buf], {

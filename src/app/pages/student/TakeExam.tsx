@@ -68,6 +68,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { submitAttempt } from "../../features/exams/examApi";
+import {
+  computeAttemptScore,
+  formatPartLabel,
+} from "../../features/exams/examScoring";
 import { sha256Base64 } from "../../features/exams/password";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
@@ -514,6 +518,70 @@ export default function TakeExam({
     return statusById;
   }, [answers, markedForReview, questionIdOrder, visited]);
 
+  const currentPart = useMemo(() => {
+    if (test?.partsMode !== "multi" || !test.parts?.length || !currentQuestion)
+      return null;
+    return test.parts.find((p) => p.id === currentQuestion.partId) || null;
+  }, [test, currentQuestion]);
+
+  const partGroups = useMemo(() => {
+    if (test?.partsMode !== "multi" || !test.parts?.length) return null;
+    const groups = test.parts
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((part) => ({
+        part,
+        items: [] as { q: ExamQuestionPublic; idx: number }[],
+      }));
+    const groupById = new Map(groups.map((g) => [g.part.id, g]));
+    const orphan: { q: ExamQuestionPublic; idx: number }[] = [];
+    questions.forEach((q, idx) => {
+      const g = q.partId ? groupById.get(q.partId) : undefined;
+      if (g) g.items.push({ q, idx });
+      else orphan.push({ q, idx });
+    });
+    return { groups, orphan };
+  }, [test, questions]);
+
+  const renderPaletteButton = (q: ExamQuestionPublic, idx: number) => {
+    const st = paletteStatus[q.id];
+    const isCurrent = idx === currentIndex;
+    const base =
+      st === "answered"
+        ? "bg-emerald-600 text-white border-emerald-600"
+        : st === "answered_marked"
+          ? "bg-violet-600 text-white border-violet-600"
+          : st === "marked_for_review"
+            ? "bg-violet-600 text-white border-violet-600"
+            : st === "not_answered"
+              ? "bg-red-600 text-white border-red-600"
+              : "bg-slate-100 text-slate-900 border-slate-300";
+
+    return (
+      <button
+        key={q.id}
+        className={cn(
+          "relative h-9 rounded-lg border text-xs font-semibold transition-all",
+          base,
+          isCurrent && st === "not_answered" && "ring-2 ring-red-800 ring-offset-2",
+          isCurrent &&
+            st !== "not_answered" &&
+            "ring-2 ring-indigo-400 ring-offset-2",
+          st === "not_visited" && "hover:bg-slate-50",
+        )}
+        onClick={() => setCurrentIndex(idx)}
+      >
+        {st === "answered_marked" ? (
+          <span
+            className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm ring-1 ring-emerald-700/20"
+            title="Answered and marked for review"
+          />
+        ) : null}
+        {idx + 1}
+      </button>
+    );
+  };
+
   const autoSubmitTriggered = useRef(false);
 
   useEffect(() => {
@@ -938,47 +1006,25 @@ export default function TakeExam({
       const keys = await listPrivateQuestions(testId);
       setCorrectKeys(keys);
       const keyById = new Map(keys.map((k) => [k.id, k.correctIndex]));
-      const neg = test?.negativeMarkPerWrong || 0;
 
-      let s = 0;
-      let max = 0;
-      let correctCount = 0;
-      let wrongCount = 0;
-      let unansweredCount = 0;
-
-      questions.forEach((q) => {
-        max += q.marks;
-        const selected = answers[q.id];
-        if (selected == null) {
-          unansweredCount++;
-          return;
-        }
-        const correct = keyById.get(q.id);
-        if (correct == null) return;
-        if (selected === correct) {
-          s += q.marks;
-          correctCount++;
-        } else {
-          s -= neg;
-          wrongCount++;
-        }
+      const result = computeAttemptScore({
+        questions,
+        correctIndexById: keyById,
+        answers,
+        negativeMarkPerWrong: test?.negativeMarkPerWrong,
+        parts: test?.partsMode === "multi" ? test.parts : undefined,
       });
-      s = Math.max(0, s);
 
       await submitAttempt({
         testId,
         uid,
-        score: s,
-        maxScore: max,
-        correctCount,
-        wrongCount,
-        unansweredCount,
+        ...result,
       });
       localStorage.removeItem(examSessionKey);
       localStorage.removeItem(`exam_answers:${testId}:${uid}`);
       setAttemptStatus("submitted");
       setAttemptSubmittedAtIso(new Date().toISOString());
-      setScore({ score: s, maxScore: max });
+      setScore({ score: result.score, maxScore: result.maxScore });
       navigate(`/student/tests/${testId}/result`, {
         replace: true,
         state: { allowPdfDownload: true },
@@ -1521,6 +1567,11 @@ export default function TakeExam({
                   <Badge className="bg-slate-900 text-white hover:bg-slate-900 px-2.5">
                     Q{currentIndex + 1}
                   </Badge>
+                  {currentPart ? (
+                    <Badge className="bg-indigo-100 text-indigo-800 border border-indigo-200/80 hover:bg-indigo-100">
+                      {formatPartLabel(currentPart)}
+                    </Badge>
+                  ) : null}
                   <span className="text-sm text-slate-600">
                     Mark:{" "}
                     <span className="font-semibold text-slate-900">
@@ -1921,48 +1972,40 @@ export default function TakeExam({
                 className="mt-2 min-h-[140px] max-h-[360px] flex-1 overflow-y-auto overscroll-contain scroll-smooth rounded-lg border border-slate-200/80 bg-slate-50/50 p-2 pr-1"
                 aria-label="Question navigation"
               >
-                <div className="grid grid-cols-6 gap-2">
-                  {questions.map((q, idx) => {
-                    const st = paletteStatus[q.id];
-                    const isCurrent = idx === currentIndex;
-                    const base =
-                      st === "answered"
-                        ? "bg-emerald-600 text-white border-emerald-600"
-                        : st === "answered_marked"
-                          ? "bg-violet-600 text-white border-violet-600"
-                          : st === "marked_for_review"
-                            ? "bg-violet-600 text-white border-violet-600"
-                            : st === "not_answered"
-                              ? "bg-red-600 text-white border-red-600"
-                              : "bg-slate-100 text-slate-900 border-slate-300";
-
-                    return (
-                      <button
-                        key={q.id}
-                        className={cn(
-                          "relative h-9 rounded-lg border text-xs font-semibold transition-all",
-                          base,
-                          isCurrent &&
-                            st === "not_answered" &&
-                            "ring-2 ring-red-800 ring-offset-2",
-                          isCurrent &&
-                            st !== "not_answered" &&
-                            "ring-2 ring-indigo-400 ring-offset-2",
-                          st === "not_visited" && "hover:bg-slate-50",
-                        )}
-                        onClick={() => setCurrentIndex(idx)}
-                      >
-                        {st === "answered_marked" ? (
-                          <span
-                            className="absolute -right-1.5 -top-1.5 h-4 w-4 rounded-full border-2 border-white bg-emerald-500 shadow-sm ring-1 ring-emerald-700/20"
-                            title="Answered and marked for review"
-                          />
-                        ) : null}
-                        {idx + 1}
-                      </button>
-                    );
-                  })}
-                </div>
+                {partGroups ? (
+                  <div className="space-y-3">
+                    {partGroups.groups.map(({ part, items }) =>
+                      items.length ? (
+                        <div key={part.id}>
+                          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+                            {formatPartLabel(part)}
+                          </div>
+                          <div className="grid grid-cols-6 gap-2">
+                            {items.map(({ q, idx }) =>
+                              renderPaletteButton(q, idx),
+                            )}
+                          </div>
+                        </div>
+                      ) : null,
+                    )}
+                    {partGroups.orphan.length ? (
+                      <div>
+                        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                          Other
+                        </div>
+                        <div className="grid grid-cols-6 gap-2">
+                          {partGroups.orphan.map(({ q, idx }) =>
+                            renderPaletteButton(q, idx),
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-6 gap-2">
+                    {questions.map((q, idx) => renderPaletteButton(q, idx))}
+                  </div>
+                )}
               </div>
 
               <div className="mt-3 shrink-0 grid grid-cols-2 gap-2 text-xs">

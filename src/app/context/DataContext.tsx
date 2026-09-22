@@ -37,6 +37,8 @@ export interface Batch {
   subjects?: string[];
   createdDate: string;
   studentCount: number;
+  /** Batch category. Undefined/absent === "course" (today's default behavior, unaffected). */
+  kind?: "course" | "test";
 }
 
 export interface Student {

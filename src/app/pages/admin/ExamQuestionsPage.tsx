@@ -23,7 +23,15 @@ import {
   normalizeQuestionMarks,
   type QuestionMarkOption,
 } from "../../features/exams/examMarks";
+import { formatPartLabel, recomputePartTotals } from "../../features/exams/examScoring";
 import type { ExamQuestionPublic, ExamTest } from "../../features/exams/types";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { Plus, Save, Trash2 } from "lucide-react";
 
 type EditorQuestion = {
@@ -36,6 +44,7 @@ type EditorQuestion = {
   imageUrl: string;
   imageFile: File | null;
   imagePreviewUrl: string;
+  partId?: string;
 };
 
 const DEFAULT_5_OPTIONS = ["A", "B", "C", "D", "E"];
@@ -52,10 +61,14 @@ function fromPublicQuestion(q: ExamQuestionPublic, correctIndex = 0): EditorQues
     imageUrl: q.imageUrl || "",
     imageFile: null,
     imagePreviewUrl: "",
+    partId: q.partId,
   };
 }
 
-function newQuestion(defaultMarks: QuestionMarkOption = DEFAULT_MARKS_PER_QUESTION): EditorQuestion {
+function newQuestion(
+  defaultMarks: QuestionMarkOption = DEFAULT_MARKS_PER_QUESTION,
+  partId?: string,
+): EditorQuestion {
   return {
     localId: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     text: "",
@@ -65,6 +78,7 @@ function newQuestion(defaultMarks: QuestionMarkOption = DEFAULT_MARKS_PER_QUESTI
     imageUrl: "",
     imageFile: null,
     imagePreviewUrl: "",
+    partId,
   };
 }
 
@@ -191,9 +205,54 @@ export default function ExamQuestionsPage() {
     e.preventDefault();
   };
 
-  const addQuestion = () => {
-    setEditorQuestions((prev) => [...prev, newQuestion(testDefaultMarks)]);
+  const isMultiPart = test?.partsMode === "multi" && !!test.parts?.length;
+
+  const addQuestion = (partId?: string) => {
+    setEditorQuestions((prev) => [...prev, newQuestion(testDefaultMarks, partId)]);
   };
+
+  const setQuestionPart = (localId: string, partId: string) => {
+    updateQuestion(localId, (q) => ({ ...q, partId: partId || undefined }));
+  };
+
+  /** Grouped by part (in test.parts order) for display + save order; falls back to insertion order for single-part tests. */
+  const displayQuestions = useMemo(() => {
+    if (!isMultiPart || !test?.parts) {
+      return editorQuestions.map((q) => ({ q }));
+    }
+    const orderById = new Map(test.parts.map((p, i) => [p.id, i]));
+    return editorQuestions
+      .map((q, idx) => ({ q, idx }))
+      .sort((a, b) => {
+        const pa = a.q.partId != null ? (orderById.get(a.q.partId) ?? 999) : 999;
+        const pb = b.q.partId != null ? (orderById.get(b.q.partId) ?? 999) : 999;
+        if (pa !== pb) return pa - pb;
+        return a.idx - b.idx;
+      })
+      .map(({ q }) => ({ q }));
+  }, [editorQuestions, isMultiPart, test]);
+
+  const groupedByPart = useMemo(() => {
+    if (!isMultiPart || !test?.parts) return null;
+    let pos = 0;
+    return test.parts
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((part) => {
+        const items = displayQuestions.filter(({ q }) => q.partId === part.id);
+        const withPositions = items.map(({ q }) => ({ q, displayPos: pos++ }));
+        return { part, items: withPositions };
+      });
+  }, [displayQuestions, isMultiPart, test]);
+
+  const unassignedQuestions = useMemo(() => {
+    if (!isMultiPart) return [];
+    const validPartIds = new Set((test?.parts || []).map((p) => p.id));
+    let pos = groupedByPart?.reduce((acc, g) => acc + g.items.length, 0) || 0;
+    return displayQuestions
+      .filter(({ q }) => !q.partId || !validPartIds.has(q.partId))
+      .map(({ q }) => ({ q, displayPos: pos++ }));
+  }, [displayQuestions, groupedByPart, isMultiPart, test]);
 
   const updateTestDefaultMarks = async (value: QuestionMarkOption) => {
     if (!testId || !test) return;
@@ -243,8 +302,9 @@ export default function ExamQuestionsPage() {
 
   const saveAll = async () => {
     if (!testId) return;
-    for (let i = 0; i < editorQuestions.length; i += 1) {
-      const err = validateQuestion(editorQuestions[i], i);
+    const ordered = displayQuestions.map(({ q }) => q);
+    for (let i = 0; i < ordered.length; i += 1) {
+      const err = validateQuestion(ordered[i], i);
       if (err) {
         alert(err);
         return;
@@ -253,19 +313,28 @@ export default function ExamQuestionsPage() {
 
     setSavingAll(true);
     try {
-      for (let i = 0; i < editorQuestions.length; i += 1) {
-        const q = editorQuestions[i];
+      const partCounters: Record<string, number> = {};
+      for (let i = 0; i < ordered.length; i += 1) {
+        const q = ordered[i];
         const options = q.options.map((x) => x.trim()).filter(Boolean);
+        let partQuestionNo: number | undefined;
+        if (isMultiPart && q.partId) {
+          partCounters[q.partId] = (partCounters[q.partId] || 0) + 1;
+          partQuestionNo = partCounters[q.partId];
+        }
+        const publicData = {
+          questionNo: i + 1,
+          text: q.text.trim(),
+          imageUrl: q.imageUrl.trim(),
+          options,
+          marks: normalizeQuestionMarks(q.marks, testDefaultMarks),
+          ...(isMultiPart && q.partId ? { partId: q.partId } : {}),
+          ...(partQuestionNo != null ? { partQuestionNo } : {}),
+        };
         const questionId = await upsertQuestion({
           testId,
           questionId: q.questionId,
-          publicData: {
-            questionNo: i + 1,
-            text: q.text.trim(),
-            imageUrl: q.imageUrl.trim(),
-            options,
-            marks: normalizeQuestionMarks(q.marks, testDefaultMarks),
-          },
+          publicData,
           privateData: {
             correctIndex: clamp(q.correctIndex, 0, options.length - 1),
           },
@@ -280,18 +349,18 @@ export default function ExamQuestionsPage() {
           await upsertQuestion({
             testId,
             questionId,
-            publicData: {
-              questionNo: i + 1,
-              text: q.text.trim(),
-              imageUrl: uploadedUrl,
-              options,
-              marks: normalizeQuestionMarks(q.marks, testDefaultMarks),
-            },
+            publicData: { ...publicData, imageUrl: uploadedUrl },
             privateData: {
               correctIndex: clamp(q.correctIndex, 0, options.length - 1),
             },
           });
         }
+      }
+
+      if (isMultiPart && test?.parts) {
+        const freshQuestions = await listPublicQuestions(testId);
+        const updatedParts = recomputePartTotals(test.parts, freshQuestions);
+        await updateExamTest(testId, { parts: updatedParts });
       }
 
       await loadData();
@@ -303,6 +372,156 @@ export default function ExamQuestionsPage() {
       setSavingAll(false);
     }
   };
+
+  const renderQuestionCard = (q: EditorQuestion, displayPos: number) => (
+    <Card key={q.localId}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base">Question {displayPos + 1}</CardTitle>
+          <Button variant="ghost" size="sm" className="text-rose-700 hover:bg-rose-50" onClick={() => void removeQuestion(q.localId)}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isMultiPart ? (
+          <div className="space-y-2">
+            <Label>Part</Label>
+            <Select
+              value={q.partId || ""}
+              onValueChange={(v) => setQuestionPart(q.localId, v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Assign to a part" />
+              </SelectTrigger>
+              <SelectContent>
+                {(test?.parts || []).map((part) => (
+                  <SelectItem key={part.id} value={part.id}>
+                    {formatPartLabel(part)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        <div className="space-y-2">
+          <Label>Question (type or paste screenshot)</Label>
+          <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+            <Textarea
+              value={q.text}
+              onChange={(e) => updateQuestion(q.localId, (prev) => ({ ...prev, text: e.target.value }))}
+              onPaste={(e) => handlePasteImage(q.localId, e)}
+              placeholder="Type your question here, or paste an image (Ctrl+V)."
+              className="min-h-24 border-slate-200"
+            />
+
+            {q.imagePreviewUrl ? (
+              <ExamQuestionImageFrame
+                src={q.imagePreviewUrl}
+                alt={`Question ${displayPos + 1} preview`}
+                questionNo={displayPos + 1}
+              />
+            ) : q.imageUrl ? (
+              <ExamQuestionImageFrame
+                src={q.imageUrl}
+                alt={`Question ${displayPos + 1}`}
+                questionNo={displayPos + 1}
+              />
+            ) : (
+              <div className="text-xs text-slate-500">
+                Paste a screenshot here (Ctrl+V) or use Upload.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                ref={(el) => {
+                  fileInputRefs.current[q.localId] = el;
+                }}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => attachImageFile(q.localId, e.target.files?.[0] || null)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRefs.current[q.localId]?.click()}
+              >
+                Upload image
+              </Button>
+              {(q.imagePreviewUrl || q.imageUrl) ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    updateQuestion(q.localId, (prev) => ({ ...prev, imageUrl: "" }));
+                    attachImageFile(q.localId, null);
+                  }}
+                >
+                  Remove image
+                </Button>
+              ) : null}
+              <div className="text-[11px] text-slate-500">
+                Tip: copy an image and press Ctrl+V inside the text box.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Options</Label>
+          </div>
+          <div
+            role="radiogroup"
+            aria-label={`Correct option for question ${displayPos + 1}`}
+            className="flex flex-wrap items-center gap-2"
+          >
+            {q.options.slice(0, 5).map((opt, optIdx) => {
+              const letter = String.fromCharCode(65 + optIdx);
+              const selected = q.correctIndex === optIdx;
+              return (
+                <button
+                  key={optIdx}
+                  type="button"
+                  onClick={() =>
+                    updateQuestion(q.localId, (prev) => ({
+                      ...prev,
+                      correctIndex: optIdx,
+                    }))
+                  }
+                  className={cn(
+                    "h-9 px-3 rounded-lg border text-sm font-semibold transition-colors",
+                    selected
+                      ? "border-indigo-600 bg-indigo-50 text-indigo-800"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                  aria-checked={selected}
+                  role="radio"
+                >
+                  {letter}
+                </button>
+              );
+            })}
+          </div>
+          <div className="text-[11px] text-slate-500">
+            Five choices (A–E) are fixed. Click the correct letter.
+          </div>
+        </div>
+
+        <QuestionMarksSelect
+          value={normalizeQuestionMarks(q.marks, testDefaultMarks) as QuestionMarkOption}
+          onChange={(v) =>
+            updateQuestion(q.localId, (prev) => ({ ...prev, marks: String(v) }))
+          }
+          label="Marks for this question"
+        />
+      </CardContent>
+    </Card>
+  );
 
   if (loading) return <div className="text-sm text-slate-500">Loading questions...</div>;
 
@@ -330,144 +549,58 @@ export default function ExamQuestionsPage() {
         <Card>
           <CardContent className="py-8 text-sm text-slate-500">No questions added yet.</CardContent>
         </Card>
+      ) : isMultiPart && groupedByPart ? (
+        <div className="space-y-6">
+          {groupedByPart.map(({ part, items }) => (
+            <div key={part.id} className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2">
+                <div>
+                  <div className="text-sm font-bold text-indigo-900">{formatPartLabel(part)}</div>
+                  <div className="text-[11px] text-indigo-700">
+                    {items.length} question{items.length === 1 ? "" : "s"} •{" "}
+                    {items.reduce((sum, { q }) => sum + (normalizeQuestionMarks(q.marks, testDefaultMarks) || 0), 0)} marks
+                  </div>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => addQuestion(part.id)}>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Add to {part.label}
+                </Button>
+              </div>
+              {items.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-slate-300 p-4 text-center text-xs text-slate-500">
+                  No questions in this part yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {items.map(({ q, displayPos }) => renderQuestionCard(q, displayPos))}
+                </div>
+              )}
+            </div>
+          ))}
+          {unassignedQuestions.length > 0 ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm font-bold text-amber-900">
+                Unassigned questions
+              </div>
+              <div className="space-y-4">
+                {unassignedQuestions.map(({ q, displayPos }) => renderQuestionCard(q, displayPos))}
+              </div>
+            </div>
+          ) : null}
+        </div>
       ) : (
         <div className="space-y-4">
-          {editorQuestions.map((q, idx) => (
-            <Card key={q.localId}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-base">Question {idx + 1}</CardTitle>
-                  <Button variant="ghost" size="sm" className="text-rose-700 hover:bg-rose-50" onClick={() => void removeQuestion(q.localId)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Question (type or paste screenshot)</Label>
-                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
-                    <Textarea
-                      value={q.text}
-                      onChange={(e) => updateQuestion(q.localId, (prev) => ({ ...prev, text: e.target.value }))}
-                      onPaste={(e) => handlePasteImage(q.localId, e)}
-                      placeholder="Type your question here, or paste an image (Ctrl+V)."
-                      className="min-h-24 border-slate-200"
-                    />
-
-                    {q.imagePreviewUrl ? (
-                      <ExamQuestionImageFrame
-                        src={q.imagePreviewUrl}
-                        alt={`Question ${idx + 1} preview`}
-                        questionNo={idx + 1}
-                      />
-                    ) : q.imageUrl ? (
-                      <ExamQuestionImageFrame
-                        src={q.imageUrl}
-                        alt={`Question ${idx + 1}`}
-                        questionNo={idx + 1}
-                      />
-                    ) : (
-                      <div className="text-xs text-slate-500">
-                        Paste a screenshot here (Ctrl+V) or use Upload.
-                      </div>
-                    )}
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <input
-                        ref={(el) => {
-                          fileInputRefs.current[q.localId] = el;
-                        }}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => attachImageFile(q.localId, e.target.files?.[0] || null)}
-                      />
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fileInputRefs.current[q.localId]?.click()}
-                      >
-                        Upload image
-                      </Button>
-                      {(q.imagePreviewUrl || q.imageUrl) ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            updateQuestion(q.localId, (prev) => ({ ...prev, imageUrl: "" }));
-                            attachImageFile(q.localId, null);
-                          }}
-                        >
-                          Remove image
-                        </Button>
-                      ) : null}
-                      <div className="text-[11px] text-slate-500">
-                        Tip: copy an image and press Ctrl+V inside the text box.
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Options</Label>
-                  </div>
-                  <div
-                    role="radiogroup"
-                    aria-label={`Correct option for question ${idx + 1}`}
-                    className="flex flex-wrap items-center gap-2"
-                  >
-                    {q.options.slice(0, 5).map((opt, optIdx) => {
-                      const letter = String.fromCharCode(65 + optIdx);
-                      const selected = q.correctIndex === optIdx;
-                      return (
-                        <button
-                          key={optIdx}
-                          type="button"
-                          onClick={() =>
-                            updateQuestion(q.localId, (prev) => ({
-                              ...prev,
-                              correctIndex: optIdx,
-                            }))
-                          }
-                          className={cn(
-                            "h-9 px-3 rounded-lg border text-sm font-semibold transition-colors",
-                            selected
-                              ? "border-indigo-600 bg-indigo-50 text-indigo-800"
-                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                          )}
-                          aria-checked={selected}
-                          role="radio"
-                        >
-                          {letter}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    Five choices (A–E) are fixed. Click the correct letter.
-                  </div>
-                </div>
-
-                <QuestionMarksSelect
-                  value={normalizeQuestionMarks(q.marks, testDefaultMarks) as QuestionMarkOption}
-                  onChange={(v) =>
-                    updateQuestion(q.localId, (prev) => ({ ...prev, marks: String(v) }))
-                  }
-                  label="Marks for this question"
-                />
-              </CardContent>
-            </Card>
-          ))}
+          {editorQuestions.map((q, idx) => renderQuestionCard(q, idx))}
         </div>
       )}
 
       <div className="sticky bottom-4">
         <div className="mx-auto max-w-3xl rounded-xl border border-slate-200 bg-white/95 backdrop-blur px-3 py-3 shadow-sm">
           <div className="flex flex-wrap items-center justify-center gap-2">
-            <Button className="bg-indigo-600 hover:bg-indigo-700" onClick={addQuestion}>
+            <Button
+              className="bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => addQuestion(isMultiPart ? test?.parts?.[0]?.id : undefined)}
+            >
               <Plus className="w-4 h-4 mr-2" />
               Add Question
             </Button>
