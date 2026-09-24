@@ -57,6 +57,8 @@ import {
   AlertCircle,
   Filter,
   User,
+  FileText,
+  Info,
 } from "lucide-react";
 import type {
   BatchEnrollmentConfig,
@@ -76,13 +78,19 @@ import {
   subscribeToScheduledEnrollmentForms,
   subscribeToAllEnrollmentForms,
   computeScheduledFormStatus,
+  getDefaultDeclarationTerms,
+  saveDefaultDeclarationTerms,
 } from "../../features/enrollment/enrollment-utils";
 import {
   exportEnrollmentFormsToExcel,
   exportBatchEnrollmentForms,
 } from "../../features/enrollment/enrollment-export";
 import { downloadEnrollmentPDF } from "../../features/enrollment/enrollment-pdf";
-import { EnrollmentFormPreview } from "../../features/enrollment/enrollment-form-components";
+import {
+  EnrollmentFormPreview,
+  DECLARATION_TERMS_LIST,
+  formatDegreeName,
+} from "../../features/enrollment/enrollment-form-components";
 import { Timestamp } from "firebase/firestore";
 
 interface ScheduledFormModalState {
@@ -95,6 +103,7 @@ interface ScheduledFormModalState {
   batchEndDate: string;
   duration: string;
   note: string;
+  declarationText: string;
   scheduleStart: string;
   scheduleEnd: string;
   isOpen: boolean;
@@ -149,11 +158,55 @@ export default function EnrollmentManagement() {
     batchEndDate: "",
     duration: "60 Days / 120 Hours",
     note: "Admissions strictly based on qualification verification.",
+    declarationText: DECLARATION_TERMS_LIST.join("\n\n"),
     scheduleStart: "",
     scheduleEnd: "",
     isOpen: true,
   });
   const [modalSaving, setModalSaving] = useState(false);
+
+  // Global default Declaration & Terms (admin-editable). Used by direct batch
+  // links and as the starting text for new scheduled forms.
+  const [defaultTerms, setDefaultTerms] = useState<string[]>(
+    DECLARATION_TERMS_LIST,
+  );
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [termsDraft, setTermsDraft] = useState("");
+  const [termsSaving, setTermsSaving] = useState(false);
+
+  useEffect(() => {
+    getDefaultDeclarationTerms().then((terms) => {
+      if (terms) setDefaultTerms(terms);
+    });
+  }, []);
+
+  const handleOpenTermsModal = () => {
+    setTermsDraft(defaultTerms.join("\n\n"));
+    setShowTermsModal(true);
+  };
+
+  const handleSaveDefaultTerms = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const terms = termsDraft
+      .split("\n")
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (terms.length === 0) {
+      alert("Please enter at least one term.");
+      return;
+    }
+    setTermsSaving(true);
+    try {
+      await saveDefaultDeclarationTerms(terms);
+      setDefaultTerms(terms);
+      setShowTermsModal(false);
+    } catch (err: any) {
+      console.error("Save default terms failed:", err);
+      alert(err?.message || "Failed to save Declaration & Terms.");
+    } finally {
+      setTermsSaving(false);
+    }
+  };
 
   const currentBatch = batches.find((b) => b.id === selectedBatch);
 
@@ -229,6 +282,7 @@ export default function EnrollmentManagement() {
       batchEndDate: "60 Days / Complete Syllabus",
       duration: "60 Days / 120 Hours",
       note: "Admissions strictly based on qualification verification. Keep video ON during live CBT tests.",
+      declarationText: defaultTerms.join("\n\n"),
       scheduleStart: "",
       scheduleEnd: "",
       isOpen: true,
@@ -248,6 +302,11 @@ export default function EnrollmentManagement() {
       batchEndDate: form.batchEndDate || form.duration,
       duration: form.duration,
       note: form.note || "",
+      declarationText:
+        form.declarationText ||
+        (form.declarationTerms && form.declarationTerms.length > 0
+          ? form.declarationTerms.join("\n\n")
+          : defaultTerms.join("\n\n")),
       scheduleStart: form.scheduleStart || "",
       scheduleEnd: form.scheduleEnd || "",
       isOpen: form.isOpen ?? true,
@@ -272,6 +331,14 @@ export default function EnrollmentManagement() {
       const effectiveEndDate =
         modalData.batchEndDate.trim() || modalData.duration.trim();
 
+      const rawTerms = modalData.declarationText
+        .split("\n")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const declarationTerms =
+        rawTerms.length > 0 ? rawTerms : defaultTerms;
+      const declarationText = modalData.declarationText.trim();
+
       if (modalData.id) {
         // Edit
         await updateScheduledEnrollmentForm(modalData.id, {
@@ -284,6 +351,8 @@ export default function EnrollmentManagement() {
           batchEndDate: effectiveEndDate,
           duration: effectiveEndDate,
           note: modalData.note.trim(),
+          declarationTerms,
+          declarationText,
           scheduleStart: modalData.scheduleStart || "",
           scheduleEnd: modalData.scheduleEnd || "",
           isOpen: modalData.isOpen,
@@ -303,6 +372,8 @@ export default function EnrollmentManagement() {
                   batchEndDate: effectiveEndDate,
                   duration: effectiveEndDate,
                   note: modalData.note.trim(),
+                  declarationTerms,
+                  declarationText,
                   scheduleStart: modalData.scheduleStart || "",
                   scheduleEnd: modalData.scheduleEnd || "",
                   isOpen: modalData.isOpen,
@@ -323,6 +394,8 @@ export default function EnrollmentManagement() {
           batchEndDate: effectiveEndDate,
           duration: effectiveEndDate,
           note: modalData.note.trim(),
+          declarationTerms,
+          declarationText,
           scheduleStart: modalData.scheduleStart || "",
           scheduleEnd: modalData.scheduleEnd || "",
           isOpen: modalData.isOpen,
@@ -604,6 +677,16 @@ export default function EnrollmentManagement() {
               className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`}
             />
             Refresh
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleOpenTermsModal}
+            className="gap-1.5"
+          >
+            <FileText className="w-4 h-4" />
+            Declaration &amp; Terms
           </Button>
 
           <Button
@@ -1224,7 +1307,7 @@ export default function EnrollmentManagement() {
                                         className="text-slate-700 font-medium"
                                       >
                                         <span className="font-bold text-indigo-700">
-                                          {r.degree || r.tier}
+                                          {formatDegreeName(r.degree || r.tier)}
                                         </span>{" "}
                                         (
                                         {r.major === "Other"
@@ -1614,6 +1697,52 @@ export default function EnrollmentManagement() {
               />
             </div>
 
+            {/* Declaration & Terms and Conditions (Editable) */}
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                  Declaration &amp; Terms and Conditions (Editable)
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-[11px] text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 h-7 px-2"
+                  onClick={() =>
+                    setModalData({
+                      ...modalData,
+                      declarationText: defaultTerms.join("\n\n"),
+                    })
+                  }
+                >
+                  Reset to Default Terms
+                </Button>
+              </div>
+
+              <Textarea
+                placeholder="Enter each declaration term separated by a new line..."
+                value={modalData.declarationText}
+                onChange={(e) =>
+                  setModalData({
+                    ...modalData,
+                    declarationText: e.target.value,
+                  })
+                }
+                rows={6}
+                className="text-xs leading-relaxed bg-white font-mono"
+              />
+
+              <span className="text-[11px] text-slate-500 flex items-start gap-1.5">
+                <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Editable Terms:</strong> Each line or paragraph will
+                  be dynamically rendered as a numbered point on the public
+                  enrollment form, student admission receipt, and PDF.
+                </span>
+              </span>
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">
                 Form Status
@@ -1655,6 +1784,71 @@ export default function EnrollmentManagement() {
                     ? "Update Form"
                     : "Create Form & Generate Link"}
               </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* GLOBAL DEFAULT DECLARATION & TERMS MODAL */}
+      <Dialog open={showTermsModal} onOpenChange={setShowTermsModal}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-indigo-600" />
+              Default Declaration &amp; Terms and Conditions
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleSaveDefaultTerms} className="space-y-3 pt-2">
+            <span className="text-[11px] text-slate-500 flex items-start gap-1.5">
+              <Info className="w-3.5 h-3.5 text-indigo-600 shrink-0 mt-0.5" />
+              <span>
+                Shown on direct batch enrollment links and used as the starting
+                text for new scheduled forms. Each line becomes a numbered
+                point. Existing scheduled forms keep their own terms — edit
+                those from the form&apos;s Edit button.
+              </span>
+            </span>
+
+            <Textarea
+              value={termsDraft}
+              onChange={(e) => setTermsDraft(e.target.value)}
+              rows={14}
+              className="text-xs leading-relaxed bg-white"
+              placeholder="Enter each declaration term on a new line..."
+            />
+
+            <div className="pt-3 border-t border-slate-200 flex flex-wrap justify-between gap-2.5">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50"
+                onClick={() =>
+                  setTermsDraft(DECLARATION_TERMS_LIST.join("\n\n"))
+                }
+                disabled={termsSaving}
+              >
+                Restore Original Terms
+              </Button>
+              <div className="flex gap-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowTermsModal(false)}
+                  disabled={termsSaving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={termsSaving}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold gap-1.5"
+                >
+                  <Save className="w-4 h-4" />
+                  {termsSaving ? "Saving..." : "Save Terms"}
+                </Button>
+              </div>
             </div>
           </form>
         </DialogContent>

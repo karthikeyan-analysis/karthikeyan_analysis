@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import type { EnrollmentForm } from "./enrollment-types";
+import { formatDegreeName } from "./enrollment-form-components";
 import { Timestamp } from "firebase/firestore";
 
 /**
@@ -50,7 +51,7 @@ function flattenEnrollmentForm(form: EnrollmentForm): Record<string, any> {
     Education: (form.educationalDetails?.records || [])
       .map(
         (r) =>
-          `${r.degree || r.tier || "Degree"} (${r.major === "Other" ? r.otherMajor : r.major || r.majorStream || "Major"}: ${r.percentage || r.percentageOfMarks}% | PSTM: ${r.pstm || "No"} | Passing Year: ${r.passingYear || r.yearOfPassing || "—"})`,
+          `${formatDegreeName(r.degree || r.tier) || "Degree"} (${r.major === "Other" ? r.otherMajor : r.major || r.majorStream || "Major"}: ${r.percentage || r.percentageOfMarks}% | PSTM: ${r.pstm || "No"} | Passing Year: ${r.passingYear || r.yearOfPassing || "—"})`,
       )
       .join("; "),
 

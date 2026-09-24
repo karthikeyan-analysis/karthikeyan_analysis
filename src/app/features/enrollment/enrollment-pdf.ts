@@ -1,4 +1,5 @@
 import type { EnrollmentForm } from "./enrollment-types";
+import { formatDegreeName } from "./enrollment-form-components";
 import bannerImage from "../../../banner.jpeg";
 
 function fmt(val?: string) {
@@ -40,15 +41,36 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
       ? bannerImage
       : new URL(bannerImage, window.location.origin).href;
 
+  const activeTerms: string[] =
+    (form as any).declarationTerms && (form as any).declarationTerms.length > 0
+      ? (form as any).declarationTerms
+      : (form as any).declarationText
+        ? (form as any).declarationText
+            .split("\n")
+            .map((s: string) => s.trim())
+            .filter(Boolean)
+        : [
+            "Fees once paid are strictly non-refundable under any circumstances.",
+            "This batch consists entirely of LIVE Online Classes. If I miss any live class, daily recordings will be accessible only until the completion of the respective batch.",
+            "All Class Tests and Mock Tests will be conducted exclusively in LIVE CBT Mode. No second attempt or question paper in PDF format will be provided.",
+            "Since classes and tests are conducted in a LIVE monitored environment, I am required to keep my video ON throughout the test until completion.",
+            "Test-related doubts, discussions, and clarifications will be addressed only during the designated time slots.",
+            "Any misconduct, inappropriate behaviour, or disturbance during LIVE classes or tests may result in immediate removal/termination from the batch.",
+            "I agree not to share, distribute, reproduce, or circulate any study materials provided by the institute with any other person.",
+            "Class schedules and test schedules are subject to change depending on official examination dates or academic requirements.",
+            "I will strictly adhere to the academic schedule, attendance requirements, and test rules prescribed by the institute for this batch.",
+            "I confirm that I have read, understood, and agreed to all the terms and conditions and undertake to follow the rules of the institute throughout the course.",
+          ];
+
   const termsAgreed = t.agreedAllTerms
-    ? 10
+    ? activeTerms.length
     : Object.values(t).filter(Boolean).length;
 
   const educationRows = (ed?.records || [])
     .map(
       (r) => `
       <tr>
-        <td>${r.degree || r.tier || "—"}</td>
+        <td>${formatDegreeName(r.degree || r.tier)}</td>
         <td>${r.major === "Other" ? r.otherMajor || "Other" : r.major || r.majorStream || "—"}</td>
         <td>${r.percentage || r.percentageOfMarks || "—"}%</td>
         <td>${r.pstm || "No"}</td>
@@ -471,24 +493,13 @@ export function downloadEnrollmentPDF(form: EnrollmentForm): void {
 <div class="section">
   <div class="section-title">VI. Declaration & Terms & Conditions</div>
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
-    <span style="font-size:8.5pt;font-weight:600;color:${termsAgreed >= 10 || t.agreedAllTerms ? "#16a34a" : "#dc2626"};">
-      ${termsAgreed >= 10 || t.agreedAllTerms ? "10 / 10 terms agreed" : `${termsAgreed} / 10 terms agreed`}
+    <span style="font-size:8.5pt;font-weight:600;color:${termsAgreed >= activeTerms.length || t.agreedAllTerms ? "#16a34a" : "#dc2626"};">
+      ${termsAgreed >= activeTerms.length || t.agreedAllTerms ? `${activeTerms.length} / ${activeTerms.length} terms agreed` : `${termsAgreed} / ${activeTerms.length} terms agreed`}
     </span>
-    ${termsAgreed >= 10 || t.agreedAllTerms ? '<span style="color:#16a34a;font-size:8pt;">✓ All declarations accepted</span>' : ""}
+    ${termsAgreed >= activeTerms.length || t.agreedAllTerms ? '<span style="color:#16a34a;font-size:8pt;">✓ All declarations accepted</span>' : ""}
   </div>
   <ol class="terms-list">
-    ${[
-      "Fees once paid are strictly non-refundable under any circumstances.",
-      "This batch consists entirely of LIVE Online Classes. If I miss any live class, daily recordings will be accessible only until the completion of the respective batch.",
-      "All Class Tests and Mock Tests will be conducted exclusively in LIVE CBT Mode. No second attempt or question paper in PDF format will be provided.",
-      "Since classes and tests are conducted in a LIVE monitored environment, I am required to keep my video ON throughout the test until completion.",
-      "Test-related doubts, discussions, and clarifications will be addressed only during the designated time slots.",
-      "Any misconduct, inappropriate behaviour, or disturbance during LIVE classes or tests may result in immediate removal/termination from the batch.",
-      "I agree not to share, distribute, reproduce, or circulate any study materials provided by the institute with any other person.",
-      "Class schedules and test schedules are subject to change depending on official examination dates or academic requirements.",
-      "I will strictly adhere to the academic schedule, attendance requirements, and test rules prescribed by the institute for this batch.",
-      "I confirm that I have read, understood, and agreed to all the terms and conditions and undertake to follow the rules of the institute throughout the course.",
-    ]
+    ${activeTerms
       .map(
         (text, i) =>
           `<li style="color:${t.agreedAllTerms || t[`term${i + 1}` as keyof typeof t] ? "#1e293b" : "#94a3b8"};">${

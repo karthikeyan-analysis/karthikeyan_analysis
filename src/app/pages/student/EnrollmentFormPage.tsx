@@ -26,6 +26,7 @@ import {
   DemographicDetailsForm,
   BatchPaymentDetailsForm,
   DeclarationTermsForm,
+  DECLARATION_TERMS_LIST,
 } from "../../features/enrollment/enrollment-form-components";
 import type {
   PersonalDetails,
@@ -40,6 +41,7 @@ import type {
 import {
   getBatchById,
   getBatchEnrollmentConfig,
+  getDefaultDeclarationTerms,
   getScheduledEnrollmentFormById,
   computeScheduledFormStatus,
   getShareableLinkByToken,
@@ -66,6 +68,8 @@ export default function PublicEnrollmentForm() {
     useState<TestBatchFormConfig | null>(null);
   const [scheduledFormId, setScheduledFormId] = useState<string>("");
   const [scheduledFormTitle, setScheduledFormTitle] = useState<string>("");
+  // Admin-edited global default terms (used when the batch/form has none)
+  const [defaultTerms, setDefaultTerms] = useState<string[] | null>(null);
 
   // Success State with Generated Credentials
   const [submittedResult, setSubmittedResult] = useState<{
@@ -195,6 +199,8 @@ export default function PublicEnrollmentForm() {
             batchEndDate: scheduledForm.batchEndDate,
             duration: scheduledForm.duration,
             note: scheduledForm.note,
+            declarationTerms: scheduledForm.declarationTerms,
+            declarationText: scheduledForm.declarationText,
             isOpen: scheduledForm.isOpen,
           });
           setBatchDetails((prev) => ({
@@ -217,12 +223,14 @@ export default function PublicEnrollmentForm() {
         }
 
         // Fetch batch and enrollment config in parallel
-        const [batch, enrollmentConfig] = await Promise.all([
+        const [batch, enrollmentConfig, globalTerms] = await Promise.all([
           getBatchById(resolvedBatchId),
           getBatchEnrollmentConfig(resolvedBatchId),
+          getDefaultDeclarationTerms(),
         ]);
 
         if (cancelled) return;
+        setDefaultTerms(globalTerms);
 
         if (!batch) {
           setError(
@@ -298,6 +306,21 @@ export default function PublicEnrollmentForm() {
     };
   }, [testBatchOverridesActive, testBatchFormConfig, config, batchId]);
 
+  // Terms shown on the form and stored with the submission:
+  // scheduled form / batch config → admin global default → built-in list.
+  const resolvedTerms: string[] = useMemo(() => {
+    if (config?.declarationTerms && config.declarationTerms.length > 0)
+      return config.declarationTerms;
+    const fromText = (config?.declarationText || "")
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (fromText.length > 0) return fromText;
+    return defaultTerms && defaultTerms.length > 0
+      ? defaultTerms
+      : DECLARATION_TERMS_LIST;
+  }, [config, defaultTerms]);
+
   const effectiveBatchName =
     testBatchOverridesActive && testBatchFormConfig?.header.batchName
       ? testBatchFormConfig.header.batchName
@@ -331,7 +354,7 @@ export default function PublicEnrollmentForm() {
     if (!addressDetails.pincode.trim()) missing.push("Pincode");
 
     if (educationalDetails.records.length === 0) {
-      missing.push("At least one degree qualification (B.Sc.)");
+      missing.push("At least one degree qualification (B.Sc. / B.A.)");
     } else {
       educationalDetails.records.forEach((r, idx) => {
         if (!r.percentage?.trim())
@@ -437,6 +460,8 @@ export default function PublicEnrollmentForm() {
           courseName: config?.courseName || batchName,
         },
         termsAndConditions: terms,
+        declarationTerms: resolvedTerms,
+        declarationText: config?.declarationText || resolvedTerms.join("\n\n"),
       };
 
       const result = await submitBatchEnrollment(payload);
@@ -710,7 +735,10 @@ export default function PublicEnrollmentForm() {
     <div className="min-h-screen bg-slate-100/70 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Course Header & Information Box */}
-        <CourseHeaderBox config={effectiveConfig} batchName={effectiveBatchName} />
+        <CourseHeaderBox
+          config={effectiveConfig}
+          batchName={effectiveBatchName}
+        />
 
         {/* Error Notice */}
         {error && (
@@ -901,7 +929,7 @@ export default function PublicEnrollmentForm() {
               </div>
             </Card>
 
-            {/* Section 6: Declaration & Terms (10 Points) */}
+            {/* Section 6: Declaration & Terms */}
             <DeclarationTermsForm
               terms={terms}
               onChange={setTerms}
@@ -915,6 +943,12 @@ export default function PublicEnrollmentForm() {
                 testBatchOverridesActive
                   ? testBatchFormConfig?.footer.termsAndConditions
                   : undefined
+              }
+              termsList={
+                testBatchOverridesActive &&
+                testBatchFormConfig?.footer.termsAndConditions
+                  ? undefined
+                  : resolvedTerms
               }
             />
 

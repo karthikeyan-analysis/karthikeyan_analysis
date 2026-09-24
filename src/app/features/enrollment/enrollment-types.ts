@@ -11,6 +11,8 @@ export interface BatchEnrollmentConfig {
   batchEndDate?: string; // Explicit Batch End Date
   duration: string; // Dynamic / Editable duration (e.g. "60 Days / 120 Hours")
   note?: string; // Optional admin banner notes/instructions for students
+  declarationTerms?: string[]; // Dynamic / Editable Declaration & Terms points
+  declarationText?: string; // Raw text of declaration terms
   isOpen: boolean; // Whether enrollment is currently open
   updatedAt?: Timestamp | Date | string;
 }
@@ -29,6 +31,8 @@ export interface ScheduledEnrollmentForm {
   batchEndDate?: string; // Explicit Batch End Date
   duration: string; // Duration e.g. "60 Days / 120 Hours"
   note?: string; // Banner note / instructions
+  declarationTerms?: string[]; // Dynamic / Editable Declaration & Terms points
+  declarationText?: string; // Raw text of declaration terms
   scheduleStart?: string; // Optional ISO string for scheduled start
   scheduleEnd?: string; // Optional ISO string for deadline / expiry
   status: "active" | "scheduled" | "closed";
@@ -72,10 +76,10 @@ export interface AddressDetails {
 // ─────────────────────────────────────────────────────────────
 // SECTION C: EDUCATIONAL QUALIFICATIONS (Dynamic Table)
 // ─────────────────────────────────────────────────────────────
-export type AllowedDegree = "BSc" | "MSc" | "MPhil" | "PhD";
+export type AllowedDegree = "BSc" | "BA" | "MSc" | "MA" | "MPhil" | "PhD";
 
 export interface EducationRecord {
-  degree: AllowedDegree | string; // Hierarchical order: BSc first -> MSc -> MPhil/PhD
+  degree: AllowedDegree | string; // Hierarchical order: BSc/BA first -> MSc/MA -> MPhil/PhD
   major: "Mathematics" | "Statistics" | "Economics" | "Other" | string;
   otherMajor?: string; // Visible when major === "Other"
   percentage: string; // Normal text/numeric input
@@ -182,6 +186,8 @@ export interface EnrollmentForm {
   otherDetails: DemographicDetails; // alias for export/pdf
   batchDetails: BatchDetails;
   termsAndConditions: TermsAndConditions;
+  declarationTerms?: string[];
+  declarationText?: string;
 
   // Shareable link info
   shareableLink?: string;
@@ -204,6 +210,8 @@ export interface EnrollmentFormDTO {
   otherDetails?: DemographicDetails;
   batchDetails?: BatchDetails;
   termsAndConditions: TermsAndConditions;
+  declarationTerms?: string[];
+  declarationText?: string;
 }
 
 // ─────────────────────────────────────────────────────────────

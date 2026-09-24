@@ -40,8 +40,12 @@ export async function createScheduledEnrollmentForm(
     formTitle: data.formTitle || "Untitled Form",
     courseName: data.courseName || "",
     startingDate: data.startingDate || "",
+    batchStartDate: data.batchStartDate || data.startingDate || "",
+    batchEndDate: data.batchEndDate || data.duration || "",
     duration: data.duration || "",
     note: data.note || "",
+    declarationTerms: data.declarationTerms || [],
+    declarationText: data.declarationText || "",
     scheduleStart: data.scheduleStart || "",
     scheduleEnd: data.scheduleEnd || "",
     status: data.status || "active",
@@ -233,6 +237,41 @@ export async function saveBatchEnrollmentConfig(
 }
 
 // ─────────────────────────────────────────────────────────────
+// GLOBAL DEFAULT DECLARATION & TERMS (Admin-editable)
+// Stored as a reserved doc in batchEnrollmentConfigs (public read, admin write).
+// Used by direct batch links and as the starting text for new scheduled forms.
+// ─────────────────────────────────────────────────────────────
+
+const DEFAULT_DECLARATION_DOC_ID = "__default_declaration__";
+
+export async function getDefaultDeclarationTerms(): Promise<string[] | null> {
+  try {
+    const snap = await getDoc(
+      doc(db, BATCH_ENROLLMENT_CONFIGS_COLLECTION, DEFAULT_DECLARATION_DOC_ID),
+    );
+    const terms = snap.exists() ? snap.data().declarationTerms : null;
+    return Array.isArray(terms) && terms.length > 0 ? terms : null;
+  } catch (err) {
+    console.error("Failed to get default declaration terms:", err);
+    return null;
+  }
+}
+
+export async function saveDefaultDeclarationTerms(
+  terms: string[],
+): Promise<void> {
+  await setDoc(
+    doc(db, BATCH_ENROLLMENT_CONFIGS_COLLECTION, DEFAULT_DECLARATION_DOC_ID),
+    {
+      declarationTerms: terms,
+      declarationText: terms.join("\n\n"),
+      updatedAt: Timestamp.now(),
+    },
+    { merge: true },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // CREDENTIAL GENERATION UTILITIES
 // ─────────────────────────────────────────────────────────────
 
@@ -320,6 +359,8 @@ export async function submitBatchEnrollment(data: EnrollmentFormDTO): Promise<{
       courseName: data.courseName || "",
     },
     termsAndConditions: data.termsAndConditions,
+    declarationTerms: data.declarationTerms || [],
+    declarationText: data.declarationText || "",
     createdAt: now,
     updatedAt: now,
   };

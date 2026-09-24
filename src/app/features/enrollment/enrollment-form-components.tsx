@@ -653,19 +653,39 @@ interface EducationalQualificationsFormProps {
   onChange: (data: EducationalDetails) => void;
 }
 
+export function formatDegreeName(degree?: string): string {
+  if (!degree) return "—";
+  switch (degree) {
+    case "BSc":
+      return "B.Sc.";
+    case "BA":
+      return "B.A.";
+    case "MSc":
+      return "M.Sc.";
+    case "MA":
+      return "M.A.";
+    case "MPhil":
+      return "M.Phil.";
+    case "PhD":
+      return "Ph.D.";
+    default:
+      return degree;
+  }
+}
+
 export function EducationalQualificationsForm({
   data,
   onChange,
 }: EducationalQualificationsFormProps) {
   const records = data.records || [];
 
-  const hasBSc = records.some((r) => r.degree === "BSc");
-  const hasMSc = records.some((r) => r.degree === "MSc");
+  const hasUG = records.some((r) => r.degree === "BSc" || r.degree === "BA");
+  const hasPG = records.some((r) => r.degree === "MSc" || r.degree === "MA");
 
   // Determine allowed next degree based on strict hierarchy
   const getNextAllowedDegrees = (): AllowedDegree[] => {
-    if (!hasBSc) return ["BSc"];
-    if (!hasMSc) return ["MSc"];
+    if (!hasUG) return ["BSc", "BA"];
+    if (!hasPG) return ["MSc", "MA"];
     return ["MPhil", "PhD"];
   };
 
@@ -713,7 +733,7 @@ export function EducationalQualificationsForm({
           type="button"
           size="sm"
           onClick={handleAddRow}
-          disabled={hasBSc && hasMSc && records.length >= 4}
+          disabled={hasUG && hasPG && records.length >= 4}
           className="bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 text-xs font-semibold"
         >
           <Plus className="w-3.5 h-3.5" />
@@ -726,9 +746,10 @@ export function EducationalQualificationsForm({
           <Info className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
           <span>
             <strong>Hierarchical Rule:</strong> Degree selection follows a
-            sequential order (must add <strong>B.Sc.</strong> first before
-            unlocking <strong>M.Sc.</strong>, and M.Sc. before unlocking{" "}
-            <strong>M.Phil. / Ph.D.</strong>).
+            sequential order (must add{" "}
+            <strong>Bachelor's (B.Sc. / B.A.)</strong> first before unlocking{" "}
+            <strong>Master's (M.Sc. / M.A.)</strong>, and Master's before
+            unlocking <strong>M.Phil. / Ph.D.</strong>).
           </span>
         </div>
 
@@ -739,7 +760,7 @@ export function EducationalQualificationsForm({
               No educational qualifications added yet
             </p>
             <p className="text-xs text-slate-500 mt-1 mb-4">
-              Click below to start with your first degree (B.Sc.)
+              Click below to start with your Bachelor's degree (B.Sc. or B.A.)
             </p>
             <Button
               type="button"
@@ -748,7 +769,7 @@ export function EducationalQualificationsForm({
               className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5"
             >
               <Plus className="w-3.5 h-3.5" />
-              Add B.Sc. Degree
+              Add Bachelor's Degree
             </Button>
           </div>
         ) : (
@@ -779,14 +800,37 @@ export function EducationalQualificationsForm({
                             })
                           }
                         >
-                          {index === 0 && <option value="BSc">B.Sc.</option>}
-                          {index === 1 && <option value="MSc">M.Sc.</option>}
+                          {index === 0 && (
+                            <>
+                              <option value="BSc">B.Sc.</option>
+                              <option value="BA">B.A.</option>
+                            </>
+                          )}
+                          {index === 1 && (
+                            <>
+                              <option value="MSc">M.Sc.</option>
+                              <option value="MA">M.A.</option>
+                            </>
+                          )}
                           {index >= 2 && (
                             <>
                               <option value="MPhil">M.Phil.</option>
                               <option value="PhD">Ph.D.</option>
+                              <option value="MSc">M.Sc.</option>
+                              <option value="MA">M.A.</option>
                             </>
                           )}
+                          {rec.degree &&
+                            ![
+                              "BSc",
+                              "BA",
+                              "MSc",
+                              "MA",
+                              "MPhil",
+                              "PhD",
+                            ].includes(rec.degree) && (
+                              <option value={rec.degree}>{rec.degree}</option>
+                            )}
                         </select>
                       </td>
 
@@ -1135,6 +1179,10 @@ interface DeclarationTermsFormProps {
    * default shared terms — every other batch is unaffected either way.
    */
   customTerms?: string;
+  /**
+   * Admin-customized declaration terms array (e.g. from scheduledForm or config).
+   */
+  termsList?: string[];
 }
 
 export function DeclarationTermsForm({
@@ -1143,6 +1191,7 @@ export function DeclarationTermsForm({
   isStep2 = false,
   customInstructions,
   customTerms,
+  termsList,
 }: DeclarationTermsFormProps) {
   const toggleFinalAgree = (checked: boolean) => {
     onChange({
@@ -1160,6 +1209,16 @@ export function DeclarationTermsForm({
       term10: checked,
     });
   };
+
+  const effectiveTerms: string[] =
+    termsList && termsList.length > 0
+      ? termsList
+      : customTerms?.trim()
+        ? customTerms
+            .split("\n")
+            .map((s) => s.trim())
+            .filter(Boolean)
+        : DECLARATION_TERMS_LIST;
 
   return (
     <Card className="border-slate-200 shadow-sm overflow-hidden">
@@ -1182,25 +1241,17 @@ export function DeclarationTermsForm({
               {customInstructions.trim()}
             </p>
           ) : null}
-          {customTerms?.trim() ? (
-            <p className="whitespace-pre-wrap font-medium text-slate-900">
-              {customTerms.trim()}
-            </p>
-          ) : (
-            <>
-              <p>
-                By submitting this application, I acknowledge and agree to the
-                following terms and conditions:
-              </p>
-              <ol className="list-decimal list-inside space-y-2 text-slate-800 font-normal">
-                {DECLARATION_TERMS_LIST.map((text, i) => (
-                  <li key={i} className="pl-1">
-                    <span className="font-medium text-slate-900">{text}</span>
-                  </li>
-                ))}
-              </ol>
-            </>
-          )}
+          <p>
+            By submitting this application, I acknowledge and agree to the
+            following terms and conditions:
+          </p>
+          <ol className="list-decimal list-inside space-y-2 text-slate-800 font-normal">
+            {effectiveTerms.map((text, i) => (
+              <li key={i} className="pl-1">
+                <span className="font-medium text-slate-900">{text}</span>
+              </li>
+            ))}
+          </ol>
         </div>
 
         {/* Final Mandatory Checkbox */}
@@ -1388,7 +1439,9 @@ export function EnrollmentFormPreview({ form }: EnrollmentFormPreviewProps) {
             <tbody className="divide-y divide-slate-200">
               {ed?.records?.map((r, i) => (
                 <tr key={i}>
-                  <td className="p-2 font-semibold">{r.degree || r.tier}</td>
+                  <td className="p-2 font-semibold">
+                    {formatDegreeName(r.degree || r.tier)}
+                  </td>
                   <td className="p-2">
                     {r.major === "Other"
                       ? r.otherMajor
