@@ -167,6 +167,7 @@ export interface EnrollmentForm {
   approvedBy?: string;
   rejectionReason?: string;
   submittedBy: string; // Candidate email
+  submittedAt?: Timestamp | Date | any;
   batchId: string;
   batchName?: string;
   courseName?: string;

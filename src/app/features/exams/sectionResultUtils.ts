@@ -40,7 +40,7 @@ export interface StudentThreeSectionBreakdown {
   grandTotalMarks: number;
   status: string;
   submittedAt: string;
-  timeTakenSeconds: number | "";
+  timeTakenSeconds: number | string;
   rawAttempt: ExamAttempt;
 }
 
