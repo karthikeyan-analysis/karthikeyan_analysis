@@ -563,7 +563,9 @@ export default function TakeExam({
         className={cn(
           "relative h-9 rounded-lg border text-xs font-semibold transition-all",
           base,
-          isCurrent && st === "not_answered" && "ring-2 ring-red-800 ring-offset-2",
+          isCurrent &&
+            st === "not_answered" &&
+            "ring-2 ring-red-800 ring-offset-2",
           isCurrent &&
             st !== "not_answered" &&
             "ring-2 ring-indigo-400 ring-offset-2",
@@ -1567,11 +1569,6 @@ export default function TakeExam({
                   <Badge className="bg-slate-900 text-white hover:bg-slate-900 px-2.5">
                     Q{currentIndex + 1}
                   </Badge>
-                  {currentPart ? (
-                    <Badge className="bg-indigo-100 text-indigo-800 border border-indigo-200/80 hover:bg-indigo-100">
-                      {formatPartLabel(currentPart)}
-                    </Badge>
-                  ) : null}
                   <span className="text-sm text-slate-600">
                     Mark:{" "}
                     <span className="font-semibold text-slate-900">
@@ -1972,40 +1969,9 @@ export default function TakeExam({
                 className="mt-2 min-h-[140px] max-h-[360px] flex-1 overflow-y-auto overscroll-contain scroll-smooth rounded-lg border border-slate-200/80 bg-slate-50/50 p-2 pr-1"
                 aria-label="Question navigation"
               >
-                {partGroups ? (
-                  <div className="space-y-3">
-                    {partGroups.groups.map(({ part, items }) =>
-                      items.length ? (
-                        <div key={part.id}>
-                          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
-                            {formatPartLabel(part)}
-                          </div>
-                          <div className="grid grid-cols-6 gap-2">
-                            {items.map(({ q, idx }) =>
-                              renderPaletteButton(q, idx),
-                            )}
-                          </div>
-                        </div>
-                      ) : null,
-                    )}
-                    {partGroups.orphan.length ? (
-                      <div>
-                        <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-                          Other
-                        </div>
-                        <div className="grid grid-cols-6 gap-2">
-                          {partGroups.orphan.map(({ q, idx }) =>
-                            renderPaletteButton(q, idx),
-                          )}
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-6 gap-2">
-                    {questions.map((q, idx) => renderPaletteButton(q, idx))}
-                  </div>
-                )}
+                <div className="grid grid-cols-6 gap-2">
+                  {questions.map((q, idx) => renderPaletteButton(q, idx))}
+                </div>
               </div>
 
               <div className="mt-3 shrink-0 grid grid-cols-2 gap-2 text-xs">

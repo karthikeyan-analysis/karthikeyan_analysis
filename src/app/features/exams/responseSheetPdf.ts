@@ -7,6 +7,7 @@ import type {
 import type { ResolvedParticipant } from "./participantUtils";
 import { getStudentPhotoDisplayCandidates } from "../students/studentPhotoUrl";
 import { formatPartLabel } from "./examScoring";
+import { resolveThreeSections } from "./sectionResultUtils";
 
 function escapeHtml(input: string) {
   return (input || "")
@@ -211,17 +212,44 @@ export function buildResponseSheetHtml({
     </section>`;
   });
 
-  // Group question rows under part headings (with a per-part score sub-strip)
-  // when the test is split into multiple parts/sections.
-  const partsList =
-    test.partsMode === "multi"
-      ? [...(test.parts || [])].sort((a, b) => a.order - b.order)
-      : [];
+  const { partAQuestions, partBQuestions, partCQuestions, sectionInfo } =
+    resolveThreeSections(test, questions);
 
-  function buildPartHeader(
-    label: string,
-    idxs: number[],
-  ): string {
+  const evalSection = (qList: ExamQuestionPublic[]) => {
+    let attempted = 0;
+    let correct = 0;
+    let wrong = 0;
+    let unanswered = 0;
+    for (const q of qList) {
+      const selected = attempt.answers?.[q.id] ?? null;
+      if (selected == null) {
+        unanswered++;
+        continue;
+      }
+      attempted++;
+      const correctIdx = keys ? correctIndexById.get(q.id) : undefined;
+      if (correctIdx != null && selected === correctIdx) {
+        correct++;
+      } else if (correctIdx != null) {
+        wrong++;
+      }
+    }
+    const marks = Math.round(correct * 1.5 * 100) / 100;
+    return {
+      attempted,
+      correct,
+      wrong,
+      unanswered,
+      marks,
+      total: qList.length,
+    };
+  };
+
+  const partAStats = evalSection(partAQuestions);
+  const partBStats = evalSection(partBQuestions);
+  const partCStats = evalSection(partCQuestions);
+
+  function buildPartHeader(label: string, idxs: number[]): string {
     let attempted = 0;
     let correct = 0;
     let wrong = 0;
@@ -247,35 +275,30 @@ export function buildResponseSheetHtml({
     </div>`;
   }
 
-  let reviewBodyHtml: string;
-  if (partsList.length) {
-    const partById = new Map(partsList.map((p) => [p.id, p]));
-    const idxsByPart = new Map<string, number[]>();
-    const unassignedIdxs: number[] = [];
-    questions.forEach((q, idx) => {
-      if (q.partId && partById.has(q.partId)) {
-        const arr = idxsByPart.get(q.partId) || [];
-        arr.push(idx);
-        idxsByPart.set(q.partId, arr);
-      } else {
-        unassignedIdxs.push(idx);
-      }
-    });
-    const sections: string[] = [];
-    for (const part of partsList) {
-      const idxs = idxsByPart.get(part.id) || [];
-      if (!idxs.length) continue;
-      sections.push(buildPartHeader(formatPartLabel(part), idxs));
-      idxs.forEach((i) => sections.push(rows[i]!));
-    }
-    if (unassignedIdxs.length) {
-      sections.push(buildPartHeader("Other Questions", unassignedIdxs));
-      unassignedIdxs.forEach((i) => sections.push(rows[i]!));
-    }
-    reviewBodyHtml = sections.join("");
-  } else {
-    reviewBodyHtml = rows.join("");
+  const qIndexMap = new Map<string, number>(questions.map((q, i) => [q.id, i]));
+  const getIdxs = (qList: ExamQuestionPublic[]) =>
+    qList
+      .map((q) => qIndexMap.get(q.id))
+      .filter((idx): idx is number => idx != null);
+
+  const idxsA = getIdxs(partAQuestions);
+  const idxsB = getIdxs(partBQuestions);
+  const idxsC = getIdxs(partCQuestions);
+
+  const sections: string[] = [];
+  if (idxsA.length) {
+    sections.push(buildPartHeader(sectionInfo.partA.fullTitle, idxsA));
+    idxsA.forEach((i) => sections.push(rows[i]!));
   }
+  if (idxsB.length) {
+    sections.push(buildPartHeader(sectionInfo.partB.fullTitle, idxsB));
+    idxsB.forEach((i) => sections.push(rows[i]!));
+  }
+  if (idxsC.length) {
+    sections.push(buildPartHeader(sectionInfo.partC.fullTitle, idxsC));
+    idxsC.forEach((i) => sections.push(rows[i]!));
+  }
+  const reviewBodyHtml = sections.length ? sections.join("") : rows.join("");
 
   return `<!doctype html>
 <html>
@@ -313,8 +336,14 @@ export function buildResponseSheetHtml({
     .score-cell{padding:9px 8px;text-align:center;border-right:1px solid #d1d5db;background:#fff}
     .score-cell:last-child{border-right:0}
     .score-label{font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#6b7280}
-    .score-value{font-size:18px;font-weight:900;color:#111827;margin-top:2px}
     .score-value.good{color:#047857}.score-value.bad{color:#be123c}
+    .sectional-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 14px}
+    .sec-card{border:1px solid #c7d2fe;border-radius:8px;background:#f8faff;padding:8px 10px}
+    .sec-title{font-size:10px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:#3730a3}
+    .sec-stat-line{display:flex;justify-content:space-between;align-items:baseline;margin-top:4px;font-size:12px;color:#1e1b4b}
+    .sec-stat-line strong{color:#047857;font-size:13px}
+    .sec-marks{font-size:11px;font-weight:800;color:#4338ca}
+    .sec-sub{font-size:9px;color:#6b7280;margin-top:2px}
     .review-title{font-size:13px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#111827;border-bottom:1px solid #111827;padding-bottom:6px;margin:16px 0 6px}
     .part-header{break-inside:avoid;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 12px;margin:16px 0 10px}
     .part-header-title{font-size:12px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;color:#3730a3}
@@ -428,6 +457,32 @@ export function buildResponseSheetHtml({
       <div class="score-cell"><div class="score-label">Wrong</div><div class="score-value bad">${wrongCount}</div></div>
       <div class="score-cell"><div class="score-label">Unanswered</div><div class="score-value">${unansweredCount}</div></div>
     </section>
+    <div class="sectional-strip">
+      <div class="sec-card">
+        <div class="sec-title">${escapeHtml(sectionInfo.partA.fullTitle)}</div>
+        <div class="sec-stat-line">
+          <span>Correct: <strong>${partAStats.correct} / ${sectionInfo.partA.totalQuestions}</strong></span>
+          <span class="sec-marks">${partAStats.marks} M (x1.5)</span>
+        </div>
+        <div class="sec-sub">Wrong: ${partAStats.wrong} • Unanswered: ${partAStats.unanswered}</div>
+      </div>
+      <div class="sec-card">
+        <div class="sec-title">${escapeHtml(sectionInfo.partB.fullTitle)}</div>
+        <div class="sec-stat-line">
+          <span>Correct: <strong>${partBStats.correct} / ${sectionInfo.partB.totalQuestions}</strong></span>
+          <span class="sec-marks">${partBStats.marks} M (x1.5)</span>
+        </div>
+        <div class="sec-sub">Wrong: ${partBStats.wrong} • Unanswered: ${partBStats.unanswered}</div>
+      </div>
+      <div class="sec-card">
+        <div class="sec-title">${escapeHtml(sectionInfo.partC.fullTitle)}</div>
+        <div class="sec-stat-line">
+          <span>Correct: <strong>${partCStats.correct} / ${sectionInfo.partC.totalQuestions}</strong></span>
+          <span class="sec-marks">${partCStats.marks} M (x1.5)</span>
+        </div>
+        <div class="sec-sub">Wrong: ${partCStats.wrong} • Unanswered: ${partCStats.unanswered}</div>
+      </div>
+    </div>
     <div class="review-title">Question Wise Response Review</div>
     ${reviewBodyHtml}
     <div class="footer">Generated by ${generatedBy === "admin" ? "Admin Panel" : "Student Portal"} • ${escapeHtml(generatedLabel)}</div>
