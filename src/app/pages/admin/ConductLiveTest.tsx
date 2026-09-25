@@ -76,6 +76,7 @@ import {
   CameraOff,
   CheckCircle2,
   Clock,
+  Download,
   ExternalLink,
   Eye,
   FileSpreadsheet,
@@ -105,7 +106,7 @@ import {
 
 export default function ConductLiveTest() {
   const { user } = useAuth();
-  const { batches } = useData();
+  const { batches, students } = useData();
   const navigate = useNavigate();
 
   const [tests, setTests] = useState<ExamTest[]>([]);
@@ -134,6 +135,10 @@ export default function ConductLiveTest() {
   const [activeSessions, setActiveSessions] = useState<LiveTestSession[]>([]);
   const [scheduledSessions, setScheduledSessions] = useState<LiveTestSession[]>(
     [],
+  );
+  const allSessions = useMemo(
+    () => [...activeSessions, ...scheduledSessions],
+    [activeSessions, scheduledSessions],
   );
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
