@@ -71,10 +71,7 @@ function percentFromAttempt(a: ExamAttempt, maxMarks: number) {
 }
 
 /** Submitted first, highest marks first; ties break by student name. In-progress / not submitted after, by name. */
-function sortAttemptsForRankExport(
-  attempts: ExamAttempt[],
-  students: any[],
-) {
+function sortAttemptsForRankExport(attempts: ExamAttempt[], students: any[]) {
   const nameOf = (a: ExamAttempt) =>
     displayNameForAttempt(a, students).trim().toLowerCase() || a.uid;
 
@@ -208,7 +205,7 @@ export default function ExamResults() {
       // Sheet 1: Ranked results according to handwritten spec & prompt
       const rankedResultRows = computedRows.map((row) => ({
         "S.No.": row.sNo,
-        "Rank": row.rank,
+        Rank: row.rank,
         "Student Name": row.studentName,
         [`PART-A (MATHS) (No. of Qus out of ${secInfo.partA.totalQuestions})`]:
           row.partA.correct,
@@ -223,7 +220,7 @@ export default function ExamResults() {
         "TOTAL MARKS": row.grandTotalMarks,
         "Student ID": row.studentId,
         "Student Email": row.studentEmail,
-        "Status": row.status,
+        Status: row.status,
         "Submitted At": row.submittedAt,
         "Time Taken (Seconds)": row.timeTakenSeconds,
       }));
@@ -279,11 +276,11 @@ export default function ExamResults() {
         const participant = resolveAttemptParticipant(a, students);
         const base: Record<string, any> = {
           "S.No.": row.sNo,
-          "Rank": row.rank,
+          Rank: row.rank,
           "Student Name": row.studentName,
           "Student ID": row.studentId,
           "Student Email": row.studentEmail,
-          "Status": row.status,
+          Status: row.status,
           "Total Correct": row.totalCorrect,
           "Grand Total Marks": row.grandTotalMarks,
           "Part A (Maths) Correct": row.partA.correct,
@@ -319,12 +316,17 @@ export default function ExamResults() {
         .filter((a) => a.status === "submitted" && a.submittedAt)
         .sort(
           (a, b) =>
-            new Date(a.submittedAt!).getTime() - new Date(b.submittedAt!).getTime(),
+            new Date(a.submittedAt!).getTime() -
+            new Date(b.submittedAt!).getTime(),
         )
         .map((a, idx) => {
           const participant = resolveAttemptParticipant(a, students);
-          const startedMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
-          const subMs = a.submittedAt ? new Date(a.submittedAt).getTime() : null;
+          const startedMs = a.startedAt
+            ? new Date(a.startedAt).getTime()
+            : null;
+          const subMs = a.submittedAt
+            ? new Date(a.submittedAt).getTime()
+            : null;
           const timeTakenSeconds =
             startedMs != null && subMs != null
               ? Math.max(0, Math.round((subMs - startedMs) / 1000))
@@ -502,7 +504,8 @@ export default function ExamResults() {
           <div>
             <CardTitle>Attempts & Rankings</CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">
-              Part A: Mathematics (35 Q) • Part B: Statistics (35 Q) • Part C: Economics (35 Q) • 1.5 marks / question
+              Part A: Mathematics (35 Q) • Part B: Statistics (35 Q) • Part C:
+              Economics (35 Q) • 1.5 marks / question
             </p>
           </div>
           <Badge variant="outline" className="text-xs">
@@ -517,38 +520,61 @@ export default function ExamResults() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/80">
-                    <TableHead className="w-12 text-center font-bold text-slate-900">S.No.</TableHead>
-                    <TableHead className="w-14 text-center font-bold text-slate-900">Rank</TableHead>
-                    <TableHead className="font-bold text-slate-900 min-w-[180px]">Student Name</TableHead>
+                    <TableHead className="w-12 text-center font-bold text-slate-900">
+                      S.No.
+                    </TableHead>
+                    <TableHead className="w-14 text-center font-bold text-slate-900">
+                      Rank
+                    </TableHead>
+                    <TableHead className="font-bold text-slate-900 min-w-[180px]">
+                      Student Name
+                    </TableHead>
                     <TableHead className="text-center font-bold text-slate-900">
                       <div>PART-A (MATHS)</div>
-                      <div className="text-[11px] font-normal text-slate-500">Correct / {sectionInfo.partA.totalQuestions} (x1.5 M)</div>
+                      <div className="text-[11px] font-normal text-slate-500">
+                        Correct / {sectionInfo.partA.totalQuestions} (x1.5 M)
+                      </div>
                     </TableHead>
                     <TableHead className="text-center font-bold text-slate-900">
                       <div>PART-B (STAT)</div>
-                      <div className="text-[11px] font-normal text-slate-500">Correct / {sectionInfo.partB.totalQuestions} (x1.5 M)</div>
+                      <div className="text-[11px] font-normal text-slate-500">
+                        Correct / {sectionInfo.partB.totalQuestions} (x1.5 M)
+                      </div>
                     </TableHead>
                     <TableHead className="text-center font-bold text-slate-900">
                       <div>PART-C (ECO)</div>
-                      <div className="text-[11px] font-normal text-slate-500">Correct / {sectionInfo.partC.totalQuestions} (x1.5 M)</div>
+                      <div className="text-[11px] font-normal text-slate-500">
+                        Correct / {sectionInfo.partC.totalQuestions} (x1.5 M)
+                      </div>
                     </TableHead>
                     <TableHead className="text-center font-bold text-emerald-800">
                       <div>Total Correct</div>
-                      <div className="text-[11px] font-normal text-slate-500">Questions</div>
+                      <div className="text-[11px] font-normal text-slate-500">
+                        Questions
+                      </div>
                     </TableHead>
                     <TableHead className="text-center font-bold text-indigo-900">
                       <div>Grand Total</div>
-                      <div className="text-[11px] font-normal text-slate-500">Marks</div>
+                      <div className="text-[11px] font-normal text-slate-500">
+                        Marks
+                      </div>
                     </TableHead>
-                    <TableHead className="text-center font-bold text-slate-900">Status</TableHead>
-                    <TableHead className="text-center font-bold text-slate-900">Action / Rejoin</TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">
+                      Status
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">
+                      Action / Rejoin
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {threeSectionRows.map((r) => {
                     const a = r.rawAttempt;
                     return (
-                      <TableRow key={a.id || a.uid} className="hover:bg-slate-50">
+                      <TableRow
+                        key={a.id || a.uid}
+                        className="hover:bg-slate-50"
+                      >
                         <TableCell className="text-center font-medium text-slate-600 tabular-nums">
                           {r.sNo}
                         </TableCell>
@@ -565,19 +591,40 @@ export default function ExamResults() {
                           </div>
                         </TableCell>
                         <TableCell className="text-center tabular-nums">
-                          <span className="font-bold text-slate-900">{r.partA.correct}</span>
-                          <span className="text-xs text-slate-500"> / {sectionInfo.partA.totalQuestions}</span>
-                          <span className="block text-xs font-semibold text-indigo-600">({r.partA.marks} M)</span>
+                          <span className="font-bold text-slate-900">
+                            {r.partA.correct}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {" "}
+                            / {sectionInfo.partA.totalQuestions}
+                          </span>
+                          <span className="block text-xs font-semibold text-indigo-600">
+                            ({r.partA.marks} M)
+                          </span>
                         </TableCell>
                         <TableCell className="text-center tabular-nums">
-                          <span className="font-bold text-slate-900">{r.partB.correct}</span>
-                          <span className="text-xs text-slate-500"> / {sectionInfo.partB.totalQuestions}</span>
-                          <span className="block text-xs font-semibold text-indigo-600">({r.partB.marks} M)</span>
+                          <span className="font-bold text-slate-900">
+                            {r.partB.correct}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {" "}
+                            / {sectionInfo.partB.totalQuestions}
+                          </span>
+                          <span className="block text-xs font-semibold text-indigo-600">
+                            ({r.partB.marks} M)
+                          </span>
                         </TableCell>
                         <TableCell className="text-center tabular-nums">
-                          <span className="font-bold text-slate-900">{r.partC.correct}</span>
-                          <span className="text-xs text-slate-500"> / {sectionInfo.partC.totalQuestions}</span>
-                          <span className="block text-xs font-semibold text-indigo-600">({r.partC.marks} M)</span>
+                          <span className="font-bold text-slate-900">
+                            {r.partC.correct}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {" "}
+                            / {sectionInfo.partC.totalQuestions}
+                          </span>
+                          <span className="block text-xs font-semibold text-indigo-600">
+                            ({r.partC.marks} M)
+                          </span>
                         </TableCell>
                         <TableCell className="text-center tabular-nums">
                           <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 font-bold px-2 py-0.5 text-sm">

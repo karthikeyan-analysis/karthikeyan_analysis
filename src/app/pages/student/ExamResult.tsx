@@ -5,7 +5,12 @@ import { useAuth } from "../../context/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import {
   getAttempt,
@@ -338,7 +343,10 @@ export default function ExamResult() {
                 <div>
                   <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
                     <span>Sectional Performance Breakdown</span>
-                    <Badge variant="outline" className="border-indigo-200 text-indigo-700 font-semibold text-xs">
+                    <Badge
+                      variant="outline"
+                      className="border-indigo-200 text-indigo-700 font-semibold text-xs"
+                    >
                       1.5 Marks / Correct Q
                     </Badge>
                   </CardTitle>
@@ -372,7 +380,8 @@ export default function ExamResult() {
                       Part A: Mathematics
                     </span>
                     <Badge className="bg-blue-50 text-blue-800 border-blue-200 text-xs">
-                      {sectionBreakdown.sectionInfo.partA.totalQuestions} Questions
+                      {sectionBreakdown.sectionInfo.partA.totalQuestions}{" "}
+                      Questions
                     </Badge>
                   </div>
                   <div className="mt-3 flex items-baseline justify-between">
@@ -384,14 +393,17 @@ export default function ExamResult() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        Correct Questions out of {sectionBreakdown.sectionInfo.partA.totalQuestions}
+                        Correct Questions out of{" "}
+                        {sectionBreakdown.sectionInfo.partA.totalQuestions}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-xl font-bold text-blue-900">
                         {sectionBreakdown.partA.marks}
                       </div>
-                      <div className="text-[11px] font-semibold text-blue-600">Marks (x1.5)</div>
+                      <div className="text-[11px] font-semibold text-blue-600">
+                        Marks (x1.5)
+                      </div>
                     </div>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
@@ -407,7 +419,8 @@ export default function ExamResult() {
                       Part B: Statistics
                     </span>
                     <Badge className="bg-indigo-50 text-indigo-800 border-indigo-200 text-xs">
-                      {sectionBreakdown.sectionInfo.partB.totalQuestions} Questions
+                      {sectionBreakdown.sectionInfo.partB.totalQuestions}{" "}
+                      Questions
                     </Badge>
                   </div>
                   <div className="mt-3 flex items-baseline justify-between">
@@ -419,14 +432,17 @@ export default function ExamResult() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        Correct Questions out of {sectionBreakdown.sectionInfo.partB.totalQuestions}
+                        Correct Questions out of{" "}
+                        {sectionBreakdown.sectionInfo.partB.totalQuestions}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-xl font-bold text-indigo-900">
                         {sectionBreakdown.partB.marks}
                       </div>
-                      <div className="text-[11px] font-semibold text-indigo-600">Marks (x1.5)</div>
+                      <div className="text-[11px] font-semibold text-indigo-600">
+                        Marks (x1.5)
+                      </div>
                     </div>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
@@ -442,7 +458,8 @@ export default function ExamResult() {
                       Part C: Economics
                     </span>
                     <Badge className="bg-purple-50 text-purple-800 border-purple-200 text-xs">
-                      {sectionBreakdown.sectionInfo.partC.totalQuestions} Questions
+                      {sectionBreakdown.sectionInfo.partC.totalQuestions}{" "}
+                      Questions
                     </Badge>
                   </div>
                   <div className="mt-3 flex items-baseline justify-between">
@@ -454,14 +471,17 @@ export default function ExamResult() {
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 mt-0.5">
-                        Correct Questions out of {sectionBreakdown.sectionInfo.partC.totalQuestions}
+                        Correct Questions out of{" "}
+                        {sectionBreakdown.sectionInfo.partC.totalQuestions}
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-xl font-bold text-purple-900">
                         {sectionBreakdown.partC.marks}
                       </div>
-                      <div className="text-[11px] font-semibold text-purple-600">Marks (x1.5)</div>
+                      <div className="text-[11px] font-semibold text-purple-600">
+                        Marks (x1.5)
+                      </div>
                     </div>
                   </div>
                   <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
