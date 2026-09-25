@@ -109,6 +109,101 @@ export default function ExamResult() {
     return new Map(keys.map((k) => [k.id, k.correctIndex]));
   }, [keys]);
 
+  const { correctCount, wrongCount, unansweredCount } = useMemo(() => {
+    if (!attempt) {
+      return { correctCount: 0, wrongCount: 0, unansweredCount: 0 };
+    }
+    const answered = Object.values(attempt.answers || {}).filter(
+      (v) => v != null,
+    ).length;
+    const totalQ = questions.length;
+    if (keys && keys.length > 0) {
+      let c = 0;
+      let w = 0;
+      let u = 0;
+      questions.forEach((q) => {
+        const sel = attempt.answers?.[q.id];
+        if (sel == null) {
+          u++;
+          return;
+        }
+        const cor = correctIndexById.get(q.id);
+        if (cor == null) return;
+        if (sel === cor) c++;
+        else w++;
+      });
+      return { correctCount: c, wrongCount: w, unansweredCount: u };
+    }
+    const defaultMark =
+      test?.defaultMarksPerQuestion ||
+      (test?.totalMarks && totalQ ? test.totalMarks / totalQ : 1);
+    const scoreVal = attempt.score ?? 0;
+    const estC =
+      defaultMark > 0 && scoreVal > 0 ? Math.round(scoreVal / defaultMark) : 0;
+    const estW = Math.max(0, answered - estC);
+    const estU = Math.max(0, totalQ - answered);
+    return {
+      correctCount: attempt.correctCount ?? estC,
+      wrongCount: attempt.wrongCount ?? estW,
+      unansweredCount: attempt.unansweredCount ?? estU,
+    };
+  }, [attempt, correctIndexById, keys, questions, test]);
+
+  const sectionBreakdown = useMemo(() => {
+    if (!test || questions.length === 0 || !attempt) return null;
+    const { partAQuestions, partBQuestions, partCQuestions, sectionInfo } =
+      resolveThreeSections(test, questions);
+
+    const answers = attempt.answers || {};
+
+    const evalSection = (qList: ExamQuestionPublic[]) => {
+      let correct = 0;
+      let wrong = 0;
+      let unanswered = 0;
+      let attempted = 0;
+
+      for (const q of qList) {
+        const sel = answers[q.id];
+        if (sel == null) {
+          unanswered++;
+          continue;
+        }
+        attempted++;
+        const cor = correctIndexById.get(q.id);
+        if (cor == null) continue;
+        if (sel === cor) correct++;
+        else wrong++;
+      }
+
+      const marks = Math.round(correct * 1.5 * 100) / 100;
+      return {
+        correct,
+        wrong,
+        unanswered,
+        attempted,
+        marks,
+        totalQuestions: qList.length,
+      };
+    };
+
+    const partA = evalSection(partAQuestions);
+    const partB = evalSection(partBQuestions);
+    const partC = evalSection(partCQuestions);
+
+    const totalCorrect = partA.correct + partB.correct + partC.correct;
+    const grandTotalMarks =
+      Math.round((partA.marks + partB.marks + partC.marks) * 100) / 100;
+
+    return {
+      sectionInfo,
+      partA,
+      partB,
+      partC,
+      totalCorrect,
+      grandTotalMarks,
+    };
+  }, [attempt?.answers, correctIndexById, questions, test]);
+
   if (!user) return null;
 
   if (loading) {
@@ -170,98 +265,6 @@ export default function ExamResult() {
   const studentIdValue = user.isGuestExamParticipant
     ? user.email?.trim() || "Guest"
     : user.studentId?.trim() || user.studentRecordId?.trim() || "-";
-
-  const { correctCount, wrongCount, unansweredCount } = useMemo(() => {
-    const answered = Object.values(attempt?.answers || {}).filter(
-      (v) => v != null,
-    ).length;
-    const totalQ = questions.length;
-    if (keys && keys.length > 0) {
-      let c = 0;
-      let w = 0;
-      let u = 0;
-      questions.forEach((q) => {
-        const sel = attempt?.answers?.[q.id];
-        if (sel == null) {
-          u++;
-          return;
-        }
-        const cor = correctIndexById.get(q.id);
-        if (cor == null) return;
-        if (sel === cor) c++;
-        else w++;
-      });
-      return { correctCount: c, wrongCount: w, unansweredCount: u };
-    }
-    const defaultMark =
-      test?.defaultMarksPerQuestion ||
-      (test?.totalMarks && totalQ ? test.totalMarks / totalQ : 1);
-    const scoreVal = attempt?.score ?? 0;
-    const estC =
-      defaultMark > 0 && scoreVal > 0 ? Math.round(scoreVal / defaultMark) : 0;
-    const estW = Math.max(0, answered - estC);
-    const estU = Math.max(0, totalQ - answered);
-    return {
-      correctCount: attempt?.correctCount ?? estC,
-      wrongCount: attempt?.wrongCount ?? estW,
-      unansweredCount: attempt?.unansweredCount ?? estU,
-    };
-  }, [attempt, correctIndexById, keys, questions, test]);
-
-  const sectionBreakdown = useMemo(() => {
-    if (!test || questions.length === 0) return null;
-    const { partAQuestions, partBQuestions, partCQuestions, sectionInfo } =
-      resolveThreeSections(test, questions);
-
-    const answers = attempt?.answers || {};
-
-    const evalSection = (qList: ExamQuestionPublic[]) => {
-      let correct = 0;
-      let wrong = 0;
-      let unanswered = 0;
-      let attempted = 0;
-
-      for (const q of qList) {
-        const sel = answers[q.id];
-        if (sel == null) {
-          unanswered++;
-          continue;
-        }
-        attempted++;
-        const cor = correctIndexById.get(q.id);
-        if (cor == null) continue;
-        if (sel === cor) correct++;
-        else wrong++;
-      }
-
-      const marks = Math.round(correct * 1.5 * 100) / 100;
-      return {
-        correct,
-        wrong,
-        unanswered,
-        attempted,
-        marks,
-        totalQuestions: qList.length,
-      };
-    };
-
-    const partA = evalSection(partAQuestions);
-    const partB = evalSection(partBQuestions);
-    const partC = evalSection(partCQuestions);
-
-    const totalCorrect = partA.correct + partB.correct + partC.correct;
-    const grandTotalMarks =
-      Math.round((partA.marks + partB.marks + partC.marks) * 100) / 100;
-
-    return {
-      sectionInfo,
-      partA,
-      partB,
-      partC,
-      totalCorrect,
-      grandTotalMarks,
-    };
-  }, [attempt?.answers, correctIndexById, questions, test]);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">

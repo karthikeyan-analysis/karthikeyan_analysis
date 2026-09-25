@@ -20,7 +20,11 @@ import { Button } from "../../components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { KeyRound, Zap, Award, Radio } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { getAttempt, getExamTest, listExamTestsForStudent } from "../../features/exams/examApi";
+import {
+  getAttempt,
+  getExamTest,
+  listExamTestsForStudent,
+} from "../../features/exams/examApi";
 import {
   canShowExamToStudentToday,
   getExamWindowStatus,
@@ -42,9 +46,13 @@ export default function TestSchedule() {
 
   const [examTests, setExamTests] = useState<ExamTest[]>([]);
   const [examLoading, setExamLoading] = useState(false);
-  const [attemptByExamId, setAttemptByExamId] = useState<Record<string, ExamAttempt | null>>({});
+  const [attemptByExamId, setAttemptByExamId] = useState<
+    Record<string, ExamAttempt | null>
+  >({});
   const [attemptLoading, setAttemptLoading] = useState(false);
-  const [activeLiveSessions, setActiveLiveSessions] = useState<LiveTestSession[]>([]);
+  const [activeLiveSessions, setActiveLiveSessions] = useState<
+    LiveTestSession[]
+  >([]);
 
   useEffect(() => {
     const unsub = subscribeAllActiveLiveTestSessions((sessions) => {
@@ -93,7 +101,12 @@ export default function TestSchedule() {
     return () => {
       cancelled = true;
     };
-  }, [user?.batchId, user?.guestExamTestId, user?.isGuestExamParticipant, user?.studentRecordId]);
+  }, [
+    user?.batchId,
+    user?.guestExamTestId,
+    user?.isGuestExamParticipant,
+    user?.studentRecordId,
+  ]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -134,7 +147,9 @@ export default function TestSchedule() {
   const studentExams = useMemo(() => {
     const todayActive = examTests
       .filter((t) => canShowExamToStudentToday(t, now))
-      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+      .sort(
+        (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+      );
     return { todayActive };
   }, [examTests, now]);
 
@@ -145,9 +160,65 @@ export default function TestSchedule() {
 
   const visibleAttemptByExamId = useMemo(() => {
     return Object.fromEntries(
-      visibleExamTests.map((test) => [test.id, attemptByExamId[test.id] ?? null]),
+      visibleExamTests.map((test) => [
+        test.id,
+        attemptByExamId[test.id] ?? null,
+      ]),
     );
   }, [attemptByExamId, visibleExamTests]);
+
+  const activeLiveTestsForStudent = useMemo(() => {
+    const studentBatchId = user?.batchId;
+
+    const liveSessionItems = activeLiveSessions
+      .filter((s) => {
+        if (s.status !== "active") return false;
+        if (!studentBatchId) return true;
+        if (s.batchId === studentBatchId) return true;
+        if (
+          s.batchIds &&
+          Array.isArray(s.batchIds) &&
+          s.batchIds.includes(studentBatchId)
+        )
+          return true;
+        return false;
+      })
+      .map((s) => {
+        const fullTest = examTests.find(
+          (t) => t.id === s.testId || t.id === s.id,
+        );
+        return {
+          id: s.testId || s.id,
+          testNo: s.testTitle || fullTest?.title || "Live Test",
+          title: s.testTitle || fullTest?.title || "Live Test",
+          portion: s.subject || fullTest?.subject || "All Topics",
+          subject: s.subject || fullTest?.subject || "General",
+          startAt: s.startedAt || new Date().toISOString(),
+          endAt: new Date(
+            Date.now() + (s.durationMinutes || 60) * 60000,
+          ).toISOString(),
+          isLiveSession: true,
+          sessionId: s.id,
+        };
+      });
+
+    const activeExamItems = studentExams.todayActive.filter(
+      (t) =>
+        getExamWindowStatus(t, now) === "active" &&
+        !liveSessionItems.some((ls) => ls.id === t.id),
+    );
+
+    return [...liveSessionItems, ...activeExamItems];
+  }, [
+    activeLiveSessions,
+    examTests,
+    studentExams.todayActive,
+    user?.batchId,
+    now,
+  ]);
+
+  const [searchParams] = useSearchParams();
+  const isLiveView = searchParams.get("view") === "live";
 
   const isGuestOnly = user?.isGuestExamParticipant && user.guestExamTestId;
 
@@ -158,8 +229,8 @@ export default function TestSchedule() {
         <Alert>
           <AlertTitle>Not Enrolled</AlertTitle>
           <AlertDescription>
-            You are not enrolled in any batch. If you have a test passcode from your instructor, you
-            can join below.
+            You are not enrolled in any batch. If you have a test passcode from
+            your instructor, you can join below.
           </AlertDescription>
         </Alert>
         <Card className="border-indigo-200 bg-indigo-50/40">
@@ -170,7 +241,8 @@ export default function TestSchedule() {
                 Join with passcode
               </p>
               <p className="text-sm text-slate-600 mt-1">
-                Enter your name, email, and the passcode shared by your instructor.
+                Enter your name, email, and the passcode shared by your
+                instructor.
               </p>
             </div>
             <Button
@@ -238,7 +310,9 @@ export default function TestSchedule() {
                         {isExam ? test.title : test.testNo}
                       </TableCell>
                       <TableCell className="text-sm">
-                        {isExam ? new Date(test.startAt).toLocaleDateString() : test.testDate}
+                        {isExam
+                          ? new Date(test.startAt).toLocaleDateString()
+                          : test.testDate}
                       </TableCell>
                       <TableCell className="text-sm">
                         {isExam ? test.subject : test.portion}
@@ -249,19 +323,31 @@ export default function TestSchedule() {
                           : `${test.startTime} – ${test.endTime}`}
                       </TableCell>
                       <TableCell>
-                      {isExam ? (
-                          visibleAttemptByExamId[test.id]?.status === "submitted" ? (
-                            <Badge className="bg-emerald-100 text-emerald-800">Submitted</Badge>
-                          ) : activeLiveSessions.some((s) => s.testId === test.id) ? (
+                        {isExam ? (
+                          visibleAttemptByExamId[test.id]?.status ===
+                          "submitted" ? (
+                            <Badge className="bg-emerald-100 text-emerald-800">
+                              Submitted
+                            </Badge>
+                          ) : activeLiveSessions.some(
+                              (s) => s.testId === test.id,
+                            ) ? (
                             <Badge className="bg-emerald-600 text-white font-bold animate-pulse">
-                              <Radio className="w-3 h-3 mr-1 inline" /> LIVE TEST NOW
+                              <Radio className="w-3 h-3 mr-1 inline" /> LIVE
+                              TEST NOW
                             </Badge>
                           ) : getExamWindowStatus(test, now) === "active" ? (
-                            <Badge className="bg-green-100 text-green-800">START NOW</Badge>
+                            <Badge className="bg-green-100 text-green-800">
+                              START NOW
+                            </Badge>
                           ) : getExamWindowStatus(test, now) === "upcoming" ? (
-                            <Badge className="bg-blue-100 text-blue-800">Upcoming</Badge>
+                            <Badge className="bg-blue-100 text-blue-800">
+                              Upcoming
+                            </Badge>
                           ) : (
-                            <Badge className="bg-gray-100 text-gray-800">Closed</Badge>
+                            <Badge className="bg-gray-100 text-gray-800">
+                              Closed
+                            </Badge>
                           )
                         ) : (
                           getStatusBadge(test.status)
@@ -269,29 +355,52 @@ export default function TestSchedule() {
                       </TableCell>
                       <TableCell className="text-right">
                         {isExam ? (
-                          visibleAttemptByExamId[test.id]?.status === "submitted" ? (
-                            <Button disabled variant="outline" size="sm" className="text-xs">
+                          visibleAttemptByExamId[test.id]?.status ===
+                          "submitted" ? (
+                            <Button
+                              disabled
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                            >
                               Completed
                             </Button>
-                          ) : activeLiveSessions.some((s) => s.testId === test.id) ? (
+                          ) : activeLiveSessions.some(
+                              (s) => s.testId === test.id,
+                            ) ? (
                             <Button
-                              onClick={() => navigate(`/student/tests/${test.id}`)}
+                              onClick={() =>
+                                navigate(`/student/tests/${test.id}`)
+                              }
                               className="bg-gradient-to-r from-emerald-600 to-indigo-600 hover:from-emerald-700 hover:to-indigo-700 text-white text-xs font-bold shadow-md"
                               size="sm"
                             >
-                              <Radio className="w-3.5 h-3.5 mr-1.5 animate-pulse" /> Join Live Test
+                              <Radio className="w-3.5 h-3.5 mr-1.5 animate-pulse" />{" "}
+                              Join Live Test
                             </Button>
                           ) : getExamWindowStatus(test, now) === "closed" ? (
-                            <Button disabled variant="outline" size="sm" className="text-xs">
+                            <Button
+                              disabled
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                            >
                               Closed
                             </Button>
                           ) : getExamWindowStatus(test, now) === "upcoming" ? (
-                            <Button disabled variant="outline" size="sm" className="text-xs">
+                            <Button
+                              disabled
+                              variant="outline"
+                              size="sm"
+                              className="text-xs"
+                            >
                               Coming
                             </Button>
                           ) : (
                             <Button
-                              onClick={() => navigate(`/student/tests/${test.id}`)}
+                              onClick={() =>
+                                navigate(`/student/tests/${test.id}`)
+                              }
                               className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
                               size="sm"
                             >
@@ -329,55 +438,26 @@ export default function TestSchedule() {
     );
   };
 
-  const activeLiveTestsForStudent = useMemo(() => {
-    const studentBatchId = user?.batchId;
-
-    const liveSessionItems = activeLiveSessions
-      .filter((s) => {
-        if (s.status !== "active") return false;
-        if (!studentBatchId) return true;
-        if (s.batchId === studentBatchId) return true;
-        if (s.batchIds && Array.isArray(s.batchIds) && s.batchIds.includes(studentBatchId)) return true;
-        return false;
-      })
-      .map((s) => {
-        const fullTest = examTests.find((t) => t.id === s.testId || t.id === s.id);
-        return {
-          id: s.testId || s.id,
-          testNo: s.testTitle || fullTest?.title || "Live Test",
-          title: s.testTitle || fullTest?.title || "Live Test",
-          portion: s.subject || fullTest?.subject || "All Topics",
-          subject: s.subject || fullTest?.subject || "General",
-          startAt: s.startedAt || new Date().toISOString(),
-          endAt: new Date(Date.now() + (s.durationMinutes || 60) * 60000).toISOString(),
-          isLiveSession: true,
-          sessionId: s.id,
-        };
-      });
-
-    const activeExamItems = studentExams.todayActive.filter(
-      (t) =>
-        getExamWindowStatus(t, now) === "active" &&
-        !liveSessionItems.some((ls) => ls.id === t.id),
-    );
-
-    return [...liveSessionItems, ...activeExamItems];
-  }, [activeLiveSessions, examTests, studentExams.todayActive, user?.batchId, now]);
-
-  const [searchParams] = useSearchParams();
-  const isLiveView = searchParams.get("view") === "live";
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-200 bg-white px-4 py-3">
-        <StudentAvatar name={user.name || "Student"} photoURL={photoURL} size="lg" className="ring-2 ring-slate-100" />
+        <StudentAvatar
+          name={user.name || "Student"}
+          photoURL={photoURL}
+          size="lg"
+          className="ring-2 ring-slate-100"
+        />
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-slate-900 truncate">{user.name || "Student"}</p>
+          <p className="text-sm font-semibold text-slate-900 truncate">
+            {user.name || "Student"}
+          </p>
           {user.studentId ? (
             <p className="text-xs text-slate-600">ID: {user.studentId}</p>
           ) : null}
           {currentBatch ? (
-            <p className="text-xs text-slate-500 truncate max-w-md">{currentBatch.name}</p>
+            <p className="text-xs text-slate-500 truncate max-w-md">
+              {currentBatch.name}
+            </p>
           ) : null}
         </div>
       </div>
@@ -391,7 +471,11 @@ export default function TestSchedule() {
               Live CBT Exam & Active Test Center
             </h2>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/student/join-test")}
+              >
                 <KeyRound className="w-3 h-3 mr-1" />
                 Passcode join
               </Button>
@@ -409,9 +493,13 @@ export default function TestSchedule() {
             <Card className="border-rose-200/80 bg-gradient-to-b from-rose-50/30 to-slate-50/50">
               <CardContent className="pt-8 text-center pb-8">
                 <Award className="w-12 h-12 mx-auto text-rose-400 mb-3 animate-pulse" />
-                <p className="text-slate-900 font-bold text-base">No Live Test Currently Active</p>
+                <p className="text-slate-900 font-bold text-base">
+                  No Live Test Currently Active
+                </p>
                 <p className="text-sm text-slate-600 mt-1 max-w-md mx-auto">
-                  When your instructor starts a live test from the Live Control Center during class, it will appear here with an instant join prompt.
+                  When your instructor starts a live test from the Live Control
+                  Center during class, it will appear here with an instant join
+                  prompt.
                 </p>
               </CardContent>
             </Card>
@@ -426,20 +514,31 @@ export default function TestSchedule() {
               Tests & Exams Archive & Schedule
             </h2>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate("/student/join-test")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/student/join-test")}
+              >
                 <KeyRound className="w-3 h-3 mr-1" />
                 Passcode join
               </Button>
             </div>
           </div>
 
-          <TestTableSection title="Scheduled Exams" tests={studentExams.todayActive} icon={Zap} isExam />
+          <TestTableSection
+            title="Scheduled Exams"
+            tests={studentExams.todayActive}
+            icon={Zap}
+            isExam
+          />
 
           {studentExams.todayActive.length === 0 && !examLoading && (
             <Card>
               <CardContent className="pt-8 text-center pb-8">
                 <Zap className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-                <p className="text-slate-600 font-medium">No scheduled exams found</p>
+                <p className="text-slate-600 font-medium">
+                  No scheduled exams found
+                </p>
                 <p className="text-sm text-slate-500 mt-1">
                   Exams will appear here on their scheduled date and time.
                 </p>
