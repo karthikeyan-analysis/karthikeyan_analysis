@@ -43,6 +43,7 @@ import {
   toIsoOrEmpty,
 } from "../../features/exams/adminTestReportUtils";
 import * as XLSX from "xlsx";
+import { computeThreeSectionBreakdown } from "../../features/exams/sectionResultUtils";
 import {
   createLiveTestSession,
   deleteLiveTestSession,
@@ -704,118 +705,42 @@ export default function ConductLiveTest() {
         for (const k of keys) correctIndexById.set(k.id, k.correctIndex);
       }
 
-      const sortAttemptsForRankExport = (
-        attList: ExamAttempt[],
-        studentList: any[],
-      ) => {
-        const nameOf = (a: ExamAttempt) =>
-          displayNameForAttempt(a, studentList).trim().toLowerCase() || a.uid;
-
-        const submitted = attList.filter((a) => a.status === "submitted");
-        const notSubmitted = attList.filter((a) => a.status !== "submitted");
-
-        submitted.sort((a, b) => {
-          const sa = a.score ?? -Infinity;
-          const sb = b.score ?? -Infinity;
-          if (sb !== sa) return sb - sa;
-          return nameOf(a).localeCompare(nameOf(b));
+      const { sectionInfo, rows: threeSectionRows } =
+        computeThreeSectionBreakdown({
+          test: t,
+          questions: qs,
+          keys,
+          attempts,
+          students,
+          resolveParticipant: resolveAttemptParticipant,
         });
-        notSubmitted.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
 
-        return { ranked: submitted, unranked: notSubmitted };
-      };
+      const exportAttemptOrder = threeSectionRows.map((r) => r.rawAttempt);
 
-      const percentFromAttempt = (a: ExamAttempt, maxM: number) => {
-        const max = a.maxScore ?? maxM;
-        const score = a.score;
-        if (score == null || !Number.isFinite(max) || max <= 0) return null;
-        return Math.round((score / max) * 1000) / 10;
-      };
-
-      const { ranked, unranked } = sortAttemptsForRankExport(
-        attempts,
-        students,
-      );
-      const exportAttemptOrder = [...ranked, ...unranked];
-
-      let rankCounter = 0;
-      let lastScoreForRank: number | undefined = undefined;
-
-      const summaryRows = exportAttemptOrder.map((a) => {
-        const participant = resolveAttemptParticipant(a, students);
-        const answers = a.answers || {};
-        const answeredCount = Object.values(answers).filter(
-          (v) => v != null,
-        ).length;
-        let correctCount: number | "" = "";
-        let wrongCount: number | "" = "";
-        let unansweredCount: number | "" = "";
-
-        if (keys) {
-          let c = 0;
-          let w = 0;
-          let u = 0;
-          for (const q of questions) {
-            const selected = answers[q.id] ?? null;
-            if (selected == null) {
-              u++;
-              continue;
-            }
-            const correct = correctIndexById.get(q.id);
-            if (correct == null) continue;
-            if (selected === correct) c++;
-            else w++;
-          }
-          correctCount = c;
-          wrongCount = w;
-          unansweredCount = u;
-        }
-
-        const startedMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
-        const submittedMs = a.submittedAt
-          ? new Date(a.submittedAt).getTime()
-          : null;
-        const timeTakenSeconds =
-          startedMs != null &&
-          submittedMs != null &&
-          Number.isFinite(startedMs) &&
-          Number.isFinite(submittedMs)
-            ? Math.max(0, Math.round((submittedMs - startedMs) / 1000))
-            : "";
-
-        const maxForStudent = a.maxScore ?? totalMarks;
-        const pct = percentFromAttempt(a, totalMarks);
-
-        if (a.status === "submitted") {
-          if (lastScoreForRank !== a.score) {
-            rankCounter++;
-            lastScoreForRank = a.score;
-          }
-        }
-
-        return {
-          Rank: a.status === "submitted" ? rankCounter : "",
-          "Student Name": participant.name,
-          "Student ID": participant.studentId,
-          "Score Obtained": a.score ?? "",
-          "Max Score": maxForStudent,
-          "Percentage (%)": pct != null ? `${pct}%` : "",
-          "Total Questions": questions.length,
-          "Total Marks": totalMarks,
-          "Student Email": participant.email,
-          "Is Guest": participant.isGuest ? "Yes" : "No",
-          Status: a.status,
-          "Answered Questions": answeredCount,
-          "Unanswered Questions": unansweredCount,
-          "Correct Answers": correctCount,
-          "Wrong Answers": wrongCount,
-          "Time Taken (Seconds)": timeTakenSeconds,
-          "Started At": toIsoOrEmpty(a.startedAt),
-          "Submitted At": toIsoOrEmpty(a.submittedAt),
-          "Exam ID": testId,
-          "Exam Title": testTitle,
-        };
-      });
+      const summaryRows = threeSectionRows.map((r) => ({
+        "S.No.": r.sNo,
+        Rank: r.rank,
+        "Student Name": r.studentName,
+        [`PART-A (MATHS) (No. of Qus out of ${sectionInfo.partA.totalQuestions})`]:
+          r.partA.correct,
+        "PART-A (MATHS) Marks (x1.5)": r.partA.marks,
+        [`PART-B (STAT) (No. of Qus out of ${sectionInfo.partB.totalQuestions})`]:
+          r.partB.correct,
+        "PART-B (STAT) Marks (x1.5)": r.partB.marks,
+        [`PART-C (ECO) (No. of Qus out of ${sectionInfo.partC.totalQuestions})`]:
+          r.partC.correct,
+        "PART-C (ECO) Marks (x1.5)": r.partC.marks,
+        "TOTAL Qus Correct": r.totalCorrect,
+        "TOTAL MARKS": r.grandTotalMarks,
+        "Student ID": r.studentId,
+        "Student Email": r.studentEmail,
+        Status: r.status,
+        "Time Taken (Seconds)": r.timeTakenSeconds,
+        "Started At": toIsoOrEmpty(r.rawAttempt.startedAt),
+        "Submitted At": toIsoOrEmpty(r.rawAttempt.submittedAt),
+        "Exam ID": testId,
+        "Exam Title": testTitle,
+      }));
 
       if (summaryRows.length === 0) {
         alert("No student attempts found for this live test yet.");

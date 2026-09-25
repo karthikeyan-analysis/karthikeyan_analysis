@@ -5,7 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent } from "../../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
 import {
   getAttempt,
@@ -21,6 +21,7 @@ import type {
   ExamQuestionPublic,
   ExamTest,
 } from "../../features/exams/types";
+import { resolveThreeSections } from "../../features/exams/sectionResultUtils";
 import { CheckCircle2, Download, Loader2, XCircle } from "lucide-react";
 
 function initialsFromName(name: string) {
@@ -202,6 +203,61 @@ export default function ExamResult() {
     };
   }, [attempt, correctIndexById, keys, questions, test]);
 
+  const sectionBreakdown = useMemo(() => {
+    if (!test || questions.length === 0) return null;
+    const { partAQuestions, partBQuestions, partCQuestions, sectionInfo } =
+      resolveThreeSections(test, questions);
+
+    const answers = attempt?.answers || {};
+
+    const evalSection = (qList: ExamQuestionPublic[]) => {
+      let correct = 0;
+      let wrong = 0;
+      let unanswered = 0;
+      let attempted = 0;
+
+      for (const q of qList) {
+        const sel = answers[q.id];
+        if (sel == null) {
+          unanswered++;
+          continue;
+        }
+        attempted++;
+        const cor = correctIndexById.get(q.id);
+        if (cor == null) continue;
+        if (sel === cor) correct++;
+        else wrong++;
+      }
+
+      const marks = Math.round(correct * 1.5 * 100) / 100;
+      return {
+        correct,
+        wrong,
+        unanswered,
+        attempted,
+        marks,
+        totalQuestions: qList.length,
+      };
+    };
+
+    const partA = evalSection(partAQuestions);
+    const partB = evalSection(partBQuestions);
+    const partC = evalSection(partCQuestions);
+
+    const totalCorrect = partA.correct + partB.correct + partC.correct;
+    const grandTotalMarks =
+      Math.round((partA.marks + partB.marks + partC.marks) * 100) / 100;
+
+    return {
+      sectionInfo,
+      partA,
+      partB,
+      partC,
+      totalCorrect,
+      grandTotalMarks,
+    };
+  }, [attempt?.answers, correctIndexById, questions, test]);
+
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -274,6 +330,149 @@ export default function ExamResult() {
             Back to schedule
           </Button>
         </div>
+
+        {sectionBreakdown && (
+          <Card className="border-indigo-100 bg-gradient-to-br from-indigo-50/30 via-white to-slate-50/50 shadow-sm overflow-hidden">
+            <CardHeader className="pb-3 border-b border-indigo-50/60 bg-white/80">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <div>
+                  <CardTitle className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <span>Sectional Performance Breakdown</span>
+                    <Badge variant="outline" className="border-indigo-200 text-indigo-700 font-semibold text-xs">
+                      1.5 Marks / Correct Q
+                    </Badge>
+                  </CardTitle>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Part A: Mathematics • Part B: Statistics • Part C: Economics
+                  </p>
+                </div>
+                <div className="flex items-center gap-4 text-xs font-semibold text-slate-700 bg-indigo-50/80 px-3 py-1.5 rounded-lg border border-indigo-100">
+                  <div>
+                    Total Correct:{" "}
+                    <span className="text-emerald-700 font-bold text-sm">
+                      {sectionBreakdown.totalCorrect}
+                    </span>
+                  </div>
+                  <div className="h-3 w-px bg-indigo-200" />
+                  <div>
+                    Grand Total:{" "}
+                    <span className="text-indigo-900 font-bold text-sm">
+                      {sectionBreakdown.grandTotalMarks} Marks
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid gap-3 sm:gap-4 grid-cols-1 md:grid-cols-3">
+                {/* Part A: Mathematics */}
+                <div className="rounded-xl border border-blue-200 bg-white p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+                      Part A: Mathematics
+                    </span>
+                    <Badge className="bg-blue-50 text-blue-800 border-blue-200 text-xs">
+                      {sectionBreakdown.sectionInfo.partA.totalQuestions} Questions
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex items-baseline justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-slate-900">
+                        {sectionBreakdown.partA.correct}{" "}
+                        <span className="text-sm font-normal text-slate-500">
+                          / {sectionBreakdown.sectionInfo.partA.totalQuestions}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Correct Questions out of {sectionBreakdown.sectionInfo.partA.totalQuestions}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold text-blue-900">
+                        {sectionBreakdown.partA.marks}
+                      </div>
+                      <div className="text-[11px] font-semibold text-blue-600">Marks (x1.5)</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                    <span>Wrong: {sectionBreakdown.partA.wrong}</span>
+                    <span>Unanswered: {sectionBreakdown.partA.unanswered}</span>
+                  </div>
+                </div>
+
+                {/* Part B: Statistics */}
+                <div className="rounded-xl border border-indigo-200 bg-white p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-indigo-700 uppercase tracking-wider">
+                      Part B: Statistics
+                    </span>
+                    <Badge className="bg-indigo-50 text-indigo-800 border-indigo-200 text-xs">
+                      {sectionBreakdown.sectionInfo.partB.totalQuestions} Questions
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex items-baseline justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-slate-900">
+                        {sectionBreakdown.partB.correct}{" "}
+                        <span className="text-sm font-normal text-slate-500">
+                          / {sectionBreakdown.sectionInfo.partB.totalQuestions}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Correct Questions out of {sectionBreakdown.sectionInfo.partB.totalQuestions}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold text-indigo-900">
+                        {sectionBreakdown.partB.marks}
+                      </div>
+                      <div className="text-[11px] font-semibold text-indigo-600">Marks (x1.5)</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                    <span>Wrong: {sectionBreakdown.partB.wrong}</span>
+                    <span>Unanswered: {sectionBreakdown.partB.unanswered}</span>
+                  </div>
+                </div>
+
+                {/* Part C: Economics */}
+                <div className="rounded-xl border border-purple-200 bg-white p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-purple-700 uppercase tracking-wider">
+                      Part C: Economics
+                    </span>
+                    <Badge className="bg-purple-50 text-purple-800 border-purple-200 text-xs">
+                      {sectionBreakdown.sectionInfo.partC.totalQuestions} Questions
+                    </Badge>
+                  </div>
+                  <div className="mt-3 flex items-baseline justify-between">
+                    <div>
+                      <div className="text-2xl font-bold text-slate-900">
+                        {sectionBreakdown.partC.correct}{" "}
+                        <span className="text-sm font-normal text-slate-500">
+                          / {sectionBreakdown.sectionInfo.partC.totalQuestions}
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        Correct Questions out of {sectionBreakdown.sectionInfo.partC.totalQuestions}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xl font-bold text-purple-900">
+                        {sectionBreakdown.partC.marks}
+                      </div>
+                      <div className="text-[11px] font-semibold text-purple-600">Marks (x1.5)</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600">
+                    <span>Wrong: {sectionBreakdown.partC.wrong}</span>
+                    <span>Unanswered: {sectionBreakdown.partC.unanswered}</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         <Card className="border-slate-200 shadow-sm">
           <CardContent className="pt-6">

@@ -40,6 +40,10 @@ import {
 } from "../../features/exams/adminTestReportUtils";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
 import { formatPartLabel } from "../../features/exams/examScoring";
+import {
+  computeThreeSectionBreakdown,
+  resolveThreeSections,
+} from "../../features/exams/sectionResultUtils";
 
 function safeFileName(name: string) {
   return (name || "export").replace(/[\\/:*?"<>|]+/g, "_");
@@ -102,6 +106,8 @@ export default function ExamResults() {
   );
   const [test, setTest] = useState<ExamTest | null>(null);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
+  const [questions, setQuestions] = useState<ExamQuestionPublic[]>([]);
+  const [keys, setKeys] = useState<ExamQuestionPrivate[] | null>(null);
 
   useEffect(() => {
     if (!testId) return;
@@ -109,13 +115,19 @@ export default function ExamResults() {
     const load = async () => {
       setLoading(true);
       try {
-        const [t, a] = await Promise.all([
+        const [t, a, qs, k] = await Promise.all([
           getExamTest(testId),
           listAttemptsForAdmin(testId),
+          listPublicQuestions(testId).catch(() => [] as ExamQuestionPublic[]),
+          listPrivateQuestions(testId).catch(
+            () => null as ExamQuestionPrivate[] | null,
+          ),
         ]);
         if (cancelled) return;
         setTest(t);
         setAttempts(a);
+        setQuestions(qs);
+        setKeys(k);
       } catch (e) {
         console.error(e);
       } finally {
@@ -133,172 +145,97 @@ export default function ExamResults() {
     return formatExamBatchLabel(test, batches);
   }, [batches, test]);
 
-  /** Matches Excel export: submitted highest marks first, then in-progress / not submitted. */
-  const sortedAttemptsForDisplay = useMemo(() => {
-    if (attempts.length === 0) return [];
-    const { ranked, unranked } = sortAttemptsForRankExport(attempts, students);
-    return [...ranked, ...unranked];
-  }, [attempts, students]);
-
-  const attemptsWithRank = useMemo(() => {
-    let r = 0;
-    let lastScore: number | undefined = undefined;
-    return sortedAttemptsForDisplay.map((a) => {
-      if (a.status === "submitted") {
-        // Dense ranking: same score = same rank
-        if (lastScore !== a.score) {
-          r++;
-          lastScore = a.score;
-        }
-        return {
-          attempt: a,
-          rank: r,
-        };
-      }
-      return {
-        attempt: a,
-        rank: null,
-      };
+  const { sectionInfo, rows: threeSectionRows } = useMemo(() => {
+    return computeThreeSectionBreakdown({
+      test,
+      questions,
+      keys,
+      attempts,
+      students,
+      resolveParticipant: resolveAttemptParticipant,
     });
-  }, [sortedAttemptsForDisplay]);
-
+  }, [test, questions, keys, attempts, students]);
   const exportExcel = async () => {
     if (!test) return;
     setExporting(true);
     try {
-      const [qs, keys] = await Promise.all([
-        listPublicQuestions(testId).catch(() => [] as ExamQuestionPublic[]),
-        listPrivateQuestions(testId).catch(
-          () => null as ExamQuestionPrivate[] | null,
-        ),
-      ]);
+      let curQuestions = questions;
+      let curKeys = keys;
+      if (curQuestions.length === 0 || !curKeys) {
+        const [qs, k] = await Promise.all([
+          listPublicQuestions(testId).catch(() => [] as ExamQuestionPublic[]),
+          listPrivateQuestions(testId).catch(
+            () => null as ExamQuestionPrivate[] | null,
+          ),
+        ]);
+        curQuestions = qs;
+        curKeys = k;
+      }
 
-      const questions = [...qs];
+      const { sectionInfo: secInfo, rows: computedRows } =
+        computeThreeSectionBreakdown({
+          test,
+          questions: curQuestions,
+          keys: curKeys,
+          attempts,
+          students,
+          resolveParticipant: resolveAttemptParticipant,
+        });
+
       const questionIndexById = new Map<string, number>();
       const questionById = new Map<string, ExamQuestionPublic>();
-      for (let i = 0; i < questions.length; i++) {
-        questionIndexById.set(questions[i]!.id, i + 1);
-        questionById.set(questions[i]!.id, questions[i]!);
+      for (let i = 0; i < curQuestions.length; i++) {
+        questionIndexById.set(curQuestions[i]!.id, i + 1);
+        questionById.set(curQuestions[i]!.id, curQuestions[i]!);
       }
       const correctIndexById = new Map<string, number>();
-      if (keys) {
-        for (const k of keys) correctIndexById.set(k.id, k.correctIndex);
+      if (curKeys) {
+        for (const k of curKeys) correctIndexById.set(k.id, k.correctIndex);
       }
 
-      const totalQuestions = questions.length;
+      const totalQuestions = curQuestions.length;
       const totalMarks =
         typeof test.totalMarks === "number"
           ? test.totalMarks
-          : questions.reduce((sum, q) => sum + (q.marks || 0), 0);
+          : curQuestions.reduce((sum, q) => sum + (q.marks || 0), 0);
 
       const partsList =
         test.partsMode === "multi"
           ? [...(test.parts || [])].sort((a, b) => a.order - b.order)
           : [];
       const partById = new Map(partsList.map((p) => [p.id, p]));
-      const neg = test.negativeMarkPerWrong || 0;
 
-      const avgMarksPerQuestion =
-        totalQuestions > 0
-          ? Math.round((totalMarks / totalQuestions) * 1000) / 1000
-          : "";
+      // Sheet 1: Ranked results according to handwritten spec & prompt
+      const rankedResultRows = computedRows.map((row) => ({
+        "S.No.": row.sNo,
+        "Rank": row.rank,
+        "Student Name": row.studentName,
+        [`PART-A (MATHS) (No. of Qus out of ${secInfo.partA.totalQuestions})`]:
+          row.partA.correct,
+        "PART-A (MATHS) Marks (x1.5)": row.partA.marks,
+        [`PART-B (STAT) (No. of Qus out of ${secInfo.partB.totalQuestions})`]:
+          row.partB.correct,
+        "PART-B (STAT) Marks (x1.5)": row.partB.marks,
+        [`PART-C (ECO) (No. of Qus out of ${secInfo.partC.totalQuestions})`]:
+          row.partC.correct,
+        "PART-C (ECO) Marks (x1.5)": row.partC.marks,
+        "TOTAL Qus Correct": row.totalCorrect,
+        "TOTAL MARKS": row.grandTotalMarks,
+        "Student ID": row.studentId,
+        "Student Email": row.studentEmail,
+        "Status": row.status,
+        "Submitted At": row.submittedAt,
+        "Time Taken (Seconds)": row.timeTakenSeconds,
+      }));
 
-      const { ranked, unranked } = sortAttemptsForRankExport(
-        attempts,
-        students,
-      );
-      const exportAttemptOrder = [...ranked, ...unranked];
-
-      let rankCounter = 0;
-      let lastScoreForRank: number | undefined = undefined;
-      const summaryRows = exportAttemptOrder.map((a) => {
-        const participant = resolveAttemptParticipant(a, students);
-        const answers = a.answers || {};
-        const answeredCount = Object.values(answers).filter(
-          (v) => v != null,
-        ).length;
-        let correctCount: number | "" = "";
-        let wrongCount: number | "" = "";
-        let unansweredCount: number | "" = "";
-        if (keys) {
-          let c = 0;
-          let w = 0;
-          let u = 0;
-          for (const q of questions) {
-            const selected = answers[q.id] ?? null;
-            if (selected == null) {
-              u++;
-              continue;
-            }
-            const correct = correctIndexById.get(q.id);
-            if (correct == null) continue;
-            if (selected === correct) c++;
-            else w++;
-          }
-          correctCount = c;
-          wrongCount = w;
-          unansweredCount = u;
-        }
-
-        const startedMs = a.startedAt ? new Date(a.startedAt).getTime() : null;
-        const submittedMs = a.submittedAt
-          ? new Date(a.submittedAt).getTime()
-          : null;
-        const timeTakenSeconds =
-          startedMs != null &&
-          submittedMs != null &&
-          Number.isFinite(startedMs) &&
-          Number.isFinite(submittedMs)
-            ? Math.max(0, Math.round((submittedMs - startedMs) / 1000))
-            : "";
-
-        const maxForStudent = a.maxScore ?? totalMarks;
-        const pct = percentFromAttempt(a, totalMarks);
-
-        if (a.status === "submitted") {
-          // Dense ranking: same score = same rank
-          if (lastScoreForRank !== a.score) {
-            rankCounter++;
-            lastScoreForRank = a.score;
-          }
-        }
-
-        return {
-          rank: a.status === "submitted" ? rankCounter : "",
-          studentName: participant.name,
-          studentId: participant.studentId,
-          marksObtained: a.score ?? "",
-          maxMarks: maxForStudent,
-          percentage: pct != null ? pct : "",
-          totalQuestions,
-          totalMarks,
-          avgMarksPerQuestion,
-          studentEmail: participant.email,
-          isGuest: participant.isGuest ? "yes" : "no",
-          status: a.status,
-          answeredCount,
-          unansweredCount,
-          correctCount,
-          wrongCount,
-          uid: a.uid,
-          studentRecordId: a.studentRecordId || "",
-          examId: test.id,
-          examTitle: test.title,
-          batch: batchName,
-          subject: test.subject,
-          startedAt: toIsoOrEmpty(a.startedAt),
-          submittedAt: toIsoOrEmpty(a.submittedAt),
-          hardEndAt: toIsoOrEmpty((a as any).hardEndAt),
-          timeTakenSeconds,
-        };
-      });
-
+      // Sheet 2: QuestionByQuestion
+      const exportAttemptOrder = computedRows.map((r) => r.rawAttempt);
       const questionByQuestionRows = exportAttemptOrder.flatMap((a) => {
         const participant = resolveAttemptParticipant(a, students);
         const answers = a.answers || {};
-        return questions.map((q) => {
+        return curQuestions.map((q) => {
           const selected = answers[q.id] ?? null;
-          const correct = keys ? correctIndexById.get(q.id) : undefined;
+          const correct = curKeys ? correctIndexById.get(q.id) : undefined;
           const selectedText =
             selected != null ? (q.options?.[selected] ?? "") : "";
           const correctText =
@@ -336,39 +273,31 @@ export default function ExamResults() {
         });
       });
 
-      let wideRank = 0;
-      let lastScoreForWideRank: number | undefined = undefined;
-      const wideRows = exportAttemptOrder.map((a) => {
+      // Sheet 3: Wide
+      const wideRows = computedRows.map((row) => {
+        const a = row.rawAttempt;
         const participant = resolveAttemptParticipant(a, students);
-        const maxForStudent = a.maxScore ?? totalMarks;
-        const pct = percentFromAttempt(a, totalMarks);
-        if (a.status === "submitted") {
-          // Dense ranking: same score = same rank
-          if (lastScoreForWideRank !== a.score) {
-            wideRank++;
-            lastScoreForWideRank = a.score;
-          }
-        }
         const base: Record<string, any> = {
-          rank: a.status === "submitted" ? wideRank : "",
-          studentName: participant.name,
-          studentId: participant.studentId,
-          marksObtained: a.score ?? "",
-          maxMarks: maxForStudent,
-          percentage: pct != null ? pct : "",
-          totalQuestions,
-          totalMarks,
-          avgMarksPerQuestion,
-          uid: a.uid,
-          studentEmail: participant.email,
-          isGuest: participant.isGuest ? "yes" : "no",
-          status: a.status,
+          "S.No.": row.sNo,
+          "Rank": row.rank,
+          "Student Name": row.studentName,
+          "Student ID": row.studentId,
+          "Student Email": row.studentEmail,
+          "Status": row.status,
+          "Total Correct": row.totalCorrect,
+          "Grand Total Marks": row.grandTotalMarks,
+          "Part A (Maths) Correct": row.partA.correct,
+          "Part A (Maths) Marks": row.partA.marks,
+          "Part B (Stat) Correct": row.partB.correct,
+          "Part B (Stat) Marks": row.partB.marks,
+          "Part C (Eco) Correct": row.partC.correct,
+          "Part C (Eco) Marks": row.partC.marks,
         };
         const answers = a.answers || {};
-        for (const q of questions) {
+        for (const q of curQuestions) {
           const qNo = questionIndexById.get(q.id) ?? "";
           const selected = answers[q.id] ?? null;
-          const correct = keys ? correctIndexById.get(q.id) : undefined;
+          const correct = curKeys ? correctIndexById.get(q.id) : undefined;
           const letter =
             selected == null || typeof selected !== "number"
               ? ""
@@ -385,57 +314,7 @@ export default function ExamResults() {
         return base;
       });
 
-      const partWiseRows = partsList.length
-        ? exportAttemptOrder.map((a) => {
-            const participant = resolveAttemptParticipant(a, students);
-            const answers = a.answers || {};
-            const row: Record<string, any> = {
-              studentName: participant.name,
-              studentId: participant.studentId,
-            };
-            let totalAttempted = 0;
-            let totalCorrect = 0;
-            for (const part of partsList) {
-              const label = formatPartLabel(part);
-              let attempted = 0;
-              let correctInPart = 0;
-              let marksInPart = 0;
-              for (const q of questions) {
-                if (q.partId !== part.id) continue;
-                const selected = answers[q.id] ?? null;
-                if (selected == null) continue;
-                attempted++;
-                const correct = keys ? correctIndexById.get(q.id) : undefined;
-                if (correct == null) continue;
-                if (selected === correct) {
-                  correctInPart++;
-                  marksInPart += q.marks || 0;
-                } else {
-                  marksInPart -= neg;
-                }
-              }
-              marksInPart = Math.max(0, marksInPart);
-              totalAttempted += attempted;
-              totalCorrect += correctInPart;
-              row[`${label} - Attempted`] = attempted;
-              row[`${label} - Correct`] = correctInPart;
-              row[`${label} - Marks`] = marksInPart;
-            }
-            row["Total Attempted"] = totalAttempted;
-            row["Total Correct"] = totalCorrect;
-            row["Total Marks Scored"] = a.score ?? "";
-            return row;
-          })
-        : [];
-
-      const rankedResultRows = summaryRows.map((row) => ({
-        rank: row.rank,
-        studentName: row.studentName,
-        marksObtained: row.marksObtained,
-        correctCount: row.correctCount,
-      }));
-
-      // Sheet 4: results in order of who submitted first.
+      // Sheet 4: Submission order
       const submissionOrderRows = [...exportAttemptOrder]
         .filter((a) => a.status === "submitted" && a.submittedAt)
         .sort(
@@ -474,11 +353,6 @@ export default function ExamResults() {
 
       const ws4 = XLSX.utils.json_to_sheet(submissionOrderRows);
       XLSX.utils.book_append_sheet(wb, ws4, "Submission order");
-
-      if (partWiseRows.length) {
-        const ws5 = XLSX.utils.json_to_sheet(partWiseRows);
-        XLSX.utils.book_append_sheet(wb, ws5, "Part-wise summary");
-      }
 
       const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" });
       const blob = new Blob([buf], {
@@ -625,55 +499,98 @@ export default function ExamResults() {
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Attempts</CardTitle>
+          <div>
+            <CardTitle>Attempts & Rankings</CardTitle>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Part A: Mathematics (35 Q) • Part B: Statistics (35 Q) • Part C: Economics (35 Q) • 1.5 marks / question
+            </p>
+          </div>
           <Badge variant="outline" className="text-xs">
-            {sortedAttemptsForDisplay.length} total
+            {threeSectionRows.length} total
           </Badge>
         </CardHeader>
         <CardContent>
-          {sortedAttemptsForDisplay.length === 0 ? (
+          {threeSectionRows.length === 0 ? (
             <div className="text-sm text-slate-500">No attempts yet.</div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-14">Rank</TableHead>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Started</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>Rejoin</TableHead>
-                    <TableHead>Marks</TableHead>
-                    <TableHead>Percent</TableHead>
+                  <TableRow className="bg-slate-50/80">
+                    <TableHead className="w-12 text-center font-bold text-slate-900">S.No.</TableHead>
+                    <TableHead className="w-14 text-center font-bold text-slate-900">Rank</TableHead>
+                    <TableHead className="font-bold text-slate-900 min-w-[180px]">Student Name</TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">
+                      <div>PART-A (MATHS)</div>
+                      <div className="text-[11px] font-normal text-slate-500">Correct / {sectionInfo.partA.totalQuestions} (x1.5 M)</div>
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">
+                      <div>PART-B (STAT)</div>
+                      <div className="text-[11px] font-normal text-slate-500">Correct / {sectionInfo.partB.totalQuestions} (x1.5 M)</div>
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">
+                      <div>PART-C (ECO)</div>
+                      <div className="text-[11px] font-normal text-slate-500">Correct / {sectionInfo.partC.totalQuestions} (x1.5 M)</div>
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-emerald-800">
+                      <div>Total Correct</div>
+                      <div className="text-[11px] font-normal text-slate-500">Questions</div>
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-indigo-900">
+                      <div>Grand Total</div>
+                      <div className="text-[11px] font-normal text-slate-500">Marks</div>
+                    </TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">Status</TableHead>
+                    <TableHead className="text-center font-bold text-slate-900">Action / Rejoin</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {attemptsWithRank.map(({ attempt: a, rank }) => {
-                    const p = resolveAttemptParticipant(a, students);
-                    const rankLabel = rank != null ? String(rank) : "—";
-                    const maxMarks = test
-                      ? (a.maxScore ?? test.totalMarks)
-                      : null;
-                    const percent =
-                      a.score != null && maxMarks != null && maxMarks > 0
-                        ? Math.round((a.score / maxMarks) * 1000) / 10
-                        : null;
+                  {threeSectionRows.map((r) => {
+                    const a = r.rawAttempt;
                     return (
-                      <TableRow key={a.id} className="hover:bg-slate-50">
-                        <TableCell className="text-sm font-semibold text-slate-800 tabular-nums">
-                          {rankLabel}
+                      <TableRow key={a.id || a.uid} className="hover:bg-slate-50">
+                        <TableCell className="text-center font-medium text-slate-600 tabular-nums">
+                          {r.sNo}
                         </TableCell>
-                        <TableCell className="min-w-[260px]">
-                          <div className="font-medium text-slate-900">
-                            {p.name || "Unknown"}
+                        <TableCell className="text-center font-bold text-slate-900 tabular-nums">
+                          {r.rank}
+                        </TableCell>
+                        <TableCell className="min-w-[180px]">
+                          <div className="font-semibold text-slate-900">
+                            {r.studentName}
                           </div>
-                          <div className="text-xs text-slate-600">
-                            {p.email || a.uid}
+                          <div className="text-xs text-slate-500">
+                            {r.studentId ? `ID: ${r.studentId} • ` : ""}
+                            {r.studentEmail || a.uid}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {a.status === "submitted" ? (
+                        <TableCell className="text-center tabular-nums">
+                          <span className="font-bold text-slate-900">{r.partA.correct}</span>
+                          <span className="text-xs text-slate-500"> / {sectionInfo.partA.totalQuestions}</span>
+                          <span className="block text-xs font-semibold text-indigo-600">({r.partA.marks} M)</span>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          <span className="font-bold text-slate-900">{r.partB.correct}</span>
+                          <span className="text-xs text-slate-500"> / {sectionInfo.partB.totalQuestions}</span>
+                          <span className="block text-xs font-semibold text-indigo-600">({r.partB.marks} M)</span>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          <span className="font-bold text-slate-900">{r.partC.correct}</span>
+                          <span className="text-xs text-slate-500"> / {sectionInfo.partC.totalQuestions}</span>
+                          <span className="block text-xs font-semibold text-indigo-600">({r.partC.marks} M)</span>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          <Badge className="bg-emerald-50 text-emerald-800 border-emerald-200 font-bold px-2 py-0.5 text-sm">
+                            {r.totalCorrect}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-center tabular-nums">
+                          <span className="text-base font-extrabold text-indigo-900">
+                            {r.grandTotalMarks}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {r.status === "submitted" ? (
                             <Badge className="bg-emerald-100 text-emerald-800">
                               Submitted
                             </Badge>
@@ -683,17 +600,7 @@ export default function ExamResults() {
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell className="text-xs text-slate-600">
-                          {a.startedAt
-                            ? new Date(a.startedAt).toLocaleString()
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-600">
-                          {a.submittedAt
-                            ? new Date(a.submittedAt).toLocaleString()
-                            : "-"}
-                        </TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">
                           {rejoinNeedsApproval(a) ? (
                             <Button
                               variant="outline"
@@ -714,16 +621,8 @@ export default function ExamResults() {
                               Approved
                             </Badge>
                           ) : (
-                            <span className="text-xs text-slate-500">-</span>
+                            <span className="text-xs text-slate-400">—</span>
                           )}
-                        </TableCell>
-                        <TableCell className="text-sm font-semibold text-slate-900">
-                          {a.score != null && maxMarks != null
-                            ? `${a.score} / ${maxMarks}`
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-700">
-                          {percent != null ? `${percent}%` : "-"}
                         </TableCell>
                       </TableRow>
                     );
