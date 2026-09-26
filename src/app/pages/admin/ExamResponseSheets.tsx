@@ -2,8 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../components/ui/table";
 import { useData } from "../../context/DataContext";
 import {
   getExamTest,
@@ -13,8 +25,16 @@ import {
 } from "../../features/exams/examApi";
 import { resolveAttemptParticipant } from "../../features/exams/adminTestReportUtils";
 import { formatExamBatchLabel } from "../../features/exams/examBatchUtils";
-import { openResponseSheetInTab, safeResponseSheetFileName } from "../../features/exams/responseSheetPdf";
-import type { ExamAttempt, ExamQuestionPrivate, ExamQuestionPublic, ExamTest } from "../../features/exams/types";
+import {
+  openResponseSheetInTab,
+  safeResponseSheetFileName,
+} from "../../features/exams/responseSheetPdf";
+import type {
+  ExamAttempt,
+  ExamQuestionPrivate,
+  ExamQuestionPublic,
+  ExamTest,
+} from "../../features/exams/types";
 import bannerImage from "../../../banner.jpeg";
 import { Download, FileText, Loader2 } from "lucide-react";
 
@@ -63,11 +83,16 @@ export default function ExamResponseSheets() {
       .sort((a, b) => {
         const pa = resolveAttemptParticipant(a, students);
         const pb = resolveAttemptParticipant(b, students);
-        return (pa.name || pa.email || a.uid).localeCompare(pb.name || pb.email || b.uid);
+        return (pa.name || pa.email || a.uid).localeCompare(
+          pb.name || pb.email || b.uid,
+        );
       });
   }, [attempts, students]);
 
-  const batchLabel = useMemo(() => (test ? formatExamBatchLabel(test, batches) : ""), [batches, test]);
+  const batchLabel = useMemo(
+    () => (test ? formatExamBatchLabel(test, batches) : ""),
+    [batches, test],
+  );
 
   const downloadAttempt = (attempt: ExamAttempt) => {
     if (!test) return;
@@ -83,7 +108,9 @@ export default function ExamResponseSheets() {
         photoURL: participant.photoURL,
         generatedBy: "admin",
       },
-      safeResponseSheetFileName(`${test.title}-${participant.name || participant.email || attempt.uid}-response-sheet`),
+      safeResponseSheetFileName(
+        `${test.title}-${participant.name || participant.email || attempt.uid}-response-sheet`,
+      ),
     );
   };
 
@@ -95,7 +122,8 @@ export default function ExamResponseSheets() {
     );
   }
 
-  if (!test) return <div className="text-sm text-slate-500">Test not found.</div>;
+  if (!test)
+    return <div className="text-sm text-slate-500">Test not found.</div>;
 
   return (
     <div className="space-y-6">
@@ -105,9 +133,12 @@ export default function ExamResponseSheets() {
             <FileText className="w-3.5 h-3.5" />
             Response sheet PDFs
           </div>
-          <h2 className="mt-2 text-xl font-semibold text-slate-900">Download individual response sheets</h2>
+          <h2 className="mt-2 text-xl font-semibold text-slate-900">
+            Download individual response sheets
+          </h2>
           <p className="mt-1 text-sm text-slate-600">
-            {test.title} • {batchLabel} • {submittedAttempts.length} submitted student
+            {test.title} • {batchLabel} • {submittedAttempts.length} submitted
+            student
             {submittedAttempts.length === 1 ? "" : "s"}
           </p>
         </div>
@@ -123,7 +154,8 @@ export default function ExamResponseSheets() {
         <CardContent>
           {submittedAttempts.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-sm text-slate-500">
-              No submitted attempts yet. Response sheets appear here after students complete the exam.
+              No submitted attempts yet. Response sheets appear here after
+              students complete the exam.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -138,25 +170,37 @@ export default function ExamResponseSheets() {
                 </TableHeader>
                 <TableBody>
                   {submittedAttempts.map((attempt) => {
-                    const participant = resolveAttemptParticipant(attempt, students);
-                    const answered = Object.values(attempt.answers || {}).filter((v) => v != null).length;
+                    const participant = resolveAttemptParticipant(
+                      attempt,
+                      students,
+                    );
+                    const answered = Object.values(
+                      attempt.answers || {},
+                    ).filter((v) => v != null).length;
                     const fileName = safeResponseSheetFileName(
                       `${test.title}-${participant.name || participant.email || attempt.uid}-response-sheet`,
                     );
                     return (
                       <TableRow key={attempt.id}>
                         <TableCell className="min-w-[260px]">
-                          <div className="font-medium text-slate-900">{participant.name || "Unknown"}</div>
+                          <div className="font-medium text-slate-900">
+                            {participant.name || "Unknown"}
+                          </div>
                           <div className="text-xs text-slate-600">
-                            {participant.studentId || participant.email || attempt.uid}
+                            {participant.studentId ||
+                              participant.email ||
+                              attempt.uid}
                           </div>
                         </TableCell>
                         <TableCell className="text-xs text-slate-600">
-                          {attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString() : "-"}
+                          {attempt.submittedAt
+                            ? new Date(attempt.submittedAt).toLocaleString()
+                            : "-"}
                         </TableCell>
                         <TableCell>
                           <div className="text-sm font-semibold text-slate-900">
-                            {attempt.score ?? 0} / {attempt.maxScore ?? test.totalMarks}
+                            {attempt.score ?? 0} /{" "}
+                            {attempt.maxScore ?? test.totalMarks}
                           </div>
                           <div className="text-xs text-slate-500">
                             Answered {answered} / {questions.length}
@@ -169,7 +213,8 @@ export default function ExamResponseSheets() {
                             title={`${fileName}.pdf`}
                             onClick={() => downloadAttempt(attempt)}
                           >
-                            <Download className="w-4 h-4 mr-2" />Open PDF
+                            <Download className="w-4 h-4 mr-2" />
+                            Open PDF
                           </Button>
                         </TableCell>
                       </TableRow>

@@ -68,11 +68,15 @@ export function useLiveClassPresence(params: {
   const [reconnectToken, setReconnectToken] = useState(0);
   const [partyTracks, setPartyTracks] = useState<PartyTracks | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const wasEverConnectedRef = useRef(false);
+  const [wasEverConnected, setWasEverConnected] = useState(false);
   const disposeClientRef = useRef<(() => void) | null>(null);
   /** Holds session$ so the PeerConnection stays alive and closes on leave. */
   const sessionHoldRef = useRef<{ unsubscribe: () => void } | null>(null);
 
   const reconnect = useCallback(() => {
+    setIsReconnecting(true);
     setConnectError(null);
     setReconnectToken((n) => n + 1);
   }, []);
@@ -80,7 +84,9 @@ export function useLiveClassPresence(params: {
   useEffect(() => {
     let cancelled = false;
     setPartyTracks(null);
-    setConnectError(null);
+    if (!wasEverConnectedRef.current) {
+      setConnectError(null);
+    }
 
     createPartyTracksClient(classId)
       .then((handle) => {
@@ -100,7 +106,14 @@ export function useLiveClassPresence(params: {
               err instanceof Error
                 ? err.message
                 : "Could not establish a media session.";
-            setConnectError(message);
+            console.warn("[live-class] Media session error:", message);
+            // If already connected in room, attempt background recovery instead of kicking user out
+            if (wasEverConnectedRef.current) {
+              setIsReconnecting(true);
+              reconnect();
+            } else {
+              setConnectError(message);
+            }
           },
         });
 
@@ -108,7 +121,12 @@ export function useLiveClassPresence(params: {
       })
       .catch((err) => {
         if (!cancelled) {
-          setConnectError(err?.message || "Could not connect to the class.");
+          if (wasEverConnectedRef.current) {
+            setIsReconnecting(true);
+            setTimeout(() => reconnect(), 3000);
+          } else {
+            setConnectError(err?.message || "Could not connect to the class.");
+          }
         }
       });
 
@@ -119,7 +137,7 @@ export function useLiveClassPresence(params: {
       disposeClientRef.current?.();
       disposeClientRef.current = null;
     };
-  }, [classId, reconnectToken]);
+  }, [classId, reconnectToken, reconnect]);
 
   const mic = useMemo(() => getMic(), []);
   const camera = useMemo(() => getCamera(), []);
@@ -203,13 +221,19 @@ export function useLiveClassPresence(params: {
 
   // Recover automatically if partytracks brings the PC back before we give up.
   useEffect(() => {
-    if (isPcConnected) setConnectError(null);
+    if (isPcConnected) {
+      wasEverConnectedRef.current = true;
+      setWasEverConnected(true);
+      setIsReconnecting(false);
+      setConnectError(null);
+    }
   }, [isPcConnected]);
 
   // Auto-reconnect as soon as device regains network connectivity
   useEffect(() => {
     const handleOnline = () => {
       setConnectError(null);
+      setIsReconnecting(true);
       reconnect();
     };
     window.addEventListener("online", handleOnline);
@@ -218,34 +242,45 @@ export function useLiveClassPresence(params: {
     };
   }, [reconnect]);
 
-  // If ICE dies or connection disconnects/fails, auto-retry first, then surface error after a grace period.
+  // If ICE dies or connection disconnects/fails, auto-retry smoothly without premature full-page kicks.
   useEffect(() => {
     if (!partyTracks) return;
     if (
       connectionState !== "failed" &&
       connectionState !== "closed" &&
       connectionState !== "disconnected"
-    )
+    ) {
+      setIsReconnecting(false);
       return;
+    }
 
-    // First, attempt an automatic recovery reconnect after 3 seconds
+    setIsReconnecting(true);
+
+    // Give WebRTC ICE a generous grace period to self-heal alternate candidates from "disconnected"
+    // Only trigger full background reconnect if state turns "failed" (2.5s) or stays "disconnected" (12s)
+    const retryDelayMs = connectionState === "failed" ? 2500 : 12000;
     const autoRetryTimer = window.setTimeout(() => {
       if (connectionState === "disconnected" || connectionState === "failed") {
+        console.warn(
+          `[live-class] Connection state is "${connectionState}", triggering background auto-reconnect...`,
+        );
         reconnect();
       }
-    }, 3000);
+    }, retryDelayMs);
 
+    // Only surface fatal error if the user was never connected initially
     const errorTimer = window.setTimeout(() => {
       if (
-        connectionState === "failed" ||
-        connectionState === "closed" ||
-        connectionState === "disconnected"
+        (connectionState === "failed" ||
+          connectionState === "closed" ||
+          connectionState === "disconnected") &&
+        !wasEverConnectedRef.current
       ) {
         setConnectError(
           "Media connection dropped due to network issues. Click 'Rejoin Class' to re-establish your live connection.",
         );
       }
-    }, 7000);
+    }, 25000);
 
     return () => {
       window.clearTimeout(autoRetryTimer);
@@ -253,14 +288,16 @@ export function useLiveClassPresence(params: {
     };
   }, [connectionState, partyTracks, reconnect]);
 
-  // Stuck in "new"/"connecting" usually means ICE/TURN or mic permission never completed.
+  // Stuck in "new"/"connecting" usually means ICE/TURN or mic permission never completed on initial join.
   useEffect(() => {
     if (!partyTracks || isPcConnected || connectError) return;
     const t = window.setTimeout(() => {
-      setConnectError(
-        "Could not establish a media connection. Check your internet connection and try rejoining.",
-      );
-    }, 25000);
+      if (!wasEverConnectedRef.current) {
+        setConnectError(
+          "Could not establish a media connection. Check your internet connection and try rejoining.",
+        );
+      }
+    }, 30000);
     return () => window.clearTimeout(t);
   }, [partyTracks, isPcConnected, connectError]);
 
@@ -331,6 +368,40 @@ export function useLiveClassPresence(params: {
     screenMeta?.trackName,
   ]);
 
+  // Periodic heartbeat every 25 seconds to keep Firestore presence and connection alive
+  useEffect(() => {
+    if (!session?.sessionId || !isPcConnected) return;
+    const interval = window.setInterval(() => {
+      upsertOwnPresence({
+        classId,
+        uid,
+        role,
+        name,
+        sessionId: session.sessionId,
+        audioTrack:
+          isMicOn && isPcConnected ? toPublishedTrack(audioMeta) : null,
+        videoTrack:
+          isCameraOn && isPcConnected ? toPublishedTrack(videoMeta) : null,
+        screenshareVideoTrack:
+          isScreenOn && isPcConnected ? toPublishedTrack(screenMeta) : null,
+      }).catch((err) => console.warn("[live-class] Heartbeat warning:", err));
+    }, 25000);
+    return () => window.clearInterval(interval);
+  }, [
+    classId,
+    uid,
+    role,
+    name,
+    session?.sessionId,
+    isPcConnected,
+    isMicOn,
+    isCameraOn,
+    isScreenOn,
+    audioMeta,
+    videoMeta,
+    screenMeta,
+  ]);
+
   // Remove our presence doc the moment we leave, regardless of why.
   useEffect(() => {
     return () => {
@@ -349,6 +420,8 @@ export function useLiveClassPresence(params: {
     reconnect,
     /** True only when WebRTC PeerConnection is actually connected (not merely session created). */
     isConnected: isPcConnected,
+    isReconnecting,
+    wasEverConnected: wasEverConnected || wasEverConnectedRef.current,
     connectionState,
     mic,
     camera,

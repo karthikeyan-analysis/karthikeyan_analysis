@@ -79,6 +79,8 @@ function LiveClassRoomInner({
     connectError,
     reconnect,
     isConnected,
+    isReconnecting,
+    wasEverConnected,
     mic,
     camera,
     screenshare,
@@ -440,7 +442,7 @@ function LiveClassRoomInner({
     navigate("/admin/live-classes");
   };
 
-  if (connectError) {
+  if (connectError && !wasEverConnected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center">
         <div className="rounded-2xl border border-rose-200 bg-white p-6 shadow-xl max-w-md w-full space-y-4 text-center">
@@ -492,6 +494,10 @@ function LiveClassRoomInner({
             });
             const track = stream.getVideoTracks()[0];
             if (track) {
+              track.onended = () => {
+                screenshare.stopBroadcasting();
+                screenshare.disableSource();
+              };
               (screenshare.video as any).broadcastTrack$.next(track);
             }
           } else {
@@ -521,16 +527,12 @@ function LiveClassRoomInner({
     updatedAt: new Date().toISOString(),
   };
 
-  const spotlightPresence = cls.spotlightUid
+  const remoteSpotlightPresence = cls.spotlightUid
     ? roster.find((p) => p.id === cls.spotlightUid)
-    : roster.find((p) =>
-        p.id === uid ? isScreenOn : !!p.screenshareVideoTrack,
-      ) || null;
+    : roster.find((p) => p.id !== uid && !!p.screenshareVideoTrack) || null;
 
   const displayRoster = roster.length > 0 ? roster : [localPresence];
-  const otherRoster = spotlightPresence
-    ? roster.filter((p) => p.id !== spotlightPresence.id)
-    : roster;
+  const otherRoster = roster.filter((p) => p.id !== uid);
   const isRecording = !!recordingHandle || cls.recordingStatus === "recording";
   const isUploading = cls.recordingStatus === "uploading";
 
@@ -545,9 +547,6 @@ function LiveClassRoomInner({
         mediaReady={isConnected}
         localVideoTrack$={isLocal ? camera.broadcastTrack$ : undefined}
         localAudioTrack$={isLocal ? mic.broadcastTrack$ : undefined}
-        localScreenshareTrack$={
-          isLocal && isScreenOn ? screenshare.video.broadcastTrack$ : undefined
-        }
         spotlighted={spotlighted}
         actions={
           !isLocal ? (
@@ -622,6 +621,28 @@ function LiveClassRoomInner({
     <div className="min-h-screen bg-slate-100 p-3 sm:p-4">
       <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-3">
+          {(!isConnected ||
+            isReconnecting ||
+            (connectError && wasEverConnected)) && (
+            <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-900 shadow-sm animate-pulse">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 text-amber-600 animate-spin shrink-0" />
+                <span>
+                  {connectError ||
+                    "Live studio connection interrupted. Auto-reconnecting in background…"}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-400 bg-white hover:bg-amber-100 text-amber-950 font-bold text-xs h-7 ml-2 shrink-0"
+                onClick={() => reconnect()}
+              >
+                🔄 Rejoin Studio Now
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div>
               <p className="font-semibold text-slate-900">{cls.name}</p>
@@ -775,12 +796,61 @@ function LiveClassRoomInner({
           ) : null}
 
           {/* MIDDLE STAGE: Big presentation when screenshare/spotlight active, otherwise clean participant grid */}
-          {spotlightPresence ? (
-            <div className="space-y-3">
-              {renderTile(spotlightPresence, true)}
+          {isScreenOn ? (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-gradient-to-r from-indigo-900 to-indigo-950 p-5 text-white shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600/40 text-indigo-300 ring-1 ring-indigo-400/40 shrink-0">
+                    <ScreenShare className="h-6 w-6 animate-pulse text-indigo-200" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-block h-2.5 w-2.5 rounded-full bg-emerald-400 animate-ping" />
+                      <h3 className="font-bold text-base sm:text-lg">
+                        You are sharing your screen
+                      </h3>
+                    </div>
+                    <p className="text-xs text-indigo-200 mt-0.5">
+                      Participants can see your shared screen or window. All
+                      student video feeds appear below.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-red-600 hover:bg-red-700 text-white font-semibold text-xs shadow-md shrink-0"
+                  onClick={() => void toggleScreenshare()}
+                >
+                  <ScreenShareOff className="mr-1.5 h-4 w-4" />
+                  Stop Sharing Screen
+                </Button>
+              </div>
+
               {otherRoster.length > 0 ? (
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                   {otherRoster.map((p) => renderTile(p))}
+                </div>
+              ) : (
+                <div className="flex h-48 flex-col items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-white p-6 text-center text-slate-500">
+                  <VideoIcon className="h-8 w-8 text-indigo-400 mb-2 animate-bounce" />
+                  <p className="font-medium text-slate-700 text-sm">
+                    Screen is broadcasting to students.
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Student video feeds will appear here as they join the class.
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : remoteSpotlightPresence ? (
+            <div className="space-y-3">
+              {renderTile(remoteSpotlightPresence, true)}
+              {otherRoster.filter((p) => p.id !== remoteSpotlightPresence.id)
+                .length > 0 ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+                  {otherRoster
+                    .filter((p) => p.id !== remoteSpotlightPresence.id)
+                    .map((p) => renderTile(p))}
                 </div>
               ) : null}
             </div>
@@ -895,33 +965,31 @@ function LiveClassRoomInner({
             </div>
           </div>
 
-          {/* HOST'S OWN VIDEO PREVIEW TILE WHEN NOT SPOTLIGHTED ON MAIN STAGE */}
-          {spotlightPresence?.id !== uid ? (
-            <div className="rounded-xl border border-indigo-200 bg-white p-3 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                  <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
-                  Your Video ({role})
-                </p>
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                  Self
-                </span>
-              </div>
-              <div className="overflow-hidden rounded-lg">
-                {renderTile(
-                  roster.find((p) => p.id === uid) || {
-                    id: uid,
-                    name,
-                    role,
-                    sessionId: classId,
-                    mutedByHost: false,
-                    videoDisabledByHost: false,
-                    updatedAt: new Date().toISOString(),
-                  },
-                )}
-              </div>
+          {/* HOST'S OWN VIDEO PREVIEW TILE IN SIDEBAR */}
+          <div className="rounded-xl border border-indigo-200 bg-white p-3 shadow-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <VideoIcon className="h-3.5 w-3.5 text-indigo-600" />
+                Your Video ({role})
+              </p>
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                Self
+              </span>
             </div>
-          ) : null}
+            <div className="overflow-hidden rounded-lg">
+              {renderTile(
+                roster.find((p) => p.id === uid) || {
+                  id: uid,
+                  name,
+                  role,
+                  sessionId: classId,
+                  mutedByHost: false,
+                  videoDisabledByHost: false,
+                  updatedAt: new Date().toISOString(),
+                },
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

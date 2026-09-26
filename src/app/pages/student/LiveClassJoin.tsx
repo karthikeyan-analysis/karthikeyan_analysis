@@ -90,6 +90,8 @@ function StudentCallInner({
     connectError,
     reconnect,
     isConnected,
+    isReconnecting,
+    wasEverConnected,
     mic,
     camera,
     roster,
@@ -242,7 +244,7 @@ function StudentCallInner({
     }
   };
 
-  if (connectError) {
+  if (connectError && !wasEverConnected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-50 p-6 text-center">
         <div className="rounded-2xl border border-rose-200 bg-white p-6 shadow-xl max-w-md w-full space-y-4 text-center">
@@ -277,7 +279,7 @@ function StudentCallInner({
       </div>
     );
   }
-  if (!partyTracks) {
+  if (!partyTracks && !wasEverConnected) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-50 p-8 text-center text-slate-500">
         <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
@@ -303,7 +305,7 @@ function StudentCallInner({
       <ParticipantVideoTile
         key={p.id}
         presence={p}
-        partyTracks={partyTracks}
+        partyTracks={partyTracks!}
         isLocal={isLocal}
         mediaReady={isConnected}
         localVideoTrack$={isLocal ? camera.broadcastTrack$ : undefined}
@@ -317,6 +319,28 @@ function StudentCallInner({
     <div className="min-h-screen bg-slate-100 p-3 sm:p-4">
       <div className="mx-auto grid max-w-[1600px] grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
         <div className="space-y-3">
+          {(!isConnected ||
+            isReconnecting ||
+            (connectError && wasEverConnected)) && (
+            <div className="flex items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs sm:text-sm font-semibold text-amber-900 shadow-sm animate-pulse">
+              <div className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 text-amber-600 animate-spin shrink-0" />
+                <span>
+                  {connectError ||
+                    "Live class connection interrupted. Auto-reconnecting in background…"}
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-400 bg-white hover:bg-amber-100 text-amber-950 font-bold text-xs h-7 ml-2 shrink-0"
+                onClick={() => reconnect()}
+              >
+                🔄 Rejoin Live Class Now
+              </Button>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
             <div>
               <p className="font-semibold text-slate-900">{cls.name}</p>

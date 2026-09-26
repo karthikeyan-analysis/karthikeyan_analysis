@@ -10,14 +10,16 @@ import { auth } from "../../../config/firebase";
  */
 const REALTIME_PROXY_PATH = "/api/realtime";
 
-/** Refresh Firebase ID token before the ~1h expiry so long classes keep working. */
-const TOKEN_REFRESH_MS = 45 * 60 * 1000;
+/** Refresh Firebase ID token every 10 minutes (well before the 60-min expiry) so long classes never drop. */
+const TOKEN_REFRESH_MS = 10 * 60 * 1000;
 
 type IceServer = RTCIceServer;
 
 function iceUrls(server: IceServer): string[] {
   if (!server.urls) return [];
-  return Array.isArray(server.urls) ? server.urls.map(String) : [String(server.urls)];
+  return Array.isArray(server.urls)
+    ? server.urls.map(String)
+    : [String(server.urls)];
 }
 
 function hasTurnServer(servers: IceServer[]): boolean {
@@ -31,17 +33,26 @@ function hasTurnServer(servers: IceServer[]): boolean {
  * and the class never becomes "active". Prefetch ICE ourselves, then pass
  * iceServers so partytracks skips that broken call.
  */
-async function fetchIceServers(classId: string, idToken: string): Promise<IceServer[]> {
+async function fetchIceServers(
+  classId: string,
+  idToken: string,
+): Promise<IceServer[]> {
   const DEFAULT_ICE_SERVERS: IceServer[] = [
+    { urls: "stun:stun.cloudflare.com:3478" },
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
   ];
 
   try {
     const url = `${REALTIME_PROXY_PATH}/generate-ice-servers?classId=${encodeURIComponent(classId)}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${idToken}` },
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+
     if (!res.ok) {
       return DEFAULT_ICE_SERVERS;
     }
@@ -55,7 +66,10 @@ async function fetchIceServers(classId: string, idToken: string): Promise<IceSer
     }
     return data.iceServers;
   } catch (err) {
-    console.warn("[live-class] Using default STUN servers due to proxy fetch error:", err);
+    console.warn(
+      "[live-class] Using default STUN servers due to proxy fetch error:",
+      err,
+    );
     return DEFAULT_ICE_SERVERS;
   }
 }
@@ -68,13 +82,16 @@ export type PartyTracksClientHandle = {
 
 /**
  * Creates a fresh PartyTracks client scoped to one class + one join.
- * Authorization is kept on a mutable Headers object and refreshed on a timer
- * so classes longer than ~1 hour do not start failing renegotiation mid-call.
+ * Authorization is kept on a mutable Headers object and refreshed frequently
+ * so classes do not fail renegotiation or drop mid-session.
  */
-export async function createPartyTracksClient(classId: string): Promise<PartyTracksClientHandle> {
+export async function createPartyTracksClient(
+  classId: string,
+): Promise<PartyTracksClientHandle> {
   const user = auth.currentUser;
   if (!user) throw new Error("Not signed in.");
-  const idToken = await user.getIdToken();
+  // ALWAYS force refresh on join to ensure the token has a full 60-minute validity window
+  const idToken = await user.getIdToken(true);
 
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${idToken}`);
@@ -88,6 +105,7 @@ export async function createPartyTracksClient(classId: string): Promise<PartyTra
     iceServers,
   });
 
+  // 1. Proactive periodic refresh every 10 minutes
   const refreshTimer = window.setInterval(() => {
     const current = auth.currentUser;
     if (!current) return;
@@ -97,14 +115,29 @@ export async function createPartyTracksClient(classId: string): Promise<PartyTra
         headers.set("Authorization", `Bearer ${fresh}`);
       })
       .catch((err) => {
-        console.warn("[live-class] Failed to refresh auth token for realtime", err);
+        console.warn(
+          "[live-class] Failed to refresh auth token for realtime",
+          err,
+        );
       });
   }, TOKEN_REFRESH_MS);
+
+  // 2. Reactive listener on Firebase Auth state/token rotation
+  const unsubTokenChange = auth.onIdTokenChanged(async (freshUser) => {
+    if (!freshUser) return;
+    try {
+      const freshToken = await freshUser.getIdToken();
+      headers.set("Authorization", `Bearer ${freshToken}`);
+    } catch (e) {
+      console.warn("[live-class] onIdTokenChanged update error:", e);
+    }
+  });
 
   return {
     partyTracks,
     dispose: () => {
       window.clearInterval(refreshTimer);
+      unsubTokenChange();
     },
   };
 }
