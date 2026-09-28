@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useData } from "../../context/DataContext";
 import { useAuth } from "../../context/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import {
@@ -58,7 +63,11 @@ export default function StudentDashboard() {
 
   const enrolledBatchIds = useMemo(() => {
     if (!user) return [];
-    return user.batchIds?.length ? user.batchIds : user.batchId ? [user.batchId] : [];
+    return user.batchIds?.length
+      ? user.batchIds
+      : user.batchId
+        ? [user.batchId]
+        : [];
   }, [user]);
 
   const enrolledBatchOptions = useMemo(() => {
@@ -87,7 +96,8 @@ export default function StudentDashboard() {
   }) => {
     if (!user) return false;
     if (item.visibilityType === "ALL") return true;
-    if (item.visibilityType === "BATCH") return !!user.batchId && item.batchId === user.batchId;
+    if (item.visibilityType === "BATCH")
+      return !!user.batchId && item.batchId === user.batchId;
     return (
       item.selectedStudents?.includes(user.studentRecordId || "") ||
       item.selectedStudents?.includes(user.id) ||
@@ -114,24 +124,36 @@ export default function StudentDashboard() {
 
     for (const item of availableContent) {
       const k = toKey(item.subject);
-      stats.set(k, { resources: (stats.get(k)?.resources || 0) + 1, videos: stats.get(k)?.videos || 0 });
+      stats.set(k, {
+        resources: (stats.get(k)?.resources || 0) + 1,
+        videos: stats.get(k)?.videos || 0,
+      });
     }
     for (const v of availableVideos) {
       const k = toKey(v.subject);
-      stats.set(k, { resources: stats.get(k)?.resources || 0, videos: (stats.get(k)?.videos || 0) + 1 });
+      stats.set(k, {
+        resources: stats.get(k)?.resources || 0,
+        videos: (stats.get(k)?.videos || 0) + 1,
+      });
     }
 
     return stats;
   }, [availableContent, availableVideos]);
 
   useEffect(() => {
-    if (!user?.batchId) return;
+    const studentBatches = user?.batchIds?.length
+      ? user.batchIds
+      : user?.batchId
+        ? [user.batchId]
+        : [];
+    if (studentBatches.length === 0) return;
     let cancelled = false;
     const load = async () => {
       try {
         const t = await listExamTestsForStudent({
-          batchId: user.batchId,
-          studentRecordId: user.studentRecordId,
+          batchId: user?.batchId,
+          batchIds: studentBatches,
+          studentRecordId: user?.studentRecordId,
         });
         if (!cancelled) setExamTests(t);
       } catch (e) {
@@ -142,7 +164,7 @@ export default function StudentDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [user?.batchId, user?.studentRecordId]);
+  }, [user?.batchId, user?.batchIds, user?.studentRecordId]);
 
   useEffect(() => {
     if (!user?.batchId) {
@@ -160,7 +182,11 @@ export default function StudentDashboard() {
     () =>
       liveClasses
         .filter((c) => c.status === "ended" && c.recordingStatus === "ready")
-        .sort((a, b) => (b.endedAt || b.createdAt || "").localeCompare(a.endedAt || a.createdAt || ""))
+        .sort((a, b) =>
+          (b.endedAt || b.createdAt || "").localeCompare(
+            a.endedAt || a.createdAt || "",
+          ),
+        )
         .slice(0, 4),
     [liveClasses],
   );
@@ -169,7 +195,9 @@ export default function StudentDashboard() {
     const now = Date.now();
     return examTests
       .filter((t) => canShowExamToStudentToday(t, now))
-      .sort((a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime());
+      .sort(
+        (a, b) => new Date(a.startAt).getTime() - new Date(b.startAt).getTime(),
+      );
   }, [examTests]);
 
   const todaysExamCount = todaysExamTests.length;
@@ -196,7 +224,9 @@ export default function StudentDashboard() {
           t.testDate === today,
       )
       .map((t) => {
-        const ts = new Date(`${t.testDate}T${t.startTime || "00:00"}`).getTime();
+        const ts = new Date(
+          `${t.testDate}T${t.startTime || "00:00"}`,
+        ).getTime();
         return {
           id: `test-${t.id}`,
           type: "TEST" as const,
@@ -256,7 +286,9 @@ export default function StudentDashboard() {
 
           {enrolledBatchOptions.length > 1 ? (
             <div className="w-full shrink-0 space-y-1.5 sm:w-56">
-              <p className="text-[11px] uppercase tracking-wide text-slate-400">Active batch</p>
+              <p className="text-[11px] uppercase tracking-wide text-slate-400">
+                Active batch
+              </p>
               <Select
                 value={user?.batchId || ""}
                 onValueChange={(value) => void handleBatchSwitch(value)}
@@ -352,7 +384,9 @@ export default function StudentDashboard() {
                 <Radio className="h-4 w-4 text-indigo-600" />
                 Live Classes
               </CardTitle>
-              <p className="mt-1 text-sm text-slate-500">Join live sessions or watch recordings.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Join live sessions or watch recordings.
+              </p>
             </div>
             <Button
               variant="ghost"
@@ -372,7 +406,9 @@ export default function StudentDashboard() {
               >
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="bg-emerald-600 hover:bg-emerald-600">Live now</Badge>
+                    <Badge className="bg-emerald-600 hover:bg-emerald-600">
+                      Live now
+                    </Badge>
                     <p className="font-medium text-slate-900">{cls.name}</p>
                   </div>
                   <p className="mt-1 text-xs text-slate-600">{cls.subject}</p>
@@ -393,12 +429,16 @@ export default function StudentDashboard() {
               >
                 <div className="min-w-0">
                   <p className="font-medium text-slate-900">{cls.name}</p>
-                  <p className="mt-1 text-xs text-slate-600">{cls.subject} · Recording ready</p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    {cls.subject} · Recording ready
+                  </p>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => navigate(`/student/live-classes/${cls.id}/recording`)}
+                  onClick={() =>
+                    navigate(`/student/live-classes/${cls.id}/recording`)
+                  }
                 >
                   <PlayCircle className="mr-1 h-4 w-4" />
                   Watch
@@ -417,7 +457,9 @@ export default function StudentDashboard() {
               <Layers3 className="h-4 w-4 text-indigo-600" />
               Subjects
             </CardTitle>
-            <p className="text-sm text-slate-500">Open the media library by subject.</p>
+            <p className="text-sm text-slate-500">
+              Open the media library by subject.
+            </p>
           </CardHeader>
           <CardContent>
             {availableSubjects.length === 0 ? (
@@ -442,7 +484,9 @@ export default function StudentDashboard() {
                       className="group flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3.5 text-left transition hover:border-indigo-200 hover:bg-indigo-50/40"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-medium text-slate-900">{subject}</p>
+                        <p className="truncate font-medium text-slate-900">
+                          {subject}
+                        </p>
                         <p className="mt-0.5 text-xs text-slate-500">
                           {resourceCount} resources · {videoCount} videos
                         </p>
@@ -463,12 +507,16 @@ export default function StudentDashboard() {
               <CalendarClock className="h-4 w-4 text-emerald-600" />
               Today&apos;s tests
             </CardTitle>
-            <p className="text-sm text-slate-500">What&apos;s scheduled for you today.</p>
+            <p className="text-sm text-slate-500">
+              What&apos;s scheduled for you today.
+            </p>
           </CardHeader>
           <CardContent className="space-y-2.5">
             {upcomingItems.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-200 px-4 py-8 text-center">
-                <p className="text-sm text-slate-500">No active tests scheduled for today.</p>
+                <p className="text-sm text-slate-500">
+                  No active tests scheduled for today.
+                </p>
               </div>
             ) : (
               upcomingItems.map((item) => (
@@ -477,12 +525,16 @@ export default function StudentDashboard() {
                   className="rounded-xl border border-slate-200 bg-slate-50/40 px-3.5 py-3"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate font-medium text-slate-900">{item.title}</p>
+                    <p className="truncate font-medium text-slate-900">
+                      {item.title}
+                    </p>
                     <Badge variant="outline" className="shrink-0 bg-white">
                       {item.type}
                     </Badge>
                   </div>
-                  <p className="mt-1 line-clamp-1 text-xs text-slate-600">{item.subject}</p>
+                  <p className="mt-1 line-clamp-1 text-xs text-slate-600">
+                    {item.subject}
+                  </p>
                   <p className="mt-1 text-xs text-slate-400">{item.meta}</p>
                 </div>
               ))

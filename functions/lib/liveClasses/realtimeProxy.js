@@ -55,7 +55,9 @@ function normalizeProxyPath(reqPath, reqUrl) {
     }
     // Gen2 / Cloud Run sometimes presents the full URL path.
     if (path.includes("/realtimeProxy/")) {
-        path = path.slice(path.indexOf("/realtimeProxy/") + "/realtimeProxy".length) || "/";
+        path =
+            path.slice(path.indexOf("/realtimeProxy/") + "/realtimeProxy".length) ||
+                "/";
     }
     if (!path.startsWith(CLIENT_PREFIX)) {
         path = `${CLIENT_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
@@ -184,7 +186,10 @@ exports.realtimeProxy = (0, https_1.onRequest)({
             let classSnap = await db.collection("liveClasses").doc(classId).get();
             let isLiveTestSession = false;
             if (!classSnap.exists) {
-                classSnap = await db.collection("liveTestSessions").doc(classId).get();
+                classSnap = await db
+                    .collection("liveTestSessions")
+                    .doc(classId)
+                    .get();
                 if (classSnap.exists) {
                     isLiveTestSession = true;
                 }
@@ -212,7 +217,9 @@ exports.realtimeProxy = (0, https_1.onRequest)({
                     return;
                 }
                 if (access.kind === "admin") {
-                    res.status(403).send("You're not assigned as a host or co-host for this class.");
+                    res
+                        .status(403)
+                        .send("You're not assigned as a host or co-host for this class.");
                     return;
                 }
                 if (access.kind === "student" && cls.status !== "active") {
@@ -225,7 +232,9 @@ exports.realtimeProxy = (0, https_1.onRequest)({
         const appToken = exports.cfRealtimeAppToken.value()?.trim();
         if (!appId || !appToken) {
             v2_1.logger.error("realtimeProxy missing Cloudflare Realtime secrets");
-            res.status(500).send("Live class media is not configured (missing Cloudflare secrets).");
+            res
+                .status(500)
+                .send("Live class media is not configured (missing Cloudflare secrets).");
             return;
         }
         const turnAppId = exports.cfTurnAppId.value()?.trim() || "";
@@ -304,7 +313,10 @@ exports.realtimeProxy = (0, https_1.onRequest)({
             return;
         }
         if (response.status >= 400) {
-            const errText = await response.clone().text().catch(() => "");
+            const errText = await response
+                .clone()
+                .text()
+                .catch(() => "");
             v2_1.logger.warn("realtimeProxy upstream error", {
                 status: response.status,
                 path,
@@ -332,7 +344,9 @@ exports.realtimeProxy = (0, https_1.onRequest)({
         const localHttp = isLocalHttpOrigin(origin, referer);
         for (const cookie of setCookies) {
             // partytracks always sets Secure; browsers on http://LAN drop it.
-            const adjusted = localHttp ? cookie.replace(/;\s*Secure/gi, "") : cookie;
+            const adjusted = localHttp
+                ? cookie.replace(/;\s*Secure/gi, "")
+                : cookie;
             res.append("set-cookie", adjusted);
         }
         const buf = Buffer.from(await response.arrayBuffer());

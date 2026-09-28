@@ -54,17 +54,23 @@ export function applySystemExamSettingLocks(
 export type NormalizedExamAccessMode = "batch" | "passcode" | "both";
 
 /** Map stored / legacy accessMode values to the three supported modes. */
-export function normalizeAccessMode(mode?: ExamAccessMode): NormalizedExamAccessMode {
+export function normalizeAccessMode(
+  mode?: ExamAccessMode,
+): NormalizedExamAccessMode {
   if (mode === "both") return "both";
   if (mode === "passcode") return "passcode";
   if (mode === "batch") return "batch";
   // Legacy: "anyone" and ID lists meant batch-scoped access without guest passcode.
-  if (mode === "anyone" || mode === "identifier_list" || mode === "email_list") return "batch";
+  if (mode === "anyone" || mode === "identifier_list" || mode === "email_list")
+    return "batch";
   return "batch";
 }
 
 export function getEffectiveExamSettings(
-  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility">,
+  test: Pick<
+    ExamTest,
+    "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility"
+  >,
 ): Required<ExamAdvancedSettings> {
   const merged = applySystemExamSettingLocks({
     ...DEFAULT_EXAM_SETTINGS,
@@ -82,7 +88,10 @@ export function getEffectiveExamSettings(
 
 /** Enrolled students in the selected batch(es) can see and take this test from their schedule. */
 export function enrolledStudentsCanAccessTest(
-  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility">,
+  test: Pick<
+    ExamTest,
+    "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility"
+  >,
 ): boolean {
   const mode = normalizeAccessMode(getEffectiveExamSettings(test).accessMode);
   if (mode === "batch" || mode === "both" || mode === "passcode") return true;
@@ -92,7 +101,10 @@ export function enrolledStudentsCanAccessTest(
 }
 
 export function accessModeUsesPasscode(
-  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility">,
+  test: Pick<
+    ExamTest,
+    "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility"
+  >,
 ): boolean {
   const mode = normalizeAccessMode(getEffectiveExamSettings(test).accessMode);
   return mode === "passcode" || mode === "both";
@@ -107,21 +119,35 @@ export function parseCsvList(input: string) {
 
 /** Test has passcode guest access configured (admin UI / link sharing). */
 export function isPasscodeGuestTestConfigured(
-  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility">,
+  test: Pick<
+    ExamTest,
+    "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility"
+  >,
 ): boolean {
   return accessModeUsesPasscode(test) && Boolean(test.accessPasswordHash);
 }
 
 /** Passcode tests that allow unenrolled guests (name + email collected at join). */
 export function allowsPasscodeGuestAccess(
-  test: Pick<ExamTest, "settings" | "accessPasswordHash" | "negativeMarkPerWrong" | "visibility" | "status" | "manuallyClosedAt">,
+  test: Pick<
+    ExamTest,
+    | "settings"
+    | "accessPasswordHash"
+    | "negativeMarkPerWrong"
+    | "visibility"
+    | "status"
+    | "manuallyClosedAt"
+  >,
 ): boolean {
-  if (test.status && test.status !== "published") return false;
+  if (test.status === "draft") return false;
   if (isExamManuallyClosed(test)) return false;
-  return isPasscodeGuestTestConfigured(test);
+  return true;
 }
 
-export function guestJoinUrl(testId: string, origin = typeof window !== "undefined" ? window.location.origin : "") {
+export function guestJoinUrl(
+  testId: string,
+  origin = typeof window !== "undefined" ? window.location.origin : "",
+) {
   const base = origin.replace(/\/$/, "");
   return `${base}/student/join-test/${testId}`;
 }
@@ -139,4 +165,3 @@ export async function copyGuestJoinLink(testId: string): Promise<void> {
     document.body.removeChild(input);
   }
 }
-

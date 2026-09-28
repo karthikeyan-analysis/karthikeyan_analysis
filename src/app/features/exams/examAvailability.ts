@@ -2,7 +2,9 @@ import type { ExamTest } from "./types";
 
 export type ExamWindowStatus = "upcoming" | "active" | "closed";
 
-export function isExamManuallyClosed(test: Pick<ExamTest, "manuallyClosedAt">): boolean {
+export function isExamManuallyClosed(
+  test: Pick<ExamTest, "manuallyClosedAt">,
+): boolean {
   return Boolean(test.manuallyClosedAt);
 }
 
@@ -49,7 +51,13 @@ export function canShowExamToStudentToday(
   test: Pick<ExamTest, "startAt" | "endAt" | "manuallyClosedAt" | "status">,
   nowMs = Date.now(),
 ): boolean {
-  return isExamScheduledToday(test, nowMs) && canStartNewExamAttempt(test, nowMs);
+  if (isExamManuallyClosed(test)) return false;
+  if (test.status === "draft") return false;
+  if (getExamWindowStatus(test, nowMs) === "active") return true;
+  if (isExamScheduledToday(test, nowMs)) return true;
+  const end = new Date(test.endAt).getTime();
+  if (isNaN(end) || nowMs <= end) return true;
+  return false;
 }
 
 export function examWindowStatusLabel(

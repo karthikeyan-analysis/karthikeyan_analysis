@@ -35,13 +35,17 @@ export function ExamQuestionImageFrame({
           Question figure
         </span>
         {questionNo != null ? (
-          <span className="text-[11px] font-medium text-slate-500 tabular-nums">Q{questionNo}</span>
+          <span className="text-[11px] font-medium text-slate-500 tabular-nums">
+            Q{questionNo}
+          </span>
         ) : null}
       </div>
       <div
         className={cn(
           "flex items-center justify-center bg-slate-50",
-          isFull ? "p-2 sm:p-3" : "p-2 sm:p-3 h-[min(32vh,200px)] sm:h-[min(34vh,260px)] md:h-[min(36vh,300px)] lg:h-[min(38vh,320px)]",
+          isFull
+            ? "p-2 sm:p-3"
+            : "p-2 sm:p-3 h-[min(32vh,200px)] sm:h-[min(34vh,260px)] md:h-[min(36vh,300px)] lg:h-[min(38vh,320px)]",
         )}
       >
         <img
@@ -49,7 +53,9 @@ export function ExamQuestionImageFrame({
           alt={alt}
           className={cn(
             "select-none object-contain object-center",
-            isFull ? "w-full h-auto max-w-full" : "max-h-full max-w-full h-auto w-auto",
+            isFull
+              ? "w-full h-auto max-w-full"
+              : "max-h-full max-w-full h-auto w-auto",
           )}
           loading="lazy"
           decoding="async"

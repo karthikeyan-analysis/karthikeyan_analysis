@@ -1101,10 +1101,16 @@ export default function TakeExam({
   // Guests already verified the passcode at join time; isGuestParticipant already checks guestExamTestId.
   const canAccessAsGuest = isGuestParticipant;
 
+  const enrolledBatches = user.batchIds?.length
+    ? user.batchIds
+    : user.batchId
+      ? [user.batchId]
+      : [];
+
   const canAccessAsEnrolled =
     !isGuestParticipant &&
-    !!user.batchId &&
-    examIncludesBatch(test, user.batchId) &&
+    enrolledBatches.length > 0 &&
+    enrolledBatches.some((bid) => examIncludesBatch(test, bid)) &&
     enrolledStudentsCanAccessTest(test);
 
   if (!canAccessAsGuest && !canAccessAsEnrolled) {

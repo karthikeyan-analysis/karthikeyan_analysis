@@ -3,17 +3,15 @@ import { Link, useNavigate, useParams } from "react-router";
 import bannerImage from "../../../banner.jpeg";
 import { useAuth } from "../../context/AuthContext";
 import { Button } from "../../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "../../components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -22,20 +20,25 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
-import { KeyRound, Loader2 } from "lucide-react";
+import {
+  ArrowRight,
+  KeyRound,
+  Loader2,
+  UserCheck,
+  AlertCircle,
+} from "lucide-react";
 import {
   getExamTest,
   listPasscodeGuestExamTests,
   verifyExamPasscode,
 } from "../../features/exams/examApi";
 import { isExamManuallyClosed } from "../../features/exams/examAvailability";
-import { allowsPasscodeGuestAccess } from "../../features/exams/settings";
 import type { ExamTest } from "../../features/exams/types";
 
 export default function GuestExamJoin() {
   const { testId: routeTestId } = useParams();
   const navigate = useNavigate();
-  const { user, loginGuestForExam, loading: authLoading } = useAuth();
+  const { user, loginGuestForExam, logout, loading: authLoading } = useAuth();
 
   const [tests, setTests] = useState<ExamTest[]>([]);
   const [testsLoading, setTestsLoading] = useState(true);
@@ -43,12 +46,16 @@ export default function GuestExamJoin() {
   const [test, setTest] = useState<ExamTest | null>(null);
   const [testLoading, setTestLoading] = useState(false);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [passcode, setPasscode] = useState("");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [name, setName] = useState(
+    user?.isGuestExamParticipant ? user.name || "" : "",
+  );
+  const [email, setEmail] = useState(
+    user?.isGuestExamParticipant ? user.email || "" : "",
+  );
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [showDifferentEntry, setShowDifferentEntry] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,66 +106,78 @@ export default function GuestExamJoin() {
     };
   }, [effectiveTestId]);
 
-  const guestAllowed = useMemo(() => (test ? allowsPasscodeGuestAccess(test) : false), [test]);
-
-  useEffect(() => {
-    if (!routeTestId || !test || !guestAllowed || dialogOpen || submitting) return;
-    setDialogOpen(true);
-  }, [routeTestId, test, guestAllowed, dialogOpen, submitting]);
-
-  const openJoinDialog = () => {
-    setError("");
-    if (!effectiveTestId) {
-      setError("Select a test first.");
-      return;
-    }
-    if (!test) {
-      setError("Test not found or not available.");
-      return;
-    }
-    if (!guestAllowed) {
-      setError("This test does not allow passcode guest access.");
-      return;
-    }
-    setDialogOpen(true);
-  };
-
-  const handleJoin = async () => {
-    if (!test || !effectiveTestId) return;
-    setError("");
-    setSubmitting(true);
-    try {
-      const ok = await verifyExamPasscode(test, passcode);
-      if (!ok) {
-        setError("Incorrect passcode. Please try again.");
-        return;
-      }
-
-      const result = await loginGuestForExam({
-        name,
-        email,
-        testId: effectiveTestId,
-      });
-      if (!result.success) {
-        setError(result.error || "Could not join test.");
-        return;
-      }
-
-      setDialogOpen(false);
-      navigate(`/student/tests/${effectiveTestId}`, { replace: true });
-    } catch (e) {
-      console.error(e);
-      setError("Something went wrong. Please try again.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   useEffect(() => {
     if (user?.role === "admin") {
       navigate("/admin", { replace: true });
     }
   }, [user?.role, navigate]);
+
+  const requiresPasscode = Boolean(test?.accessPasswordHash);
+
+  const isNameValid = name.trim().length >= 2;
+  const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const isPasscodeValid = !requiresPasscode || passcode.trim().length > 0;
+  const isFormValid =
+    Boolean(effectiveTestId) && isNameValid && isEmailValid && isPasscodeValid;
+
+  const handleContinue = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!effectiveTestId) {
+      setError("Please select a test.");
+      return;
+    }
+    if (!test) {
+      setError("Test information is still loading. Please wait.");
+      return;
+    }
+    if (!isNameValid) {
+      setError("Please enter your full name (at least 2 characters).");
+      return;
+    }
+    if (!isEmailValid) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (requiresPasscode && !passcode.trim()) {
+      setError("Please enter the test passcode.");
+      return;
+    }
+
+    setError("");
+    setSubmitting(true);
+    try {
+      if (requiresPasscode) {
+        const ok = await verifyExamPasscode(test, passcode.trim());
+        if (!ok) {
+          setError(
+            "Incorrect passcode. Please check with your instructor and try again.",
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      const result = await loginGuestForExam({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        testId: effectiveTestId,
+      });
+
+      if (!result.success) {
+        setError(
+          result.error || "Could not start guest session. Please try again.",
+        );
+        setSubmitting(false);
+        return;
+      }
+
+      navigate(`/student/tests/${effectiveTestId}`, { replace: true });
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message || "An unexpected error occurred. Please try again.");
+      setSubmitting(false);
+    }
+  };
 
   if (authLoading) {
     return (
@@ -170,188 +189,249 @@ export default function GuestExamJoin() {
 
   if (user?.role === "admin") return null;
 
-  // Only show "continue your test" if the guest session is for the SAME test as the URL.
-  // If the URL contains a DIFFERENT testId (a new test link was shared), fall through to
-  // the join form so the student can join the new test instead of being stuck on the old one.
-  if (
+  // Active guest session for this test
+  const hasActiveSessionForThisTest =
+    !showDifferentEntry &&
     user?.isGuestExamParticipant &&
     user.guestExamTestId &&
-    (!routeTestId || user.guestExamTestId === routeTestId)
-  ) {
-    return (
-      <PageShell>
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Continue your test</CardTitle>
-            <CardDescription>You are signed in as {user.name || "Guest"}.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Button
-              className="w-full bg-indigo-600 hover:bg-indigo-700"
-              onClick={() => navigate(`/student/tests/${user.guestExamTestId}`)}
-            >
-              Go to exam
-            </Button>
-            <Button variant="outline" className="w-full" onClick={() => navigate("/student/tests")}>
-              Test schedule
-            </Button>
-          </CardContent>
-        </Card>
-      </PageShell>
-    );
-  }
+    (!routeTestId || user.guestExamTestId === routeTestId);
 
   return (
     <PageShell>
       <Card className="w-full max-w-lg shadow-xl border-indigo-100 overflow-hidden">
-        <div className="w-full bg-white px-3 py-3 flex items-center justify-center border-b">
-          <img src={bannerImage} alt="Banner" className="max-h-14 object-contain" />
+        <div className="w-full bg-white px-4 py-3 flex items-center justify-center border-b">
+          <img
+            src={bannerImage}
+            alt="Banner"
+            className="max-h-14 object-contain"
+          />
         </div>
+
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <KeyRound className="w-5 h-5 text-indigo-600" />
-            Join test with passcode
+            Guest Test Entry
           </CardTitle>
           <CardDescription>
-            For students not enrolled in a batch. Enter the passcode from your instructor, then your
-            name and email.
+            Enter your details to access the test. Passcode is provided by your
+            instructor.
           </CardDescription>
         </CardHeader>
+
         <CardContent className="space-y-4">
-          {testsLoading ? (
-            <div className="text-sm text-slate-500 flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin" /> Loading available tests…
-            </div>
-          ) : tests.length === 0 ? (
-            <Alert>
-              <AlertTitle>No passcode tests</AlertTitle>
-              <AlertDescription>
-                There are no published tests open for passcode guests right now.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <div className="space-y-2">
-              <Label>Select test</Label>
-              <Select value={selectedTestId} onValueChange={setSelectedTestId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a test" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tests.map((t) => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.title} — {t.subject}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
+          {hasActiveSessionForThisTest ? (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4 space-y-2">
+                <div className="flex items-center gap-2 text-indigo-900 font-semibold">
+                  <UserCheck className="w-5 h-5 text-indigo-600" />
+                  Active Guest Session
+                </div>
+                <p className="text-sm text-indigo-800">
+                  You are signed in as <strong>{user?.name || "Guest"}</strong>{" "}
+                  ({user?.email}).
+                </p>
+                {test && (
+                  <p className="text-xs text-indigo-700 font-medium">
+                    Test: {test.title} — {test.subject}
+                  </p>
+                )}
+              </div>
 
-          {testLoading && effectiveTestId ? (
-            <p className="text-xs text-slate-500">Loading test details…</p>
-          ) : null}
+              <Button
+                className="w-full bg-indigo-600 hover:bg-indigo-700 font-semibold"
+                onClick={() =>
+                  navigate(`/student/tests/${user?.guestExamTestId}`)
+                }
+              >
+                Continue to Exam
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
 
-          {test && guestAllowed ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-              <span className="font-medium">{test.title}</span>
-              <span className="text-emerald-800"> — {test.subject}</span>
-            </div>
-          ) : test && isExamManuallyClosed(test) ? (
-            <Alert variant="destructive">
-              <AlertTitle>Test closed</AlertTitle>
-              <AlertDescription>
-                This test has been closed by the instructor and is not accepting new entries.
-              </AlertDescription>
-            </Alert>
-          ) : test && !guestAllowed ? (
-            <div className="space-y-3">
-              <Alert variant="destructive">
-                <AlertTitle>Not available for guest access</AlertTitle>
-                <AlertDescription>This test is not configured for passcode guest access.</AlertDescription>
-              </Alert>
-              {user?.isGuestExamParticipant && user.guestExamTestId && user.guestExamTestId !== routeTestId && (
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => navigate(`/student/tests/${user.guestExamTestId}`)}
+              <div className="flex items-center justify-between text-xs pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowDifferentEntry(true)}
+                  className="text-indigo-600 hover:underline"
                 >
-                  Go to my current test
-                </Button>
-              )}
+                  Enter with different details
+                </button>
+                <Link
+                  to="/student/tests"
+                  className="text-slate-500 hover:underline"
+                >
+                  View Schedule
+                </Link>
+              </div>
             </div>
-          ) : null}
+          ) : (
+            <form onSubmit={handleContinue} className="space-y-4">
+              {/* Test Selection or Info */}
+              {routeTestId && test ? (
+                <div className="rounded-lg border border-indigo-100 bg-indigo-50/50 px-3.5 py-2.5 text-sm">
+                  <p className="font-semibold text-indigo-950">{test.title}</p>
+                  <p className="text-xs text-indigo-700 mt-0.5">
+                    {test.subject} • {test.durationMinutes || 60} mins
+                  </p>
+                </div>
+              ) : testsLoading ? (
+                <div className="text-sm text-slate-500 flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Loading available
+                  tests…
+                </div>
+              ) : tests.length === 0 ? (
+                <Alert>
+                  <AlertTitle>No guest tests available</AlertTitle>
+                  <AlertDescription>
+                    There are no open tests available for guests right now.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="test-select">Select Test</Label>
+                  <Select
+                    value={selectedTestId}
+                    onValueChange={(val) => {
+                      setSelectedTestId(val);
+                      setError("");
+                    }}
+                  >
+                    <SelectTrigger id="test-select">
+                      <SelectValue placeholder="Choose a test" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tests.map((t) => (
+                        <SelectItem key={t.id} value={t.id}>
+                          {t.title} — {t.subject}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
-          {error && !dialogOpen ? <p className="text-sm text-rose-600">{error}</p> : null}
+              {testLoading && effectiveTestId ? (
+                <p className="text-xs text-slate-500 flex items-center gap-1.5">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading test
+                  details…
+                </p>
+              ) : null}
 
-          <Button
-            className="w-full bg-indigo-600 hover:bg-indigo-700"
-            disabled={!effectiveTestId || testsLoading || testLoading || !guestAllowed}
-            onClick={openJoinDialog}
-          >
-            Continue
-          </Button>
+              {test && isExamManuallyClosed(test) ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertTitle>Test closed</AlertTitle>
+                  <AlertDescription>
+                    This test has been closed by the instructor and is no longer
+                    accepting entries.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-          <p className="text-center text-sm text-slate-600">
-            Enrolled student?{" "}
-            <Link to="/login" className="text-indigo-600 hover:underline">
-              Sign in with Google
-            </Link>
-          </p>
+              {/* Full Name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="guest-name">
+                  Full Name <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="guest-name"
+                  placeholder="Enter your full name"
+                  value={name}
+                  autoComplete="name"
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (error) setError("");
+                  }}
+                  disabled={submitting}
+                />
+              </div>
+
+              {/* Email Address */}
+              <div className="space-y-1.5">
+                <Label htmlFor="guest-email">
+                  Email Address <span className="text-rose-500">*</span>
+                </Label>
+                <Input
+                  id="guest-email"
+                  type="email"
+                  placeholder="student@example.com"
+                  value={email}
+                  autoComplete="email"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError("");
+                  }}
+                  disabled={submitting}
+                />
+              </div>
+
+              {/* Passcode (Required if test has passcode) */}
+              {requiresPasscode && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="guest-passcode">
+                    Passcode <span className="text-rose-500">*</span>
+                  </Label>
+                  <Input
+                    id="guest-passcode"
+                    type="password"
+                    placeholder="Enter test passcode"
+                    value={passcode}
+                    autoComplete="current-password"
+                    onChange={(e) => {
+                      setPasscode(e.target.value);
+                      if (error) setError("");
+                    }}
+                    disabled={submitting}
+                  />
+                  <p className="text-xs text-slate-500">
+                    Enter the access passcode provided by your instructor.
+                  </p>
+                </div>
+              )}
+
+              {/* Error Message */}
+              {error && (
+                <Alert variant="destructive" className="py-2.5">
+                  <AlertCircle className="w-4 h-4" />
+                  <AlertDescription className="text-xs">
+                    {error}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Continue Button */}
+              <Button
+                type="submit"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 transition-all shadow-md hover:shadow-lg disabled:opacity-50"
+                disabled={submitting || testLoading || !isFormValid}
+              >
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Starting test…
+                  </>
+                ) : (
+                  <>
+                    Continue
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
+
+              <div className="pt-2 text-center text-xs text-slate-500 space-y-1">
+                <p>
+                  Enrolled student?{" "}
+                  <Link
+                    to="/login"
+                    className="text-indigo-600 font-medium hover:underline"
+                  >
+                    Sign in with Google
+                  </Link>
+                </p>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Your details</DialogTitle>
-            <DialogDescription>
-              {test?.title ? `Joining: ${test.title}` : "Enter your information to start the test."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-2">
-              <Label>Passcode</Label>
-              <Input
-                type="password"
-                value={passcode}
-                onChange={(e) => setPasscode(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Full name</Label>
-              <Input value={name} autoComplete="name" onChange={(e) => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={email}
-                autoComplete="email"
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-          </div>
-          {error ? <p className="text-sm text-rose-600">{error}</p> : null}
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              className="bg-indigo-600 hover:bg-indigo-700"
-              disabled={submitting || !passcode.trim() || !name.trim() || !email.trim()}
-              onClick={() => void handleJoin()}
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin mr-2" /> Starting…
-                </>
-              ) : (
-                "Start test"
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </PageShell>
   );
 }

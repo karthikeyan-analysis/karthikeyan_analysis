@@ -78,28 +78,39 @@ export async function listExamTestsForAdmin(): Promise<ExamTest[]> {
 }
 
 export async function listExamTestsForStudent(params: {
-  batchId: string;
+  batchId?: string;
+  batchIds?: string[];
   studentRecordId?: string;
 }): Promise<ExamTest[]> {
-  // Legacy single-batch field + multi-batch array (dedupe).
-  const [legacySnap, multiSnap] = await Promise.all([
-    getDocs(
-      query(collection(db, TESTS), where("batchId", "==", params.batchId)),
-    ),
-    getDocs(
-      query(
-        collection(db, TESTS),
-        where("batchIds", "array-contains", params.batchId),
+  const targetBatchIds = [
+    ...new Set(
+      [...(params.batchIds || []), params.batchId].filter(
+        (id): id is string => typeof id === "string" && id.trim().length > 0,
       ),
     ),
+  ];
+  if (targetBatchIds.length === 0) return [];
+
+  // Query legacy single-batch field + multi-batch array for all target batch IDs
+  const queries = targetBatchIds.flatMap((bid) => [
+    getDocs(query(collection(db, TESTS), where("batchId", "==", bid))),
+    getDocs(
+      query(collection(db, TESTS), where("batchIds", "array-contains", bid)),
+    ),
   ]);
+
+  const snapshots = await Promise.all(queries);
   const byId = new Map<string, ExamTest>();
-  for (const d of [...legacySnap.docs, ...multiSnap.docs]) {
-    byId.set(d.id, { id: d.id, ...(d.data() as object) } as ExamTest);
+  for (const snap of snapshots) {
+    for (const d of snap.docs) {
+      byId.set(d.id, { id: d.id, ...(d.data() as object) } as ExamTest);
+    }
   }
+
   const tests = [...byId.values()];
   const visible = tests.filter((t) => {
-    if (!examIncludesBatch(t, params.batchId)) return false;
+    const belongs = targetBatchIds.some((bid) => examIncludesBatch(t, bid));
+    if (!belongs) return false;
     if (!enrolledStudentsCanAccessTest(t)) return false;
     if (t.visibility === "SELECTIVE" && params.studentRecordId) {
       return (t.selectedStudentRecordIds || []).includes(

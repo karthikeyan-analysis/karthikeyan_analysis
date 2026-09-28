@@ -15,14 +15,19 @@ export const cfTurnAppToken = defineSecret("CF_TURN_APP_TOKEN");
  */
 const CLIENT_PREFIX = "/api/realtime";
 
-function normalizeProxyPath(reqPath: string, reqUrl: string): { path: string; search: string } {
+function normalizeProxyPath(
+  reqPath: string,
+  reqUrl: string,
+): { path: string; search: string } {
   let path = reqPath || "/";
   if (path.startsWith("/realtimeProxy")) {
     path = path.slice("/realtimeProxy".length) || "/";
   }
   // Gen2 / Cloud Run sometimes presents the full URL path.
   if (path.includes("/realtimeProxy/")) {
-    path = path.slice(path.indexOf("/realtimeProxy/") + "/realtimeProxy".length) || "/";
+    path =
+      path.slice(path.indexOf("/realtimeProxy/") + "/realtimeProxy".length) ||
+      "/";
   }
   if (!path.startsWith(CLIENT_PREFIX)) {
     path = `${CLIENT_PREFIX}${path.startsWith("/") ? path : `/${path}`}`;
@@ -55,7 +60,8 @@ function resolveRequestBody(req: {
   }
 
   if (req.body == null || req.body === "") return undefined;
-  if (Buffer.isBuffer(req.body)) return req.body.length > 0 ? req.body : undefined;
+  if (Buffer.isBuffer(req.body))
+    return req.body.length > 0 ? req.body : undefined;
   if (typeof req.body === "string") {
     const trimmed = req.body.trim();
     if (!trimmed || trimmed === "{}") return undefined;
@@ -75,7 +81,9 @@ function resolveRequestBody(req: {
 /** Keep classId for our auth gate only — never forward it to Cloudflare SFU. */
 function cloudflareSearch(search: string): string {
   if (!search) return "";
-  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const params = new URLSearchParams(
+    search.startsWith("?") ? search.slice(1) : search,
+  );
   params.delete("classId");
   const next = params.toString();
   return next ? `?${next}` : "";
@@ -102,7 +110,10 @@ function errorMessage(error: unknown): string {
  */
 async function withStreamBodyFetch<T>(fn: () => Promise<T>): Promise<T> {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+  globalThis.fetch = ((
+    input: Parameters<typeof fetch>[0],
+    init?: RequestInit,
+  ) => {
     if (init?.body != null && (init as { duplex?: string }).duplex == null) {
       const body = init.body as { getReader?: unknown };
       if (typeof body === "object" && typeof body.getReader === "function") {
@@ -149,7 +160,10 @@ export const realtimeProxy = onRequest(
         return;
       }
 
-      const { path, search } = normalizeProxyPath(req.path || "/", req.url || "");
+      const { path, search } = normalizeProxyPath(
+        req.path || "/",
+        req.url || "",
+      );
       const method = (req.method || "GET").toUpperCase();
 
       const classId = String(req.query.classId || "");
@@ -163,7 +177,10 @@ export const realtimeProxy = onRequest(
         let classSnap = await db.collection("liveClasses").doc(classId).get();
         let isLiveTestSession = false;
         if (!classSnap.exists) {
-          classSnap = await db.collection("liveTestSessions").doc(classId).get();
+          classSnap = await db
+            .collection("liveTestSessions")
+            .doc(classId)
+            .get();
           if (classSnap.exists) {
             isLiveTestSession = true;
           }
@@ -179,7 +196,8 @@ export const realtimeProxy = onRequest(
           const adminSnap = await db.collection("admins").doc(uid).get();
           const userDoc = userSnap.data();
           const adminDoc = adminSnap.data();
-          const isAdminCaller = userDoc?.role === "admin" || adminDoc?.role === "admin";
+          const isAdminCaller =
+            userDoc?.role === "admin" || adminDoc?.role === "admin";
           if (!isAdminCaller && cls.status !== "active") {
             res.status(412).send("The live test session is not active.");
             return;
@@ -191,7 +209,9 @@ export const realtimeProxy = onRequest(
             return;
           }
           if (access.kind === "admin") {
-            res.status(403).send("You're not assigned as a host or co-host for this class.");
+            res
+              .status(403)
+              .send("You're not assigned as a host or co-host for this class.");
             return;
           }
           if (access.kind === "student" && cls.status !== "active") {
@@ -205,7 +225,11 @@ export const realtimeProxy = onRequest(
       const appToken = cfRealtimeAppToken.value()?.trim();
       if (!appId || !appToken) {
         logger.error("realtimeProxy missing Cloudflare Realtime secrets");
-        res.status(500).send("Live class media is not configured (missing Cloudflare secrets).");
+        res
+          .status(500)
+          .send(
+            "Live class media is not configured (missing Cloudflare secrets).",
+          );
         return;
       }
 
@@ -214,11 +238,14 @@ export const realtimeProxy = onRequest(
       if (!turnAppId || !turnAppToken) {
         // Without TURN, PeerConnections often never leave "checking" on mobile /
         // carrier NAT → subsequent tracks/new returns 410 disconnected.
-        logger.warn("realtimeProxy missing Cloudflare TURN secrets — media may fail off-LAN", {
-          path,
-          hasTurnAppId: Boolean(turnAppId),
-          hasTurnAppToken: Boolean(turnAppToken),
-        });
+        logger.warn(
+          "realtimeProxy missing Cloudflare TURN secrets — media may fail off-LAN",
+          {
+            path,
+            hasTurnAppId: Boolean(turnAppId),
+            hasTurnAppToken: Boolean(turnAppToken),
+          },
+        );
       }
 
       const { routePartyTracksRequest } = await import("partytracks/server");
@@ -256,11 +283,14 @@ export const realtimeProxy = onRequest(
       }
 
       const cfSearch = cloudflareSearch(search);
-      const fetchRequest = new Request(`https://internal.local${path}${cfSearch}`, {
-        method,
-        headers,
-        ...(bodyBuf && bodyBuf.length > 0 ? { body: bodyBuf } : {}),
-      });
+      const fetchRequest = new Request(
+        `https://internal.local${path}${cfSearch}`,
+        {
+          method,
+          headers,
+          ...(bodyBuf && bodyBuf.length > 0 ? { body: bodyBuf } : {}),
+        },
+      );
 
       let response: Response;
       try {
@@ -293,7 +323,10 @@ export const realtimeProxy = onRequest(
       }
 
       if (response.status >= 400) {
-        const errText = await response.clone().text().catch(() => "");
+        const errText = await response
+          .clone()
+          .text()
+          .catch(() => "");
         logger.warn("realtimeProxy upstream error", {
           status: response.status,
           path,
@@ -315,13 +348,17 @@ export const realtimeProxy = onRequest(
       });
 
       const setCookies =
-        (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.() ?? [];
+        (
+          response.headers as unknown as { getSetCookie?: () => string[] }
+        ).getSetCookie?.() ?? [];
       const origin = req.get("origin") || "";
       const referer = req.get("referer") || "";
       const localHttp = isLocalHttpOrigin(origin, referer);
       for (const cookie of setCookies) {
         // partytracks always sets Secure; browsers on http://LAN drop it.
-        const adjusted = localHttp ? cookie.replace(/;\s*Secure/gi, "") : cookie;
+        const adjusted = localHttp
+          ? cookie.replace(/;\s*Secure/gi, "")
+          : cookie;
         res.append("set-cookie", adjusted);
       }
 
