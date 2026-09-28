@@ -288,7 +288,9 @@ export const realtimeProxy = onRequest(
         {
           method,
           headers,
-          ...(bodyBuf && bodyBuf.length > 0 ? { body: bodyBuf } : {}),
+          ...(bodyBuf && bodyBuf.length > 0
+            ? { body: bodyBuf as unknown as BodyInit }
+            : {}),
         },
       );
 
@@ -301,7 +303,7 @@ export const realtimeProxy = onRequest(
             turnServerAppId: turnAppId || undefined,
             turnServerAppToken: turnAppToken || undefined,
             prefix: CLIENT_PREFIX,
-            lockSessionToInitiator: true,
+            lockSessionToInitiator: false,
             request: fetchRequest,
           }),
         );
