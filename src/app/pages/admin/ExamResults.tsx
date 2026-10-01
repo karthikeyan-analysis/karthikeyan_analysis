@@ -17,10 +17,11 @@ import {
   TableHeader,
   TableRow,
 } from "../../components/ui/table";
-import { CheckCircle2, Download, Loader2, Trash2 } from "lucide-react";
+import { CheckCircle2, Download, Loader2, Send, Trash2 } from "lucide-react";
 import {
   approveRejoinForAdmin,
   deleteAttemptsForAdmin,
+  forceSubmitAttemptForAdmin,
   getExamTest,
   listAttemptsForAdmin,
   listPrivateQuestions,
@@ -101,6 +102,7 @@ export default function ExamResults() {
   const [approvingRejoinUid, setApprovingRejoinUid] = useState<string | null>(
     null,
   );
+  const [forcingSubmitUid, setForcingSubmitUid] = useState<string | null>(null);
   const [test, setTest] = useState<ExamTest | null>(null);
   const [attempts, setAttempts] = useState<ExamAttempt[]>([]);
   const [questions, setQuestions] = useState<ExamQuestionPublic[]>([]);
@@ -435,6 +437,38 @@ export default function ExamResults() {
     }
   };
 
+  const forceSubmit = async (attempt: ExamAttempt) => {
+    if (!test || attempt.status !== "in_progress") return;
+    const participant = resolveAttemptParticipant(attempt, students);
+    const name = participant.name || participant.email || attempt.uid;
+    if (
+      !window.confirm(
+        `Force submit ${name}'s interrupted test? Their saved answers will be scored and a response sheet will become available.`,
+      )
+    ) return;
+
+    setForcingSubmitUid(attempt.uid);
+    try {
+      const result = await forceSubmitAttemptForAdmin({
+        testId,
+        uid: attempt.uid,
+        negativeMarkPerWrong: test.negativeMarkPerWrong,
+      });
+      setAttempts((prev) =>
+        prev.map((item) =>
+          item.uid === attempt.uid
+            ? { ...item, ...result, status: "submitted", submittedAt: new Date().toISOString() }
+            : item,
+        ),
+      );
+    } catch (error) {
+      console.error("Force submit failed", error);
+      alert("Could not force submit this attempt. Please try again.");
+    } finally {
+      setForcingSubmitUid(null);
+    }
+  };
+
   if (loading) {
     return (
       <div className="text-sm text-slate-500 flex items-center gap-2">
@@ -563,7 +597,7 @@ export default function ExamResults() {
                       Status
                     </TableHead>
                     <TableHead className="text-center font-bold text-slate-900">
-                      Action / Rejoin
+                      Actions
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -648,28 +682,46 @@ export default function ExamResults() {
                           )}
                         </TableCell>
                         <TableCell className="text-center">
-                          {rejoinNeedsApproval(a) ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="border-amber-200 text-amber-800 hover:bg-amber-50"
-                              onClick={() => void approveRejoin(a)}
-                              disabled={approvingRejoinUid === a.uid}
-                            >
-                              {approvingRejoinUid === a.uid ? (
-                                <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                              ) : (
-                                <CheckCircle2 className="w-3 h-3 mr-1" />
-                              )}
-                              Approve
-                            </Button>
-                          ) : a.rejoinApprovedAt ? (
-                            <Badge className="bg-emerald-100 text-emerald-800">
-                              Approved
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-slate-400">—</span>
-                          )}
+                          <div className="flex flex-wrap items-center justify-center gap-2">
+                            {a.status === "in_progress" && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-rose-200 text-rose-700 hover:bg-rose-50"
+                                onClick={() => void forceSubmit(a)}
+                                disabled={forcingSubmitUid !== null}
+                              >
+                                {forcingSubmitUid === a.uid ? (
+                                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                ) : (
+                                  <Send className="w-3 h-3 mr-1" />
+                                )}
+                                Force Submit
+                              </Button>
+                            )}
+                            {rejoinNeedsApproval(a) ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-amber-200 text-amber-800 hover:bg-amber-50"
+                                onClick={() => void approveRejoin(a)}
+                                disabled={approvingRejoinUid === a.uid}
+                              >
+                                {approvingRejoinUid === a.uid ? (
+                                  <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                                ) : (
+                                  <CheckCircle2 className="w-3 h-3 mr-1" />
+                                )}
+                                Approve
+                              </Button>
+                            ) : a.rejoinApprovedAt && a.status === "in_progress" ? (
+                              <Badge className="bg-emerald-100 text-emerald-800">
+                                Approved
+                              </Badge>
+                            ) : a.status === "submitted" ? (
+                              <span className="text-xs text-slate-400">—</span>
+                            ) : null}
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

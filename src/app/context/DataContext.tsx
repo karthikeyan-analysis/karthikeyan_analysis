@@ -579,7 +579,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         uploadDate: new Date().toISOString().split("T")[0],
       };
       const docRef = await addDoc(collection(db, "videos"), newVideo);
-      setVideos([...videos, { ...newVideo, id: docRef.id }]);
+      setVideos((prev) => [...prev, { ...newVideo, id: docRef.id }]);
     } catch (error) {
       console.error("Error adding video:", error);
       throw error;

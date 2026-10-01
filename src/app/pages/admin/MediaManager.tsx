@@ -171,8 +171,8 @@ export default function MediaManager() {
             onProgress?.(progress);
           },
           reject,
-          async () => {
-            resolve(await getDownloadURL(uploadTask.snapshot.ref));
+          () => {
+            void getDownloadURL(uploadTask.snapshot.ref).then(resolve, reject);
           },
         );
       });
@@ -226,9 +226,11 @@ export default function MediaManager() {
           setVideoUploadState("error");
           reject(err);
         },
-        async () => {
-          setVideoUploadState("success");
-          resolve(await getDownloadURL(uploadTask.snapshot.ref));
+        () => {
+          void getDownloadURL(uploadTask.snapshot.ref).then((url) => {
+            setVideoUploadState("success");
+            resolve(url);
+          }, reject);
         },
       );
     });
@@ -280,7 +282,9 @@ export default function MediaManager() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isUploading) return;
     setError("");
+    let completedVideos = 0;
 
     const hasPdf = !!selectedPdfFile;
     const hasVideos = selectedVideoFiles.length > 0;
@@ -351,6 +355,7 @@ export default function MediaManager() {
           subject: selectedSubject,
           fileUrl,
         });
+        setSelectedPdfFile(null);
       }
 
       // ── Video uploads (one storage upload per file, one Firestore doc per batch) ──
@@ -383,6 +388,7 @@ export default function MediaManager() {
             videoUrl,
           });
         }
+        completedVideos += 1;
       }
 
       setFormData({ title: "", description: "" });
@@ -394,11 +400,18 @@ export default function MediaManager() {
       setVideoUploadProgress(0);
       setIsUploadDialogOpen(false);
     } catch (uploadError: any) {
+      // Keep only files that have not been fully published, so retry does not
+      // upload successful videos again after a later file fails.
+      if (completedVideos > 0) {
+        setSelectedVideoFiles(selectedVideoFiles.slice(completedVideos));
+        setCurrentUploadFileIdx(0);
+      }
       const code = uploadError?.code ? ` (${uploadError.code})` : "";
       const serverResponse = uploadError?.customData?.serverResponse
         ? `\n\nServer response:\n${String(uploadError.customData.serverResponse)}`
         : "";
       setError(
+        (completedVideos > 0 ? `${completedVideos} video(s) published. ` : "") +
         (uploadError?.message ? `${uploadError.message}${code}` : `Upload failed${code}.`) +
           serverResponse,
       );

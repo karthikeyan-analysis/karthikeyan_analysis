@@ -57,8 +57,8 @@ export function ExamQuestionImageFrame({
               ? "w-full h-auto max-w-full"
               : "max-h-full max-w-full h-auto w-auto",
           )}
-          loading="lazy"
-          decoding="async"
+          loading={isFull ? "eager" : "lazy"}
+          decoding={isFull ? "sync" : "async"}
           draggable={false}
         />
       </div>

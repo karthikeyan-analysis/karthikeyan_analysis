@@ -152,10 +152,9 @@ exports.submitExamAttempt = (0, https_1.onCall)({
     }
     const test = testSnap.data();
     const attempt = attemptSnap.data();
-    const endAt = new Date(test.endAt).getTime();
     const startedAt = new Date(attempt.startedAt).getTime();
     const durationMs = (Number(test.durationMinutes) || 0) * 60 * 1000;
-    const hardEnd = Math.min(startedAt + durationMs, endAt);
+    const hardEnd = startedAt + durationMs;
     // Prevent re-submission
     if (attempt.status === "submitted") {
         // If previously submitted when scoring logic was outdated, allow recompute after timer end.

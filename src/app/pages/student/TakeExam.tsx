@@ -181,6 +181,9 @@ export default function TakeExam({
   const [pwChecking, setPwChecking] = useState(false);
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [pendingQuestionIndex, setPendingQuestionIndex] = useState<number | null>(null);
+  const questionNavigationId = useRef(0);
+  const readyQuestionImages = useRef(new Set<string>());
   const [answers, setAnswers] = useState<Record<string, number | null>>({});
   const [markedForReview, setMarkedForReview] = useState<string[]>([]);
   const [visited, setVisited] = useState<Record<string, true>>({});
@@ -335,7 +338,7 @@ export default function TakeExam({
           toast.warning(
             "⚠️ Your exam has been force-submitted by the instructor.",
           );
-          void handleSubmit();
+          void handleSubmit(true);
         }
       },
     );
@@ -434,6 +437,7 @@ export default function TakeExam({
   }, [attemptStartedAtMs, durationMs, test]);
   const isAttemptActive = attemptStatus === "in_progress";
   const isAttemptSubmitted = attemptStatus === "submitted";
+  const canSubmit = isAttemptActive && hardEndMs !== null && nowTick >= hardEndMs;
 
   const timeLeftSeconds = hardEndMs
     ? Math.max(0, Math.floor((hardEndMs - nowTick) / 1000))
@@ -571,7 +575,8 @@ export default function TakeExam({
             "ring-2 ring-indigo-400 ring-offset-2",
           st === "not_visited" && "hover:bg-slate-50",
         )}
-        onClick={() => setCurrentIndex(idx)}
+        onClick={() => void goToQuestion(idx)}
+        disabled={pendingQuestionIndex !== null}
       >
         {st === "answered_marked" ? (
           <span
@@ -583,8 +588,6 @@ export default function TakeExam({
       </button>
     );
   };
-
-  const autoSubmitTriggered = useRef(false);
 
   useEffect(() => {
     if (!uid || !testId) return;
@@ -863,17 +866,6 @@ export default function TakeExam({
     };
   }, [answers, isAttemptActive, markedForReview, testId, uid]);
 
-  // Auto-submit when timer ends.
-  useEffect(() => {
-    if (!isAttemptActive) return;
-    if (!hardEndMs) return;
-    if (autoSubmitTriggered.current) return;
-    if (nowTick < hardEndMs) return;
-    autoSubmitTriggered.current = true;
-    void handleSubmit();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hardEndMs, isAttemptActive, nowTick]);
-
   // Lock navigation while exam is active (best-effort on web).
   useEffect(() => {
     if (!isAttemptActive) return;
@@ -970,10 +962,41 @@ export default function TakeExam({
     });
   };
 
-  const goNext = () =>
-    setCurrentIndex((i) => clamp(i + 1, 0, questions.length - 1));
-  const goPrev = () =>
-    setCurrentIndex((i) => clamp(i - 1, 0, questions.length - 1));
+  const goToQuestion = async (index: number) => {
+    const nextIndex = clamp(index, 0, questions.length - 1);
+    const nextQuestion = questions[nextIndex];
+    if (!nextQuestion || nextIndex === currentIndex || pendingQuestionIndex !== null) return;
+
+    const imageUrl = nextQuestion.imageUrl;
+    if (imageUrl && !readyQuestionImages.current.has(imageUrl)) {
+      const navigationId = ++questionNavigationId.current;
+      setPendingQuestionIndex(nextIndex);
+      try {
+        const image = new Image();
+        image.src = imageUrl;
+        await new Promise<void>((resolve, reject) => {
+          if (image.complete) {
+            image.naturalWidth ? resolve() : reject(new Error("Question image failed to load"));
+          } else {
+            image.onload = () => resolve();
+            image.onerror = () => reject(new Error("Question image failed to load"));
+          }
+        });
+        if (image.decode) await image.decode();
+        readyQuestionImages.current.add(imageUrl);
+      } catch {
+        if (navigationId === questionNavigationId.current) {
+          toast.error("Could not load the next question image. Please try again.");
+        }
+        return;
+      } finally {
+        if (navigationId === questionNavigationId.current) setPendingQuestionIndex(null);
+      }
+    }
+    setCurrentIndex(nextIndex);
+  };
+  const goNext = () => void goToQuestion(currentIndex + 1);
+  const goPrev = () => void goToQuestion(currentIndex - 1);
 
   const handleManualSave = async () => {
     if (!uid || !testId) return;
@@ -995,10 +1018,11 @@ export default function TakeExam({
     }
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (forcedByAdmin = false) => {
     if (!uid || !testId) return;
     if (!test) return;
     if (!isAttemptActive) return;
+    if ((!forcedByAdmin && (!hardEndMs || Date.now() < hardEndMs)) || submitting) return;
 
     try {
       setSubmitting(true);
@@ -1033,7 +1057,6 @@ export default function TakeExam({
       });
     } catch (e) {
       console.error("Submit failed", e);
-      autoSubmitTriggered.current = false;
     } finally {
       setSubmitting(false);
       setSaving(false);
@@ -1568,7 +1591,15 @@ export default function TakeExam({
 
       <div className="flex-1 min-h-0 px-3 pb-3 md:px-5 md:pb-4 pt-3">
         <div className="h-full grid grid-cols-1 lg:grid-cols-[1fr_340px] gap-3 md:gap-4 min-h-0">
-          <Card className="min-h-0 flex flex-col overflow-hidden shadow-md border-slate-200/90">
+          <Card className="relative min-h-0 flex flex-col overflow-hidden shadow-md border-slate-200/90">
+            {pendingQuestionIndex !== null && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/95" role="status" aria-live="polite">
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-700">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Loading question {pendingQuestionIndex + 1}...
+                </div>
+              </div>
+            )}
             <CardContent className="p-0 flex flex-col min-h-0 flex-1">
               <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-2.5 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1774,7 +1805,7 @@ export default function TakeExam({
                       size="sm"
                       className="bg-blue-600 hover:bg-blue-700"
                       onClick={() => void handleManualSave().finally(goNext)}
-                      disabled={!isAttemptActive || saving || submitting}
+                      disabled={!isAttemptActive || saving || submitting || pendingQuestionIndex !== null}
                     >
                       {saving ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -1784,31 +1815,38 @@ export default function TakeExam({
                       Save &amp; Next
                     </Button>
                   ) : (
-                    <Button
-                      size="sm"
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md"
-                      onClick={() => {
-                        if (
-                          confirm(
-                            "Are you sure you want to submit your test now?",
-                          )
-                        ) {
-                          void handleSubmit();
-                        }
-                      }}
-                      disabled={!isAttemptActive || saving || submitting}
-                    >
-                      {submitting ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />{" "}
-                          Submitting...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Test
-                        </>
+                    <>
+                      {isAttemptActive && !canSubmit && (
+                        <span className="text-xs text-slate-600">
+                          Submit unlocks when the timer ends.
+                        </span>
                       )}
-                    </Button>
+                      <Button
+                        size="sm"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md"
+                        onClick={() => {
+                          if (
+                            confirm(
+                              "Are you sure you want to submit your test now?",
+                            )
+                          ) {
+                            void handleSubmit();
+                          }
+                        }}
+                        disabled={!canSubmit || saving || submitting || pendingQuestionIndex !== null}
+                      >
+                        {submitting ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />{" "}
+                            Submitting...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Test
+                          </>
+                        )}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>

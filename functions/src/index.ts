@@ -147,10 +147,9 @@ export const submitExamAttempt = onCall(
   const test = testSnap.data() as any;
   const attempt = attemptSnap.data() as any;
 
-  const endAt = new Date(test.endAt).getTime();
   const startedAt = new Date(attempt.startedAt).getTime();
   const durationMs = (Number(test.durationMinutes) || 0) * 60 * 1000;
-  const hardEnd = Math.min(startedAt + durationMs, endAt);
+  const hardEnd = startedAt + durationMs;
 
   // Prevent re-submission
   if (attempt.status === "submitted") {
