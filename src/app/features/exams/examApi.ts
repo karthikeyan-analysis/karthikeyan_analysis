@@ -288,26 +288,26 @@ export async function getExamTest(testId: string): Promise<ExamTest | null> {
 export async function listPublicQuestions(
   testId: string,
 ): Promise<ExamQuestionPublic[]> {
-  const snap = await getDocs(
-    query(
-      examQuestionsPublicCol(testId),
-      orderBy("questionNo", "asc"),
-      limit(500),
-    ),
-  );
-  return snap.docs.map((d) => ({
+  // No limit() and no orderBy(): Firestore's orderBy silently drops docs that
+  // lack the field, so fetch every question and sort client-side instead.
+  const snap = await getDocs(examQuestionsPublicCol(testId));
+  const questions = snap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as any),
   })) as ExamQuestionPublic[];
+  return questions.sort((a, b) => {
+    const na = Number.isFinite(a.questionNo) ? a.questionNo : Infinity;
+    const nb = Number.isFinite(b.questionNo) ? b.questionNo : Infinity;
+    if (na !== nb) return na - nb;
+    return a.id.localeCompare(b.id);
+  });
 }
 
 export async function listPrivateQuestions(
   testId: string,
 ): Promise<ExamQuestionPrivate[]> {
   // Private docs only store the answer key; no questionNo field to order by.
-  const snap = await getDocs(
-    query(examQuestionsPrivateCol(testId), limit(500)),
-  );
+  const snap = await getDocs(examQuestionsPrivateCol(testId));
   return snap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as any),

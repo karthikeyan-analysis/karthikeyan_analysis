@@ -67,14 +67,32 @@ export function resolveThreeSections(
     .slice()
     .sort((a, b) => a.order - b.order);
 
-  const findPart = (pattern: RegExp) =>
-    parts.find(
-      (p) => pattern.test(p.subject || "") || pattern.test(p.label || ""),
+  // Each section must map to a distinct part, otherwise one part is counted
+  // twice and another part's questions are silently dropped.
+  // Subject-name matches are resolved first, then any remaining section falls
+  // back to the next unused part in display order.
+  const usedPartIds = new Set<string>();
+  const findPart = (pattern: RegExp) => {
+    const match = parts.find(
+      (p) =>
+        !usedPartIds.has(p.id) &&
+        (pattern.test(p.subject || "") || pattern.test(p.label || "")),
     );
+    if (match) usedPartIds.add(match.id);
+    return match;
+  };
+  const nextUnusedPart = () => {
+    const match = parts.find((p) => !usedPartIds.has(p.id));
+    if (match) usedPartIds.add(match.id);
+    return match;
+  };
 
-  const partAMatch = findPart(/math/i) || parts[0];
-  const partBMatch = findPart(/stat/i) || parts[1];
-  const partCMatch = findPart(/eco/i) || parts[2];
+  let partAMatch = findPart(/math/i);
+  let partBMatch = findPart(/stat/i);
+  let partCMatch = findPart(/eco/i);
+  partAMatch = partAMatch || nextUnusedPart();
+  partBMatch = partBMatch || nextUnusedPart();
+  partCMatch = partCMatch || nextUnusedPart();
 
   let partAQuestions: ExamQuestionPublic[] = [];
   let partBQuestions: ExamQuestionPublic[] = [];
@@ -105,7 +123,7 @@ export function resolveThreeSections(
     if (questions.length >= 70) {
       partAQuestions = questions.slice(0, 35);
       partBQuestions = questions.slice(35, 70);
-      partCQuestions = questions.slice(70, Math.min(105, questions.length));
+      partCQuestions = questions.slice(70);
     } else {
       const chunkSize = Math.max(1, Math.ceil(questions.length / 3));
       partAQuestions = questions.slice(0, chunkSize);

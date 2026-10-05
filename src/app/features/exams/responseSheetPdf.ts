@@ -285,18 +285,27 @@ export function buildResponseSheetHtml({
   const idxsB = getIdxs(partBQuestions);
   const idxsC = getIdxs(partCQuestions);
 
+  // Every question must appear exactly once in the review, even when it is not
+  // tagged to Part A/B/C (unassigned, stale partId, or an extra part).
+  const rendered = new Set<number>();
   const sections: string[] = [];
-  if (idxsA.length) {
-    sections.push(buildPartHeader(sectionInfo.partA.fullTitle, idxsA));
-    idxsA.forEach((i) => sections.push(rows[i]!));
-  }
-  if (idxsB.length) {
-    sections.push(buildPartHeader(sectionInfo.partB.fullTitle, idxsB));
-    idxsB.forEach((i) => sections.push(rows[i]!));
-  }
-  if (idxsC.length) {
-    sections.push(buildPartHeader(sectionInfo.partC.fullTitle, idxsC));
-    idxsC.forEach((i) => sections.push(rows[i]!));
+  const pushSection = (label: string, idxs: number[]) => {
+    const fresh = idxs.filter((i) => !rendered.has(i));
+    if (!fresh.length) return;
+    sections.push(buildPartHeader(label, fresh));
+    fresh.forEach((i) => {
+      rendered.add(i);
+      sections.push(rows[i]!);
+    });
+  };
+  pushSection(sectionInfo.partA.fullTitle, idxsA);
+  pushSection(sectionInfo.partB.fullTitle, idxsB);
+  pushSection(sectionInfo.partC.fullTitle, idxsC);
+  if (sections.length) {
+    pushSection(
+      "Other Questions",
+      rows.map((_, i) => i),
+    );
   }
   const reviewBodyHtml = sections.length ? sections.join("") : rows.join("");
 
