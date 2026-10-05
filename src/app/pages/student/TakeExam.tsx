@@ -74,7 +74,10 @@ import {
 } from "../../features/exams/examScoring";
 import { sha256Base64 } from "../../features/exams/password";
 import { ExamQuestionImageFrame } from "../../components/exams/ExamQuestionImageFrame";
-import { canStartNewExamAttempt } from "../../features/exams/examAvailability";
+import {
+  canStartNewExamAttempt,
+  getExamWindowStatus,
+} from "../../features/exams/examAvailability";
 import {
   subscribeToActiveLiveTestForTest,
   upsertLiveTestPresence,
@@ -399,6 +402,19 @@ export default function TakeExam({
 
   const nowTick = useNowTicker(1000);
 
+  // Student opened the test before its scheduled start: keep it locked, then
+  // reload once the start time arrives so the attempt can begin normally.
+  const waitingForStart = Boolean(
+    closedForNewAttempts &&
+    !attemptStatus &&
+    test &&
+    getExamWindowStatus(test) === "upcoming",
+  );
+  useEffect(() => {
+    if (!waitingForStart || !test) return;
+    if (nowTick >= new Date(test.startAt).getTime()) window.location.reload();
+  }, [nowTick, test, waitingForStart]);
+
   const testId = id || "";
   const uid = user?.id || "";
   const isGuestParticipant =
@@ -707,10 +723,9 @@ export default function TakeExam({
         );
 
         if (!attempt || isStaleAttemptFromPreviousRun) {
+          // Only an admin-run live session may bypass the scheduled window.
           const isLiveActive = Boolean(
-            (liveSession && liveSession.status === "active") ||
-            test.status === "published" ||
-            !test.manuallyClosedAt,
+            liveSession && liveSession.status === "active",
           );
           if (!canStartNewExamAttempt(test, Date.now(), isLiveActive)) {
             setClosedForNewAttempts(true);
@@ -1185,6 +1200,41 @@ export default function TakeExam({
             <p className="text-xs text-slate-500">
               After admin approves, open this test again to continue.
             </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (waitingForStart) {
+    const start = new Date(test.startAt);
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <Clock className="w-10 h-10 text-indigo-500 mx-auto" />
+            <div>
+              <div className="text-lg font-semibold text-slate-900">
+                Test has not started yet
+              </div>
+              <p className="text-sm text-slate-600 mt-2">
+                This test opens at{" "}
+                <strong>
+                  {start.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </strong>{" "}
+                on {start.toLocaleDateString()}. Keep this page open — it will
+                start automatically at the scheduled time.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => navigate("/student/tests")}
+            >
+              Back to schedule
+            </Button>
           </CardContent>
         </Card>
       </div>

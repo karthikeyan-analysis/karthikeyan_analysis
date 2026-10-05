@@ -151,7 +151,13 @@ export default function TestSchedule() {
     };
   }, [examTests, user?.id]);
 
-  const now = Date.now();
+  // Re-render periodically so "Upcoming" flips to "START NOW" at the
+  // scheduled time without the student having to refresh.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(Date.now()), 15_000);
+    return () => window.clearInterval(t);
+  }, []);
   const studentExams = useMemo(() => {
     const todayActive = examTests
       .filter((t) => canShowExamToStudentToday(t, now))
@@ -350,8 +356,7 @@ export default function TestSchedule() {
                             <Badge className="bg-gray-100 text-gray-800">
                               Closed
                             </Badge>
-                          ) : getExamWindowStatus(test, now) === "upcoming" &&
-                            test.status !== "published" ? (
+                          ) : getExamWindowStatus(test, now) === "upcoming" ? (
                             <Badge className="bg-blue-100 text-blue-800">
                               Upcoming
                             </Badge>
@@ -398,8 +403,7 @@ export default function TestSchedule() {
                             >
                               Closed
                             </Button>
-                          ) : getExamWindowStatus(test, now) === "upcoming" &&
-                            test.status !== "published" ? (
+                          ) : getExamWindowStatus(test, now) === "upcoming" ? (
                             <Button
                               disabled
                               variant="outline"

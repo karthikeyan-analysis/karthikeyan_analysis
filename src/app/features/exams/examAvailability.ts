@@ -43,7 +43,8 @@ export function canStartNewExamAttempt(
   if (isLiveTestActive) return true;
   if (isExamManuallyClosed(test)) return false;
   if (test.status === "draft") return false;
-  if (test.status === "published") return true;
+  // Published only means "visible"; new attempts still require the scheduled
+  // window (late access works by extending endAt).
   return getExamWindowStatus(test, nowMs) === "active";
 }
 

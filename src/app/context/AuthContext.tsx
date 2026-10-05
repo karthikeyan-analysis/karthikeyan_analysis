@@ -958,6 +958,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
     }
 
+    // Anonymous session opened only to read enrollmentForms; dropped again
+    // in `finally` unless the login succeeds.
+    let signedInForLookup = false;
+    let loginSucceeded = false;
+
     try {
       console.log(
         "[STUDENT_AUTH] Direct client-side student login attempt for input:",
@@ -1009,29 +1014,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
+      // Set when the password was verified against an enrollment slip rather
+      // than the student record (candidate re-submitted the form, so the slip
+      // they hold differs from the credentials stored on their student doc).
+      let passwordVerifiedViaEnrollment = false;
+
       if (studentSnap.empty) {
-        // Check if candidate registered via batch enrollment form and is pending approval
+        // enrollmentForms is only readable when signed in, so sign in
+        // anonymously for the lookup (signed out again if login fails).
         try {
-          const enrollQuery = query(
-            collection(db, "enrollmentForms"),
-            where("portalUsername", "==", cleanInput),
+          if (!auth.currentUser) {
+            await signInAnonymously(auth);
+            signedInForLookup = true;
+          }
+          const enrollSnap = await getDocs(
+            query(
+              collection(db, "enrollmentForms"),
+              where("portalUsername", "==", cleanInput),
+            ),
           );
-          const enrollSnap = await getDocs(enrollQuery);
-          if (!enrollSnap.empty) {
-            const enrollData = enrollSnap.docs[0].data();
-            const storedPw = String(enrollData.portalPassword || "").trim();
-            if (storedPw === password) {
-              if (
-                enrollData.approvalStatus === "pending" ||
-                (!enrollData.approvalStatus &&
-                  enrollData.status === "submitted")
-              ) {
-                return {
-                  success: false,
-                  error:
-                    "Your enrollment is pending admin approval. Once approved by the administrator, your student account will be activated.",
-                };
+          const formDoc = enrollSnap.docs.find(
+            (d) => String(d.data().portalPassword || "").trim() === password,
+          );
+          if (formDoc) {
+            const enrollData = formDoc.data();
+            const formEmail = String(
+              enrollData.personalDetails?.email || enrollData.submittedBy || "",
+            )
+              .trim()
+              .toLowerCase();
+
+            // Approved student with the same email → log into that record.
+            if (formEmail) {
+              let linkedSnap = await getDocs(
+                query(collection(db, "students"), where("email", "==", formEmail)),
+              );
+              if (linkedSnap.empty) {
+                const allStudentsSnap = await getDocs(collection(db, "students"));
+                const matchDoc = allStudentsSnap.docs.find(
+                  (d) =>
+                    String(d.data().email || "").trim().toLowerCase() ===
+                    formEmail,
+                );
+                if (matchDoc) {
+                  linkedSnap = { empty: false, docs: [matchDoc] } as any;
+                }
               }
+              if (!linkedSnap.empty) {
+                studentSnap = linkedSnap;
+                passwordVerifiedViaEnrollment = true;
+              }
+            }
+
+            if (!passwordVerifiedViaEnrollment) {
               if (enrollData.approvalStatus === "rejected") {
                 return {
                   success: false,
@@ -1039,6 +1074,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     "Your enrollment application was not approved. Please contact the administrator.",
                 };
               }
+              if (enrollData.approvalStatus === "approved") {
+                return {
+                  success: false,
+                  error:
+                    "Your enrollment was approved, but no student account exists for it. Please contact the administrator.",
+                };
+              }
+              return {
+                success: false,
+                error:
+                  "Your enrollment is pending admin approval. Once approved by the administrator, your student account will be activated.",
+              };
             }
           }
         } catch (e) {
@@ -1048,11 +1095,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           );
         }
 
-        console.error(
-          "[STUDENT_AUTH] Student record not found for input:",
-          cleanInput,
-        );
-        return { success: false, error: "Invalid username or password." };
+        if (studentSnap.empty) {
+          console.error(
+            "[STUDENT_AUTH] Student record not found for input:",
+            cleanInput,
+          );
+          return { success: false, error: "Invalid username or password." };
+        }
       }
 
       const studentDocRef = studentSnap.docs[0];
@@ -1096,7 +1145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const storedPassword = String(studentData.portalPassword || "").trim();
-      if (!storedPassword || storedPassword !== password) {
+      if (
+        !passwordVerifiedViaEnrollment &&
+        (!storedPassword || storedPassword !== password)
+      ) {
         console.error(
           "[STUDENT_AUTH] Password mismatch for student:",
           studentRecordId,
@@ -1168,6 +1220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         studentUser.name,
       );
       setUser(studentUser);
+      loginSucceeded = true;
       return { success: true };
     } catch (error: any) {
       console.error("[STUDENT_AUTH] Direct username login error:", error);
@@ -1176,6 +1229,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: error?.message || "Login failed. Please try again.",
       };
     } finally {
+      if (
+        signedInForLookup &&
+        !loginSucceeded &&
+        auth.currentUser?.isAnonymous
+      ) {
+        await signOut(auth).catch(() => {});
+      }
       isLoggingInRef.current = false;
     }
   };
