@@ -139,7 +139,16 @@ export default function ResponseSheetPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => iframeRef.current?.contentWindow?.print()}
+            onClick={() => {
+              // rsSave waits for / retries missing question images before
+              // opening the print dialog, so no question prints blank.
+              const win = iframeRef.current?.contentWindow as
+                | (Window & { rsSave?: () => void })
+                | null
+                | undefined;
+              if (win?.rsSave) win.rsSave();
+              else win?.print();
+            }}
           >
             <Printer className="w-4 h-4 mr-2" />
             Print / Save as PDF

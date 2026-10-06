@@ -198,7 +198,7 @@ export function buildResponseSheetHtml({
         </div>`;
 
     const imgHtml = q.imageUrl
-      ? `<div class="img-wrap"><img src="${escapeHtml(q.imageUrl)}" alt="Question ${idx + 1}" /></div>`
+      ? `<div class="img-wrap"><img src="${escapeHtml(q.imageUrl)}" alt="Question ${idx + 1}" loading="eager" decoding="sync" /></div>`
       : "";
 
     return `<section class="question-row">
@@ -298,9 +298,27 @@ export function buildResponseSheetHtml({
       sections.push(rows[i]!);
     });
   };
-  pushSection(sectionInfo.partA.fullTitle, idxsA);
-  pushSection(sectionInfo.partB.fullTitle, idxsB);
-  pushSection(sectionInfo.partC.fullTitle, idxsC);
+  // Prefer the test's own parts (their order and labels), so the review runs
+  // Q1..Qn in sequence exactly as the student saw it. Fall back to the
+  // canonical Maths/Stat/Eco split only for tests without tagged parts.
+  const testParts = [...(test.parts || [])].sort((a, b) => a.order - b.order);
+  const usesTestParts = testParts.some((p) =>
+    questions.some((q) => q.partId === p.id),
+  );
+  if (usesTestParts) {
+    for (const part of testParts) {
+      pushSection(
+        formatPartLabel(part),
+        questions
+          .map((q, i) => (q.partId === part.id ? i : -1))
+          .filter((i) => i >= 0),
+      );
+    }
+  } else {
+    pushSection(sectionInfo.partA.fullTitle, idxsA);
+    pushSection(sectionInfo.partB.fullTitle, idxsB);
+    pushSection(sectionInfo.partC.fullTitle, idxsC);
+  }
   if (sections.length) {
     pushSection(
       "Other Questions",
@@ -408,8 +426,8 @@ export function buildResponseSheetHtml({
     </div>
   </div>
   <div class="save-bar">
-    <button class="save-btn" id="rsSaveBtn" onclick="window.print()" disabled>Preparing…</button>
-    <span class="save-hint">Click → choose "Save as PDF" in the print dialog</span>
+    <button class="save-btn" id="rsSaveBtn" onclick="window.rsSave()" disabled>Preparing…</button>
+    <span class="save-hint" id="rsSaveHint">Loading all question images before saving…</span>
   </div>
   <div class="watermark"><div class="watermark-text">${escapeHtml(`${studentName} • ${studentId}`)}</div></div>
   <main class="content">
@@ -498,83 +516,133 @@ export function buildResponseSheetHtml({
   </main>
   <script>
     (function () {
+      // Every question in a test can be an image, and a PDF saved before an
+      // image finishes downloading prints that question blank. So the Save
+      // button stays locked until EVERY image has really loaded (with retries),
+      // and each image is downloaded once — no parallel probe copies.
+      var MAX_RETRIES = 3;
+      var HARD_LIMIT_MS = 180000;
+
       function fallbackUrls(img) {
         try { return JSON.parse(img.getAttribute("data-fallback-srcs") || "[]"); } catch (e) { return []; }
       }
+      function isLoaded(img) { return img.complete && img.naturalWidth > 0; }
+      function withRetryParam(url, n) {
+        if (!url || url.indexOf("data:") === 0) return url;
+        return url + (url.indexOf("?") >= 0 ? "&" : "?") + "_rs_retry=" + n;
+      }
 
-      // Races every candidate URL for this <img> in parallel instead of trying
-      // them one at a time with a fixed wait between each — a slow/broken first
-      // candidate no longer blocks the whole page for several seconds.
+      // Resolves true once the <img> shows a real image, false if every
+      // attempt (retries, then fallback URLs) failed.
       function loadImage(img) {
         return new Promise(function (resolve) {
-          if (img.complete && img.naturalWidth > 0) { resolve(); return; }
-
-          var urls = fallbackUrls(img);
-          var candidates = urls.length ? urls : [img.getAttribute("src") || ""];
-          var settled = false;
-          var remaining = candidates.length;
-          var overallTimeout = setTimeout(finish, 6000);
-
-          function finish(winningUrl) {
-            if (settled) return;
-            settled = true;
-            clearTimeout(overallTimeout);
-            if (winningUrl && img.src !== winningUrl) img.src = winningUrl;
-            resolve();
+          if (isLoaded(img)) { resolve(true); return; }
+          var original = img.getAttribute("src") || "";
+          var fallbacks = fallbackUrls(img).filter(function (u) { return u && u !== original; });
+          var attempt = 0;
+          var done = false;
+          function finish(ok) {
+            if (done) return;
+            done = true;
+            img.removeEventListener("load", onLoad);
+            img.removeEventListener("error", onError);
+            resolve(ok);
           }
-
-          candidates.forEach(function (url) {
-            var probe = new Image();
-            probe.onload = function () { finish(url); };
-            probe.onerror = function () {
-              remaining -= 1;
-              if (remaining <= 0) finish();
-            };
-            probe.src = url;
-          });
+          function onLoad() { if (isLoaded(img)) finish(true); else onError(); }
+          function onError() {
+            attempt += 1;
+            if (attempt <= MAX_RETRIES) {
+              setTimeout(function () { img.src = withRetryParam(original, attempt); }, 400 * attempt);
+            } else if (fallbacks.length) {
+              original = fallbacks.shift();
+              attempt = 0;
+              img.src = original;
+            } else {
+              finish(false);
+            }
+          }
+          img.addEventListener("load", onLoad);
+          img.addEventListener("error", onError);
+          // The image may have errored before this listener was attached.
+          if (img.complete && img.naturalWidth === 0) onError();
         });
       }
 
-      function waitForImages(onProgress) {
-        var images = Array.prototype.slice.call(document.images || []);
-        if (!images.length) {
-          onProgress(1, 1);
-          return Promise.resolve();
-        }
-        var loaded = 0;
-        return Promise.all(
-          images.map(function (img) {
-            return loadImage(img).then(function () {
-              loaded += 1;
-              onProgress(loaded, images.length);
-            });
-          }),
-        );
+      var fill = document.getElementById("rsLoadFill");
+      var label = document.getElementById("rsLoadLabel");
+      var btn = document.getElementById("rsSaveBtn");
+      var hint = document.getElementById("rsSaveHint");
+      var images = Array.prototype.slice.call(document.images || []);
+      var questionImages = images.filter(function (img) { return img.closest(".img-wrap"); });
+
+      function failedQuestionImages() {
+        return questionImages.filter(function (img) { return !isLoaded(img); });
+      }
+      function questionLabel(img) {
+        var row = img.closest(".question-row");
+        var head = row && row.querySelector(".q-num, .q-title");
+        return head ? (head.textContent || "").trim().split(".")[0] : "?";
+      }
+
+      function setProgress(loaded, total) {
+        var pct = total ? Math.round((loaded / total) * 100) : 100;
+        if (fill) fill.style.width = pct + "%";
+        if (label) label.textContent = "Loading question images… " + loaded + " / " + total + " (" + pct + "%)";
       }
 
       function reveal() {
         var overlay = document.getElementById("rsLoadOverlay");
-        var btn = document.getElementById("rsSaveBtn");
         document.body.classList.remove("is-loading");
-        if (btn) { btn.disabled = false; btn.textContent = "⬇ Save as PDF"; }
         if (overlay) setTimeout(function () { overlay.style.display = "none"; }, 220);
+        var failed = failedQuestionImages();
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = failed.length ? "⟳ Retry " + failed.length + " missing image(s)" : "⬇ Save as PDF";
+        }
+        if (hint) {
+          hint.textContent = failed.length
+            ? "Could not load images for: " + failed.map(questionLabel).join(", ") + ". Check your internet and retry before saving."
+            : "All " + document.querySelectorAll(".question-row").length + " questions ready • Click → choose 'Save as PDF' in the print dialog";
+        }
       }
 
-      window.focus();
-
-      var fill = document.getElementById("rsLoadFill");
-      var label = document.getElementById("rsLoadLabel");
-
-      waitForImages(function (loaded, total) {
-        var pct = total ? Math.round((loaded / total) * 100) : 100;
-        if (fill) fill.style.width = pct + "%";
-        if (label) label.textContent = "Preparing response sheet… " + pct + "%";
-      }).then(function () {
-        // Two animation frames guarantee the browser has actually painted the
-        // fully-laid-out page before we reveal it, so nothing "pops in" piece by piece.
-        requestAnimationFrame(function () {
-          requestAnimationFrame(reveal);
+      function loadAll() {
+        var loaded = images.filter(isLoaded).length;
+        setProgress(loaded, images.length);
+        var pending = images.map(function (img) {
+          var wasLoaded = isLoaded(img);
+          return loadImage(img).then(function (ok) {
+            if (!wasLoaded && ok) { loaded += 1; setProgress(loaded, images.length); }
+          });
         });
+        var limit = new Promise(function (r) { setTimeout(r, HARD_LIMIT_MS); });
+        return Promise.race([Promise.all(pending), limit]);
+      }
+
+      window.rsSave = function () {
+        var failed = failedQuestionImages();
+        if (failed.length) {
+          // Retry the missing images instead of printing blank questions.
+          document.body.classList.add("is-loading");
+          var overlay = document.getElementById("rsLoadOverlay");
+          if (overlay) overlay.style.display = "";
+          if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+          failed.forEach(function (img) {
+            var src = img.getAttribute("src") || "";
+            img.src = withRetryParam(src.replace(/[?&]_rs_retry=[0-9]+$/, ""), Date.now());
+          });
+          loadAll().then(function () { requestAnimationFrame(function () { requestAnimationFrame(reveal); }); });
+          return;
+        }
+        window.print();
+      };
+
+      window.focus();
+      if (!images.length) { setProgress(1, 1); reveal(); return; }
+      loadAll().then(function () {
+        // Two animation frames guarantee the browser has painted the
+        // fully-laid-out page before it is revealed.
+        requestAnimationFrame(function () { requestAnimationFrame(reveal); });
       });
     })();
   </script>
