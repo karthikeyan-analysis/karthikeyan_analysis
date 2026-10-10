@@ -50,6 +50,10 @@ export default function Login({ role = "student" }: LoginProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // Separate busy flags per sign-in method: a Google popup left open (often
+  // hidden behind the browser window) must never lock the username Sign In.
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [usernameLoading, setUsernameLoading] = useState(false);
   const [kickedNotice, setKickedNotice] = useState(false);
   const [showGuestLoginButton, setShowGuestLoginButton] = useState(
     DEFAULT_PORTAL_LOGIN_SETTINGS.showGuestLoginButton,
@@ -101,7 +105,7 @@ export default function Login({ role = "student" }: LoginProps) {
 
   // After redirect-based Google login, AuthContext hydrates the student user.
   useEffect(() => {
-    if (authLoading || loading) return;
+    if (authLoading || loading || usernameLoading) return;
     if (role === "student" && user?.role === "student") {
       const ids = user.batchIds?.length
         ? user.batchIds
@@ -117,7 +121,7 @@ export default function Login({ role = "student" }: LoginProps) {
     if (role === "admin" && user?.role === "admin") {
       navigate(user.adminKind === "cohost" ? "/admin/live-classes" : "/admin", { replace: true });
     }
-  }, [authLoading, loading, navigate, role, user]);
+  }, [authLoading, loading, usernameLoading, navigate, role, user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -145,7 +149,7 @@ export default function Login({ role = "student" }: LoginProps) {
   const handleStudentGoogleLogin = async () => {
     console.log("[LOGIN_PAGE] Student clicked Google login button.");
     setError("");
-    setLoading(true);
+    setGoogleLoading(true);
     try {
       const result = await loginStudentWithGoogle();
       console.log("[LOGIN_PAGE] loginStudentWithGoogle result:", result);
@@ -156,7 +160,7 @@ export default function Login({ role = "student" }: LoginProps) {
       console.error("[LOGIN_PAGE] handleStudentGoogleLogin caught error:", err);
       setError(err?.message || "Google sign-in failed. Please try again.");
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
     }
   };
 
@@ -168,9 +172,23 @@ export default function Login({ role = "student" }: LoginProps) {
       return;
     }
     setError("");
-    setLoading(true);
+    setUsernameLoading(true);
     try {
-      const result = await loginStudentWithUsername(portalUsername, portalPassword);
+      // Never leave the button greyed forever on a stalled network.
+      const result = await Promise.race([
+        loginStudentWithUsername(portalUsername, portalPassword),
+        new Promise<{ success: boolean; error?: string }>((resolve) =>
+          setTimeout(
+            () =>
+              resolve({
+                success: false,
+                error:
+                  "Sign-in is taking too long. Please check your internet connection and try again.",
+              }),
+            30000,
+          ),
+        ),
+      ]);
       console.log("[LOGIN_PAGE] loginStudentWithUsername result:", result);
       if (!result.success) {
         setError(result.error || "Invalid username or password.");
@@ -179,7 +197,7 @@ export default function Login({ role = "student" }: LoginProps) {
       console.error("[LOGIN_PAGE] handlePortalUsernameLogin caught error:", err);
       setError(err?.message || "Login failed. Please try again.");
     } finally {
-      setLoading(false);
+      setUsernameLoading(false);
     }
   };
 
@@ -280,11 +298,11 @@ export default function Login({ role = "student" }: LoginProps) {
                       type="button"
                       className="w-full h-12 text-base font-semibold bg-white text-slate-900 border-2 border-slate-300 hover:bg-slate-50 hover:border-slate-400 shadow-sm"
                       onClick={handleStudentGoogleLogin}
-                      disabled={loading || authLoading}
+                      disabled={googleLoading || usernameLoading || authLoading}
                       aria-label="Continue with Google"
                     >
                       <GoogleMark className="w-5 h-5 mr-3 shrink-0" />
-                      {loading ? "Connecting to Google..." : "Continue with Google"}
+                      {googleLoading ? "Connecting to Google..." : "Continue with Google"}
                     </Button>
 
                     <p className="text-xs text-center text-slate-500">
@@ -356,9 +374,9 @@ export default function Login({ role = "student" }: LoginProps) {
                           id="portal-username-login-btn"
                           type="submit"
                           className="w-full bg-indigo-600 hover:bg-indigo-700"
-                          disabled={loading || authLoading}
+                          disabled={usernameLoading}
                         >
-                          {loading ? "Signing in..." : "Sign In"}
+                          {usernameLoading ? "Signing in..." : "Sign In"}
                         </Button>
                       </form>
                     </div>
@@ -381,7 +399,7 @@ export default function Login({ role = "student" }: LoginProps) {
                     type="button"
                     variant="outline"
                     className="w-full border-indigo-200 hover:bg-indigo-50"
-                    disabled={loading || authLoading}
+                    disabled={usernameLoading}
                     onClick={() => navigate("/student/join-test")}
                   >
                     <KeyRound className="w-4 h-4 mr-2" />

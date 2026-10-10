@@ -534,7 +534,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // ── 2. Process redirect result in parallel with the listener ─────────────
     const boot = async () => {
       try {
-        const redirectResult = await getRedirectResult(auth);
+        // getRedirectResult can hang when the browser blocks third-party
+        // storage for the auth domain; never let it keep the app "loading".
+        const redirectResult = await Promise.race([
+          getRedirectResult(auth),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 10000)),
+        ]);
 
         if (redirectResult?.user && !cancelled) {
           const completed = await completeStudentGoogleSignIn(
@@ -976,6 +981,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           where("portalUsername", "==", cleanInput),
         ),
       );
+
+      // Firestore answers from the (empty) local cache when it cannot reach
+      // the server, which would otherwise surface as "Invalid username".
+      if (studentSnap.metadata.fromCache) {
+        return {
+          success: false,
+          error:
+            "Could not connect to the server. Please check your internet connection (or try another network / disable VPN or antivirus web-shield) and try again.",
+        };
+      }
 
       // 2. If not found by portalUsername, try matching email
       if (studentSnap.empty) {
