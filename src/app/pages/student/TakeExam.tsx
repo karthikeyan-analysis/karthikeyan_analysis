@@ -1024,9 +1024,13 @@ export default function TakeExam({
         8_000,
       );
     } catch (e) {
+      // Firestore keeps the write queued and retries it, and answers are already in
+      // localStorage — so warn without blocking the student (a modal alert here
+      // fired on every question for students on slow connections).
       console.error("Manual save failed", e);
-      alert(
-        "Save failed. Your answer is recorded locally — you can continue. Check connection.",
+      toast.warning(
+        "Slow connection — your answers are saved on this device and will sync automatically. Keep going.",
+        { id: "exam-save-slow" },
       );
     } finally {
       setSaving(false);
@@ -1854,8 +1858,12 @@ export default function TakeExam({
                     <Button
                       size="sm"
                       className="bg-blue-600 hover:bg-blue-700"
-                      onClick={() => void handleManualSave().finally(goNext)}
-                      disabled={!isAttemptActive || saving || submitting || pendingQuestionIndex !== null}
+                      onClick={() => {
+                        // Save in the background; don't make the student wait on the network.
+                        void handleManualSave();
+                        goNext();
+                      }}
+                      disabled={!isAttemptActive || submitting || pendingQuestionIndex !== null}
                     >
                       {saving ? (
                         <Loader2 className="w-4 h-4 animate-spin mr-2" />
