@@ -30,8 +30,8 @@ d. Answering a Question
 e. Saving
    - Your progress is auto-saved periodically; keep your internet connection stable.
 
-f. Submit
-   - After submitting, you cannot continue the test again.
+f. Automatic Submission
+   - The test will automatically submit when the timer ends. There is no manual submit button.
 
 g. Do not refresh / close
    - Avoid refreshing, using the back button, or closing the tab/window during the test.
