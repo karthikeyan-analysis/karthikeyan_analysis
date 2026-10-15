@@ -144,10 +144,21 @@ function buildAdminPreviewHtml({ test, questions, keys }: AdminPreviewPdfParams)
     .answer-key{margin-top:10px;border-radius:10px;background:#eef2ff;color:#312e81;padding:8px 10px;font-size:12px}
     .missing{margin-left:8px;color:#b91c1c;font-weight:800}
     .footer{margin-top:18px;text-align:right;font-size:10px;color:#64748b}
-    @media print{body{margin:12px}.options{grid-template-columns:1fr}.image-wrap img{max-height:420px}}
+    .toolbar{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:-20px -20px 16px;padding:10px 20px;background:#0f172a;color:#e2e8f0;font-size:12px}
+    .toolbar button{border:0;border-radius:8px;padding:7px 14px;font-weight:800;font-size:12px;cursor:pointer;background:#4f46e5;color:#fff}
+    .toolbar button.secondary{background:#334155}
+    .toolbar button:disabled{opacity:.5;cursor:wait}
+    #pvStatus{flex:1;min-width:200px}
+    .img-failed{outline:2px solid #ef4444;outline-offset:2px}
+    @media print{body{margin:12px}.toolbar{display:none}.options{grid-template-columns:1fr}.image-wrap img{max-height:420px}}
   </style>
 </head>
 <body>
+  <div class="toolbar">
+    <span id="pvStatus">Loading question images…</span>
+    <button type="button" id="pvRetry" class="secondary" style="display:none">⟳ Retry missing images</button>
+    <button type="button" id="pvPrint" disabled>⬇ Save as PDF</button>
+  </div>
   <section class="top">
     <div class="label">Admin Preview Copy - Not For Publishing</div>
     <h1>${escapeHtml(test.title)}</h1>
@@ -166,13 +177,118 @@ function buildAdminPreviewHtml({ test, questions, keys }: AdminPreviewPdfParams)
   }
   ${questionHtml || `<div class="warning">No questions uploaded yet.</div>`}
   <div class="footer">Generated from Admin Panel • ${escapeHtml(new Date().toLocaleString())}</div>
-  <script>window.focus(); setTimeout(() => window.print(), 350);</script>
+  <script>
+    (function () {
+      // Printing before the question images finish downloading saved PDFs with
+      // blank image questions. Wait for every image (with retries) first.
+      var MAX_RETRIES = 3;
+      var HARD_LIMIT_MS = 180000;
+      var images = Array.prototype.slice.call(document.querySelectorAll(".image-wrap img"));
+      var status = document.getElementById("pvStatus");
+      var printBtn = document.getElementById("pvPrint");
+      var retryBtn = document.getElementById("pvRetry");
+
+      function isLoaded(img) { return img.complete && img.naturalWidth > 0; }
+      function withRetryParam(url, n) {
+        if (!url || url.indexOf("data:") === 0) return url;
+        return url.replace(/[?&]_pv_retry=[0-9]+$/, "") + (url.indexOf("?") >= 0 ? "&" : "?") + "_pv_retry=" + n;
+      }
+      function loadImage(img) {
+        return new Promise(function (resolve) {
+          if (isLoaded(img)) { resolve(true); return; }
+          var original = img.getAttribute("src") || "";
+          var attempt = 0;
+          var done = false;
+          function finish(ok) {
+            if (done) return;
+            done = true;
+            img.removeEventListener("load", onLoad);
+            img.removeEventListener("error", onError);
+            resolve(ok);
+          }
+          function onLoad() { if (isLoaded(img)) finish(true); else onError(); }
+          function onError() {
+            attempt += 1;
+            if (attempt <= MAX_RETRIES) {
+              setTimeout(function () { img.src = withRetryParam(original, attempt); }, 400 * attempt);
+            } else {
+              finish(false);
+            }
+          }
+          img.addEventListener("load", onLoad);
+          img.addEventListener("error", onError);
+          if (img.complete && img.naturalWidth === 0) onError();
+        });
+      }
+      function failed() { return images.filter(function (img) { return !isLoaded(img); }); }
+      function label(img) {
+        var q = img.closest(".question");
+        var no = q && q.querySelector(".question-no");
+        return no ? (no.textContent || "").replace("Question", "Q").trim() : "?";
+      }
+      function loadAll() {
+        var loaded = images.filter(isLoaded).length;
+        status.textContent = "Loading question images… " + loaded + " / " + images.length;
+        var pending = images.map(function (img) {
+          var was = isLoaded(img);
+          return loadImage(img).then(function (ok) {
+            if (!was && ok) { loaded += 1; status.textContent = "Loading question images… " + loaded + " / " + images.length; }
+          });
+        });
+        return Promise.race([Promise.all(pending), new Promise(function (r) { setTimeout(r, HARD_LIMIT_MS); })]);
+      }
+      function ready(autoPrint) {
+        var bad = failed();
+        images.forEach(function (img) { img.classList.toggle("img-failed", !isLoaded(img)); });
+        printBtn.disabled = false;
+        retryBtn.disabled = false;
+        if (bad.length) {
+          retryBtn.style.display = "";
+          printBtn.textContent = "Print anyway";
+          status.textContent = "Could not load images for: " + bad.map(label).join(", ") + ". Retry before saving.";
+        } else {
+          retryBtn.style.display = "none";
+          printBtn.textContent = "⬇ Save as PDF";
+          status.textContent = "All " + document.querySelectorAll(".question").length + " questions ready — choose 'Save as PDF' in the print dialog.";
+          if (autoPrint) requestAnimationFrame(function () { requestAnimationFrame(function () { window.print(); }); });
+        }
+      }
+      printBtn.addEventListener("click", function () { window.print(); });
+      retryBtn.addEventListener("click", function () {
+        retryBtn.disabled = true;
+        printBtn.disabled = true;
+        failed().forEach(function (img) { img.src = withRetryParam(img.getAttribute("src") || "", Date.now()); });
+        loadAll().then(function () { ready(false); });
+      });
+
+      window.focus();
+      if (!images.length) { ready(true); return; }
+      loadAll().then(function () { ready(true); });
+    })();
+  </script>
 </body>
 </html>`;
 }
 
-export function openAdminPreviewPdf(params: AdminPreviewPdfParams) {
+/**
+ * Call synchronously inside the click handler (before any await) so the
+ * browser treats it as a user gesture and doesn't block the popup.
+ */
+export function openAdminPreviewWindow(): Window | null {
   const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(
+      `<!doctype html><title>Preparing preview…</title><body style="font-family:Arial,sans-serif;padding:40px;color:#475569">Preparing question paper preview…</body>`,
+    );
+  }
+  return win;
+}
+
+export function openAdminPreviewPdf(
+  params: AdminPreviewPdfParams,
+  preOpened?: Window | null,
+) {
+  const win = preOpened && !preOpened.closed ? preOpened : window.open("", "_blank");
   if (!win) {
     alert("Popup blocked. Please allow popups to download the preview PDF.");
     return;

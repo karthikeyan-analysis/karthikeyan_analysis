@@ -291,6 +291,13 @@ export async function listPublicQuestions(
   // No limit() and no orderBy(): Firestore's orderBy silently drops docs that
   // lack the field, so fetch every question and sort client-side instead.
   const snap = await getDocs(examQuestionsPublicCol(testId));
+  // When the server is unreachable getDocs doesn't throw — it answers from the
+  // (empty) local cache, which rendered as a blank "Questions: 0" exam screen.
+  if (snap.empty && snap.metadata.fromCache) {
+    throw new Error(
+      "Could not load questions from the server. Check your internet connection and try again.",
+    );
+  }
   const questions = snap.docs.map((d) => ({
     id: d.id,
     ...(d.data() as any),

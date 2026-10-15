@@ -250,11 +250,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? "cohost"
           : "full";
 
+      // Only heal for real admins. A brand-new student/guest uid also has no users
+      // doc for a moment (the login flow writes it right after sign-in), and
+      // provisioning here used to stamp role "admin" onto those student accounts.
       if (
-        !userData ||
-        (role === "admin" &&
-          (userData.role !== "admin" ||
-            (adminDocData?.name && userData.name !== adminDocData.name)))
+        role === "admin" &&
+        (!userData ||
+          userData.role !== "admin" ||
+          (adminDocData?.name && userData.name !== adminDocData.name))
       ) {
         console.warn(
           "[AUTH] Auto-provisioning/healing admin doc for UID:",
@@ -500,6 +503,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let userWasSetByRedirect = false;
 
     const resolveAuthUser = async (firebaseUser: FirebaseUser | null) => {
+      // An explicit login flow is running and will setUser itself once it has
+      // written users/{uid}; resolving here would race it with a half-built profile.
+      if (isLoggingInRef.current) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
       if (firebaseUser) {
         const userData = await fetchUserData(firebaseUser);
         if (!cancelled) setUser(userData);
@@ -951,7 +960,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     usernameInput: string,
     passwordInput: string,
   ): Promise<{ success: boolean; error?: string }> => {
-    isLoggingInRef.current = true;
     const rawInput = usernameInput.trim();
     const cleanInput = rawInput.toLowerCase();
     const password = passwordInput.trim();
@@ -962,6 +970,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error: "Please enter both username and password.",
       };
     }
+    // Set only after the early return above, so the flag is always cleared in `finally`.
+    isLoggingInRef.current = true;
 
     // Anonymous session opened only to read enrollmentForms; dropped again
     // in `finally` unless the login succeeds.
@@ -1171,8 +1181,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: "Invalid username or password." };
       }
 
-      // Password verified! Authenticate with Firebase Auth (or sign in anonymously)
+      // Password verified! Authenticate with Firebase Auth (or sign in anonymously).
+      // Only reuse the current session if it is this student's own anonymous uid
+      // (or the one opened above for the lookup). Reusing anyone else's session —
+      // a Google student, an admin, or another student on a shared laptop —
+      // would overwrite their users/{uid} profile and share their exam attempts.
       let currentAuthUser = auth.currentUser;
+      if (currentAuthUser && !signedInForLookup) {
+        let ownSession = false;
+        if (currentAuthUser.isAnonymous) {
+          try {
+            const existing = await getDoc(doc(db, "users", currentAuthUser.uid));
+            ownSession = existing.data()?.studentRecordId === studentRecordId;
+          } catch {
+            ownSession = false;
+          }
+        }
+        if (!ownSession) {
+          await signOut(auth);
+          currentAuthUser = null;
+        }
+      }
       if (!currentAuthUser) {
         const cred = await signInAnonymously(auth);
         currentAuthUser = cred.user;
@@ -1268,6 +1297,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     if (!params.testId) return { success: false, error: "Test not found." };
 
+    isLoggingInRef.current = true;
     try {
       if (auth.currentUser) {
         await signOut(auth);
@@ -1330,6 +1360,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         success: false,
         error: "Could not start guest session. Please try again.",
       };
+    } finally {
+      isLoggingInRef.current = false;
     }
   };
 

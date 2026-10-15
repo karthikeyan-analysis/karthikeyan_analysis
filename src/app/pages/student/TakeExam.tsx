@@ -204,6 +204,8 @@ export default function TakeExam({
     maxScore: number;
   } | null>(null);
   const [closedForNewAttempts, setClosedForNewAttempts] = useState(false);
+  const [questionsLoadError, setQuestionsLoadError] = useState<string | null>(null);
+  const [questionsReloadKey, setQuestionsReloadKey] = useState(0);
   const [rejoinBlocked, setRejoinBlocked] = useState(false);
   const [requestingRejoin, setRequestingRejoin] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -695,8 +697,24 @@ export default function TakeExam({
     if (!instructionsOk) return;
     let cancelled = false;
 
+    // A flaky connection often fails the first read and succeeds a moment later.
+    const fetchQuestionsWithRetry = async () => {
+      let lastError: unknown;
+      for (let i = 0; i < 3; i++) {
+        try {
+          return await listPublicQuestions(testId);
+        } catch (e) {
+          lastError = e;
+          if (cancelled) throw e;
+          await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+        }
+      }
+      throw lastError;
+    };
+
     const loadQuestionsAndAttempt = async () => {
       setLoading(true);
+      setQuestionsLoadError(null);
       try {
         // Run questions + attempt fetch in parallel.
         // If prefetch already completed (questions were loaded during instructions screen),
@@ -704,10 +722,18 @@ export default function TakeExam({
         const [rawQs, attempt] = await Promise.all([
           prefetchedQsRef.current && prefetchedForTestId.current === testId
             ? Promise.resolve(prefetchedQsRef.current)
-            : listPublicQuestions(testId),
+            : fetchQuestionsWithRetry(),
           getAttempt(testId, uid),
         ]);
         if (cancelled) return;
+
+        // Never start (or show) an attempt with no questions — that was the blank
+        // "Questions: 0" screen. Show a retry instead.
+        if (!rawQs.length) {
+          throw new Error(
+            "No questions could be loaded for this test. Please try again in a moment.",
+          );
+        }
 
         const isLiveActiveSession = Boolean(
           liveSession &&
@@ -824,7 +850,14 @@ export default function TakeExam({
           }
         }
       } catch (e) {
-        console.error(e);
+        console.error("Loading questions/attempt failed", e);
+        if (!cancelled) {
+          setQuestionsLoadError(
+            e instanceof Error && e.message
+              ? e.message
+              : "Could not load the test. Check your internet connection and try again.",
+          );
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -846,6 +879,7 @@ export default function TakeExam({
     user?.name,
     user?.studentRecordId,
     examSessionKey,
+    questionsReloadKey,
   ]);
 
   // Mark current question as visited whenever you navigate.
@@ -1267,6 +1301,49 @@ export default function TakeExam({
             >
               Back to schedule
             </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (questionsLoadError) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 space-y-4 text-center">
+            <XCircle className="w-10 h-10 text-red-500 mx-auto" />
+            <div>
+              <div className="text-lg font-semibold text-slate-900">
+                Couldn&apos;t load the test
+              </div>
+              <p className="text-sm text-slate-600 mt-2">{questionsLoadError}</p>
+              <p className="text-xs text-slate-500 mt-2">
+                Your timer and any saved answers are safe. If this keeps happening,
+                switch network (mobile hotspot) or pause antivirus web protection.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Button
+                className="bg-indigo-600 hover:bg-indigo-700"
+                onClick={() => {
+                  try {
+                    sessionStorage.removeItem(`exam_qs:${testId}`);
+                  } catch {}
+                  prefetchedQsRef.current = null;
+                  prefetchedForTestId.current = "";
+                  setQuestionsReloadKey((k) => k + 1);
+                }}
+              >
+                Retry
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => navigate("/student/tests")}
+              >
+                Back to schedule
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -10,7 +10,10 @@ import {
   listPublicQuestions,
   updateExamTest,
 } from "../../features/exams/examApi";
-import { openAdminPreviewPdf } from "../../features/exams/adminPreviewPdf";
+import {
+  openAdminPreviewPdf,
+  openAdminPreviewWindow,
+} from "../../features/exams/adminPreviewPdf";
 import type { ExamTest } from "../../features/exams/types";
 import { Download } from "lucide-react";
 
@@ -77,15 +80,18 @@ export default function ExamPublishPage() {
 
   const downloadPreview = async () => {
     if (!test) return;
+    // Open the tab before awaiting Firestore, while still inside the click gesture.
+    const previewWin = openAdminPreviewWindow();
     setDownloadingPreview(true);
     try {
       const [questions, keys] = await Promise.all([
         listPublicQuestions(testId),
         listPrivateQuestions(testId),
       ]);
-      openAdminPreviewPdf({ test, questions, keys });
+      openAdminPreviewPdf({ test, questions, keys }, previewWin);
     } catch (e) {
       console.error(e);
+      previewWin?.close();
       alert("Failed to prepare preview PDF. Please save questions and try again.");
     } finally {
       setDownloadingPreview(false);
