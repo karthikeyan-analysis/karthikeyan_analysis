@@ -48,7 +48,6 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import {
   Award,
   Camera,
-  CheckCircle2,
   Clock,
   Eye,
   FileQuestion,
@@ -455,7 +454,6 @@ export default function TakeExam({
   }, [attemptStartedAtMs, durationMs, test]);
   const isAttemptActive = attemptStatus === "in_progress";
   const isAttemptSubmitted = attemptStatus === "submitted";
-  const canSubmit = isAttemptActive && hardEndMs !== null && nowTick >= hardEndMs;
 
   const timeLeftSeconds = hardEndMs
     ? Math.max(0, Math.floor((hardEndMs - nowTick) / 1000))
@@ -1071,6 +1069,8 @@ export default function TakeExam({
     }
   };
 
+  const autoSubmittedHandled = useRef(false);
+
   const handleSubmit = async (forcedByAdmin = false) => {
     if (!uid || !testId) return;
     if (!test) return;
@@ -1110,11 +1110,29 @@ export default function TakeExam({
       });
     } catch (e) {
       console.error("Submit failed", e);
+      toast.error("Submission failed. Retrying in 5 seconds...", {
+        id: "submit-retry",
+      });
+      setTimeout(() => {
+        autoSubmittedHandled.current = false;
+      }, 5000);
     } finally {
       setSubmitting(false);
       setSaving(false);
     }
   };
+
+  // Automatically submit exam when the timer finishes.
+  useEffect(() => {
+    if (!isAttemptActive || !hardEndMs || submitting || autoSubmittedHandled.current) return;
+    if (nowTick >= hardEndMs || timeLeftSeconds <= 0) {
+      autoSubmittedHandled.current = true;
+      toast.info("Time is up! Submitting your test automatically...", {
+        id: "auto-submit-timeup",
+      });
+      void handleSubmit(true);
+    }
+  }, [isAttemptActive, hardEndMs, nowTick, submitting, timeLeftSeconds]);
 
   const showAnswers = useMemo(() => {
     if (!test) return false;
@@ -1512,7 +1530,7 @@ export default function TakeExam({
                             Important Instructions (Our platform)
                           </div>
                           <div className="text-xs text-slate-600 mt-0.5">
-                            How to use Save/Mark/Submit properly
+                            How to use Save/Mark properly
                           </div>
                         </div>
                         <Badge className="bg-violet-600 text-white">
@@ -1729,6 +1747,21 @@ export default function TakeExam({
                   <Loader2 className="h-5 w-5 animate-spin" />
                   Loading question {pendingQuestionIndex + 1}...
                 </div>
+              </div>
+            )}
+            {submitting && (
+              <div
+                className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm p-4 text-center"
+                role="status"
+                aria-live="polite"
+              >
+                <Loader2 className="h-10 w-10 animate-spin text-indigo-600 mb-3" />
+                <h3 className="text-lg font-bold text-slate-900">
+                  Submitting your test...
+                </h3>
+                <p className="text-sm text-slate-500 mt-1 max-w-sm">
+                  Time is up. Please wait while your answers are being evaluated and recorded. Do not close or refresh this page.
+                </p>
               </div>
             )}
             <CardContent className="p-0 flex flex-col min-h-0 flex-1">
@@ -1950,38 +1983,21 @@ export default function TakeExam({
                       Save &amp; Next
                     </Button>
                   ) : (
-                    <>
-                      {isAttemptActive && !canSubmit && (
-                        <span className="text-xs text-slate-600">
-                          Submit unlocks when the timer ends.
-                        </span>
+                    <Button
+                      size="sm"
+                      className="bg-blue-600 hover:bg-blue-700"
+                      onClick={() => {
+                        void handleManualSave();
+                      }}
+                      disabled={!isAttemptActive || submitting || pendingQuestionIndex !== null}
+                    >
+                      {saving ? (
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      ) : (
+                        <Save className="w-4 h-4 mr-2" />
                       )}
-                      <Button
-                        size="sm"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 shadow-md"
-                        onClick={() => {
-                          if (
-                            confirm(
-                              "Are you sure you want to submit your test now?",
-                            )
-                          ) {
-                            void handleSubmit();
-                          }
-                        }}
-                        disabled={!canSubmit || saving || submitting || pendingQuestionIndex !== null}
-                      >
-                        {submitting ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin mr-2" />{" "}
-                            Submitting...
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle2 className="w-4 h-4 mr-2" /> Submit Test
-                          </>
-                        )}
-                      </Button>
-                    </>
+                      Save
+                    </Button>
                   )}
                 </div>
               </div>
